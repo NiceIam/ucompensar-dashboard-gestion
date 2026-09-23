@@ -1,0 +1,478 @@
+import json
+import logging
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import HTTPException, status
+
+from app.config import get_settings
+from app.database import get_org_pool
+from app.models.schemas import ChatHistoryResponse, ChatMessageResponse
+from app.utils import with_retry
+
+logger = logging.getLogger(__name__)
+
+
+async def _build_context(org_id: str, file_id: str | None) -> str:
+    """Construye contexto completo del cliente — memoria de la org."""
+    from app.database import get_main_pool
+
+    context_parts: list[str] = []
+
+    # Info de la organizacion
+    main_pool = await get_main_pool()
+    async with main_pool.acquire() as conn:
+        try:
+            org_uuid = uuid.UUID(org_id)
+        except ValueError:
+            org_uuid = org_id
+        org = await conn.fetchrow(
+            "SELECT name, sector, size, city, business_type, plan_type FROM organizations WHERE id = $1",
+            org_uuid,
+        )
+    if org:
+        context_parts.append(
+            f"Empresa: {org['name']} | Sector: {org['sector']} | Tamaño: {org['size']} | "
+            f"Ciudad: {org['city']} | Tipo negocio: {org['business_type'] or 'no definido'}"
+        )
+
+    # Tablas y datos de la org
+    pool = await get_org_pool(org_id)
+    async with pool.acquire() as conn:
+        tables = await conn.fetch(
+            "SELECT id, table_name, display_name, row_count, columns_definition FROM org_data_tables"
+        )
+        total_records = sum((t["row_count"] or 0) for t in tables)
+
+        context_parts.append(
+            f"Tablas: {len(tables)} | Registros totales: {total_records}"
+        )
+        for t in tables:
+            cols = t["columns_definition"]
+            if isinstance(cols, str):
+                cols = json.loads(cols)
+            col_names = [c["name"] for c in cols] if cols else []
+            context_parts.append(
+                f"  - {t['display_name']} ({t['row_count'] or 0} filas): {', '.join(col_names[:8])}"
+            )
+
+        # Muestra de datos reales (primeras filas de cada tabla con datos)
+        for t in tables:
+            if (t["row_count"] or 0) > 0:
+                rows = await conn.fetch(
+                    "SELECT data FROM org_data_rows WHERE table_id = $1 LIMIT 3",
+                    t["id"],
+                )
+                if rows:
+                    samples = []
+                    for r in rows:
+                        data = r["data"]
+                        if isinstance(data, str):
+                            data = json.loads(data)
+                        samples.append(str(data)[:200])
+                    context_parts.append(
+                        f"  Muestra {t['display_name']}: {'; '.join(samples)}"
+                    )
+
+        # ETL jobs recientes
+        jobs = await conn.fetch(
+            "SELECT filename, status, rows_loaded FROM etl_jobs ORDER BY created_at DESC LIMIT 5"
+        )
+        if jobs:
+            context_parts.append(f"ETL recientes: {len(jobs)} jobs")
+
+        # Historial de chat (ultimos 5 mensajes para contexto de conversacion)
+        recent_msgs = await conn.fetch(
+            "SELECT role, content FROM chat_messages ORDER BY created_at DESC LIMIT 5"
+        )
+        if recent_msgs:
+            context_parts.append("Conversacion reciente:")
+            for m in reversed(recent_msgs):
+                context_parts.append(f"  {m['role']}: {m['content'][:150]}")
+
+    return "\n".join(context_parts)
+
+
+@with_retry(
+    max_retries=3, retryable_exceptions=(ConnectionError, TimeoutError, OSError)
+)
+async def _call_gemini(system_context: str, user_message: str, org_id: str) -> str:
+    """Llama a Gemini o genera respuesta local si no hay API key."""
+    settings = get_settings()
+
+    # Si no hay API key configurada, generar respuesta local
+    if not settings.GOOGLE_API_KEY or settings.GOOGLE_API_KEY == "tu-google-api-key":
+        return await _local_chat_response(system_context, user_message, org_id)
+
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+
+        client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+
+        prompt = (
+            "Eres un asistente de analisis de datos para una PYME. "
+            "Responde en espanol de forma clara y concisa.\n\n"
+            f"Contexto de datos de la empresa:\n{system_context}\n\n"
+            f"Pregunta del usuario: {user_message}"
+        )
+
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=1024,
+                temperature=0.4,
+            ),
+        )
+        return response.text or "No pude generar una respuesta en este momento."
+
+    except ConnectionError as e:
+        logger.warning(
+            "Connection error calling Gemini: %s. Falling back to local response.", e
+        )
+        return await _local_chat_response(system_context, user_message, org_id)
+    except TimeoutError as e:
+        logger.warning("Timeout calling Gemini: %s. Falling back to local response.", e)
+        return await _local_chat_response(system_context, user_message, org_id)
+    except Exception as exc:
+        logger.error("Unexpected error calling Gemini: %s", exc)
+        return await _local_chat_response(system_context, user_message, org_id)
+
+
+async def _local_chat_response(context: str, user_message: str, org_id: str) -> str:
+    """Respuesta local inteligente basada en datos reales sin LLM."""
+    from app.database import get_main_pool
+
+    pool = await get_org_pool(org_id)
+    msg_lower = user_message.lower()
+
+    # Obtener info de la org
+    main_pool = await get_main_pool()
+    try:
+        org_uuid = uuid.UUID(org_id)
+    except ValueError:
+        org_uuid = org_id
+    async with main_pool.acquire() as conn:
+        org = await conn.fetchrow(
+            "SELECT name, sector, size, city FROM organizations WHERE id = $1",
+            org_uuid,
+        )
+    org_name = org["name"] if org else "tu empresa"
+
+    async with pool.acquire() as conn:
+        tables = await conn.fetch(
+            "SELECT id, table_name, display_name, row_count FROM org_data_tables"
+        )
+        total_records = sum((t["row_count"] or 0) for t in tables)
+        tables_info = [
+            f"- {t['display_name']}: {t['row_count'] or 0} registros" for t in tables
+        ]
+
+        jobs = await conn.fetch(
+            "SELECT status, filename FROM etl_jobs ORDER BY created_at DESC LIMIT 5"
+        )
+        messages_count = await conn.fetchval("SELECT count(*) FROM chat_messages")
+
+        # Buscar datos reales relevantes al mensaje
+        relevant_data = []
+        for t in tables:
+            if (t["row_count"] or 0) > 0 and (
+                t["table_name"] in msg_lower
+                or t["display_name"].lower() in msg_lower
+                or any(w in msg_lower for w in t["table_name"].split("_"))
+            ):
+                rows = await conn.fetch(
+                    "SELECT data FROM org_data_rows WHERE table_id = $1 LIMIT 5",
+                    t["id"],
+                )
+                relevant_data.append(
+                    {
+                        "table": t["display_name"],
+                        "count": t["row_count"],
+                        "samples": [
+                            r["data"]
+                            if isinstance(r["data"], dict)
+                            else json.loads(r["data"])
+                            for r in rows
+                        ],
+                    }
+                )
+
+    # Si hay datos relevantes, mostrarlos
+    if relevant_data:
+        parts = [f"**Datos encontrados para '{user_message}':**\n"]
+        for rd in relevant_data:
+            parts.append(f"\n**{rd['table']}** ({rd['count']} registros):")
+            for i, sample in enumerate(rd["samples"][:5], 1):
+                vals = ", ".join(f"{k}: {v}" for k, v in list(sample.items())[:4])
+                parts.append(f"  {i}. {vals}")
+        parts.append(
+            f"\nTotal en {org_name}: {total_records} registros en {len(tables)} tablas."
+        )
+        return "\n".join(parts)
+
+    # Respuestas contextuales basadas en keywords
+    if any(w in msg_lower for w in ["hola", "buenos", "hey", "saludos"]):
+        return (
+            f"Hola! Soy tu asistente de datos para **{org_name}**. "
+            f"Tienes {len(tables)} tablas con {total_records} registros.\n\n"
+            f"Tablas:\n" + "\n".join(tables_info) + "\n\n"
+            "Preguntame sobre tus datos, sube archivos, o pide reportes."
+        )
+
+    if any(w in msg_lower for w in ["ventas", "venta", "vendido"]):
+        return (
+            f"**{org_name} — Datos disponibles:**\n" + "\n".join(tables_info) + "\n\n"
+            f"Total: {total_records} registros\n\n"
+            "Para analizar ventas, sube un CSV/Excel con el boton de adjuntar."
+        )
+
+    if any(w in msg_lower for w in ["datos", "tabla", "registros", "informacion"]):
+        return (
+            f"Resumen de tus datos:\n\n"
+            f"Tablas configuradas: {len(tables)}\n" + "\n".join(tables_info) + "\n\n"
+            f"Registros totales: {total_records}\n"
+            f"Archivos ETL procesados: {len(jobs)}\n\n"
+            "Para cargar mas datos, sube un archivo CSV, Excel o PDF."
+        )
+
+    if any(w in msg_lower for w in ["reporte", "informe", "resumen", "analisis"]):
+        return (
+            f"Resumen de tu empresa:\n\n"
+            f"Tablas: {len(tables)}\n" + "\n".join(tables_info) + "\n"
+            f"Registros totales: {total_records}\n"
+            f"Jobs ETL: {len(jobs)} ({sum(1 for j in jobs if j['status'] == 'completed')} completados)\n\n"
+            "Para generar un reporte mas detallado, carga datos primero y luego usa "
+            "la seccion de Analisis IA."
+        )
+
+    if any(w in msg_lower for w in ["cargar", "subir", "importar", "archivo"]):
+        return (
+            "Para cargar datos a tu empresa:\n\n"
+            "1. Haz clic en el boton de adjuntar archivo (icono de clip)\n"
+            "2. Selecciona un archivo CSV, Excel (.xlsx) o PDF\n"
+            "3. El sistema lo procesara automaticamente\n"
+            "4. Los datos se cargaran en la tabla correspondiente\n\n"
+            "Formatos soportados: CSV, Excel (.xlsx, .xls), PDF con tablas"
+        )
+
+    # Respuesta generica
+    return (
+        f"Entiendo tu pregunta. Aqui esta un resumen de tu empresa:\n\n"
+        f"Tablas: {len(tables)}\n" + "\n".join(tables_info) + "\n\n"
+        f"Total registros: {total_records}\n\n"
+        "Para obtener analisis mas profundos, puedes:\n"
+        "- Cargar datos usando archivos CSV/Excel\n"
+        "- Usar la seccion de Analisis IA\n"
+        "- Hacer preguntas especificas sobre tus ventas, productos o clientes"
+    )
+
+
+async def send_message(
+    org_id: str,
+    user_id: str,
+    content: str,
+    file_id: str | None = None,
+) -> tuple[ChatMessageResponse, ChatMessageResponse]:
+    """Envía mensaje al ChatAgent y retorna par (user_msg, assistant_msg)."""
+    pool = await get_org_pool(org_id)
+    now = datetime.now(timezone.utc)
+
+    # Guardar mensaje del usuario
+    user_msg_id = str(uuid.uuid4())
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO chat_messages (id, user_id, role, content, created_at)
+            VALUES ($1, $2, 'user', $3, $4)
+            """,
+            user_msg_id,
+            user_id,
+            content,
+            now,
+        )
+
+    # Obtener historial reciente para contexto
+    async with pool.acquire() as conn:
+        recent = await conn.fetch(
+            "SELECT role, content FROM chat_messages ORDER BY created_at DESC LIMIT 8"
+        )
+    chat_history = [
+        {"role": r["role"], "content": r["content"]} for r in reversed(recent)
+    ]
+
+    # Usar Gemini con tools
+    from app.services.agent_tools_service import process_with_gemini
+
+    result = await process_with_gemini(org_id, content, chat_history)
+
+    ai_response = result["text"]
+
+    # Si hay charts, agregarlos como bloques especiales en el contenido
+    if result.get("charts"):
+        for chart in result["charts"]:
+            ai_response += f"\n```chart\n{json.dumps(chart, ensure_ascii=False)}\n```"
+
+    # Guardar respuesta del asistente
+    assistant_msg_id = str(uuid.uuid4())
+    completed_at = datetime.now(timezone.utc)
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO chat_messages (id, user_id, role, content, created_at) VALUES ($1, $2, 'assistant', $3, $4)",
+            assistant_msg_id,
+            user_id,
+            ai_response,
+            completed_at,
+        )
+
+    user_response = ChatMessageResponse(
+        message_id=user_msg_id,
+        role="user",
+        content=content,
+        created_at=now,
+    )
+    assistant_response = ChatMessageResponse(
+        message_id=assistant_msg_id,
+        role="assistant",
+        content=ai_response,
+        created_at=completed_at,
+    )
+
+    return user_response, assistant_response
+
+
+async def send_file_message(
+    org_id: str,
+    user_id: str,
+    file,
+    user_message: str | None = None,
+) -> ChatMessageResponse:
+    """Procesa un archivo subido via chat con el Schema Agent."""
+    from app.services.file_service import parse_file
+    from app.services.schema_agent_service import smart_upload
+
+    pool = await get_org_pool(org_id)
+    now = datetime.now(timezone.utc)
+    filename = file.filename or "archivo.csv"
+
+    # Guardar mensaje del usuario
+    user_text = user_message or f"Subiendo archivo: {filename}"
+    user_msg_id = str(uuid.uuid4())
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO chat_messages (id, user_id, role, content, created_at) VALUES ($1, $2, 'user', $3, $4)",
+            user_msg_id,
+            user_id,
+            user_text,
+            now,
+        )
+
+    # Procesar archivo con Schema Agent
+    try:
+        df = await parse_file(file)
+
+        # Guardar archivo en uploaded_files + carpeta local
+        from app.services.file_service import store_file, validate_file, _infer_columns
+
+        file_type, size_bytes = await validate_file(file, df)
+        columns = _infer_columns(df)
+        file_id = await store_file(
+            upload=file,
+            org_id=org_id,
+            file_type=file_type,
+            columns=columns,
+            rows_count=len(df),
+            size_bytes=size_bytes,
+        )
+
+        result = await smart_upload(df, org_id, filename)
+
+        # Actualizar status del archivo
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE uploaded_files SET status = 'ready', rows_count = $1 WHERE id = $2",
+                result.get("rows_inserted", len(df)),
+                file_id,
+            )
+
+        # Construir respuesta descriptiva
+        actions_text = "\n".join(f"- {a['detail']}" for a in result["actions"])
+        analysis = result["analysis"]
+        cols_text = ", ".join(c["clean_name"] for c in analysis["columns"][:8])
+        if len(analysis["columns"]) > 8:
+            cols_text += f" y {len(analysis['columns']) - 8} mas"
+
+        if result["status"] == "created_new_table":
+            response_text = (
+                f"**Archivo procesado: {filename}**\n\n"
+                f"Analice el archivo y cree una nueva tabla **{result['table_name']}** "
+                f"con {analysis['column_count']} columnas.\n\n"
+                f"**Columnas detectadas:** {cols_text}\n\n"
+                f"**Acciones realizadas:**\n{actions_text}\n\n"
+                f"**Resultado:** {result['rows_inserted']} registros cargados exitosamente. "
+                f"Total en tabla: {result['total_rows']} registros."
+            )
+        else:
+            response_text = (
+                f"**Archivo procesado: {filename}**\n\n"
+                f"Analice el archivo y encontre que coincide con la tabla existente "
+                f"**{result['table_name']}** (coincidencia: {int(result.get('match_score', 0) * 100)}%).\n\n"
+                f"**Columnas detectadas:** {cols_text}\n\n"
+                f"**Acciones realizadas:**\n{actions_text}\n\n"
+                f"**Resultado:** {result['rows_inserted']} registros cargados exitosamente. "
+                f"Total en tabla: {result['total_rows']} registros."
+            )
+
+    except Exception as exc:
+        logger.error("Error procesando archivo en chat: %s", exc)
+        response_text = (
+            f"**Error al procesar {filename}**\n\n"
+            f"No pude procesar el archivo: {str(exc)[:200]}\n\n"
+            "Asegurate de que sea un CSV o Excel valido con encabezados en la primera fila."
+        )
+
+    # Guardar respuesta
+    assistant_msg_id = str(uuid.uuid4())
+    completed_at = datetime.now(timezone.utc)
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO chat_messages (id, user_id, role, content, created_at) VALUES ($1, $2, 'assistant', $3, $4)",
+            assistant_msg_id,
+            user_id,
+            response_text,
+            completed_at,
+        )
+
+    return ChatMessageResponse(
+        message_id=assistant_msg_id,
+        role="assistant",
+        content=response_text,
+        created_at=completed_at,
+    )
+
+
+async def get_history(org_id: str, limit: int = 50) -> ChatHistoryResponse:
+    pool = await get_org_pool(org_id)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, role, content, created_at
+            FROM chat_messages
+            ORDER BY created_at ASC
+            LIMIT $1
+            """,
+            limit,
+        )
+
+    messages = [
+        ChatMessageResponse(
+            message_id=str(row["id"]),
+            role=row["role"],
+            content=row["content"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+    return ChatHistoryResponse(messages=messages, total=len(messages))
