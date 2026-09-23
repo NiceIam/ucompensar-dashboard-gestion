@@ -4,7 +4,6 @@
 
 <h1 align="center">Ucompensar · Dashboard de Gestión con IA</h1>
 <p align="center"><b>Gestión estratégica de datos con IA para PYMES colombianas</b></p>
-<p align="center"><sub>Nombre de producto pendiente de definir por el equipo — este título es provisional.</sub></p>
 
 <p align="center">
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-14-black?logo=next.js">
