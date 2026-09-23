@@ -1,0 +1,41 @@
+fecha,producto,tipo_movimiento,cantidad,motivo
+2025-07-01,Cemento Argos 50kg,entrada,100,Compra a proveedor Argos pedido #2025-071
+2025-07-02,Cemento Argos 50kg,salida,10,Venta a Carlos Pinzon
+2025-07-03,Martillo Stanley 16oz,salida,2,Venta a Maria Gutierrez
+2025-07-05,Cable THW 12 AWG (metro),salida,50,Venta a Constructora Andes
+2025-07-06,Cable THW 12 AWG (metro),entrada,200,Reposicion stock Centelsa
+2025-07-08,Pintura vinilo blanco 5gal,salida,3,Venta a Jose Rodriguez
+2025-07-10,Taladro Percutor Bosch 13mm,salida,1,Venta a Pedro Morales
+2025-07-10,Taladro Percutor Bosch 13mm,entrada,5,Compra a Bosch Colombia
+2025-07-12,Tornillo drywall 6x1 (caja 100),salida,5,Venta a Constructora Andes
+2025-07-15,Tubo PVC 1/2 x 6m,salida,20,Venta a Plomeria Express
+2025-07-15,Tubo PVC 1/2 x 6m,entrada,50,Reposicion Pavco
+2025-07-18,Varilla corrugada 1/2 x 6m,salida,30,Venta a Constructora Andes
+2025-07-20,Varilla corrugada 1/2 x 6m,entrada,100,Compra Siderurgica Nacional
+2025-07-22,Candado Yale 50mm,salida,3,Venta a Ana Lopez
+2025-07-25,Sierra Circular DeWalt 7 1/4,salida,1,Venta a Roberto Diaz
+2025-07-28,Brocha 4 pulgadas,salida,8,Venta a Pintores Asociados
+2025-08-01,Cemento Argos 50kg,salida,15,Venta a Constructora Bolivar
+2025-08-01,Cemento Argos 50kg,entrada,150,Pedido mensual Argos
+2025-08-03,Llave de paso 1/2,salida,5,Venta a Juan Hernandez
+2025-08-05,Pulidora Angular Makita 4 1/2,salida,2,Venta a Taller Metalico
+2025-08-05,Pulidora Angular Makita 4 1/2,entrada,5,Compra Makita
+2025-08-10,Disco corte metal 7x1/16,salida,10,Venta a Taller Metalico
+2025-08-12,Escalera aluminio 6 pasos,salida,1,Venta a Luis Perez
+2025-08-15,Pintura vinilo blanco 5gal,salida,5,Venta a Pintores Asociados
+2025-08-15,Pintura vinilo blanco 5gal,entrada,20,Compra Pintuco
+2025-08-20,Silicona transparente 280ml,salida,6,Venta a Vidrios JR
+2025-08-22,Cerradura principal Schlage,salida,2,Venta a Inmobiliaria Sur
+2025-08-25,Guantes carnaza par,salida,10,Venta a Constructora Bolivar
+2025-08-25,Guantes carnaza par,entrada,50,Compra Segurindustria
+2025-08-28,Cable THW 12 AWG (metro),salida,100,Venta a Electricidad Total
+2025-09-01,Cemento Argos 50kg,salida,20,Venta a MegaConstrucciones
+2025-09-01,Cemento Argos 50kg,entrada,200,Pedido mensual Argos
+2025-09-05,Destornillador Phillips 1/4,entrada,60,Reposicion Ferreimportaciones
+2025-09-10,Lija agua #100 (pliego),salida,20,Venta a Taller Metalico
+2025-09-12,Tornillo drywall 6x1 (caja 100),salida,8,Venta a Drywall Express
+2025-09-15,Interruptor sencillo,entrada,30,Compra Legrand
+2025-09-18,Varilla corrugada 1/2 x 6m,salida,25,Venta a MegaConstrucciones
+2025-09-20,Gafas seguridad transparentes,salida,15,Venta Constructora Bolivar
+2025-09-25,Pintura vinilo blanco 5gal,salida,4,Venta a Gloria Mendoza
+2025-10-01,Cemento Argos 50kg,salida,12,Venta a Constructora Andes

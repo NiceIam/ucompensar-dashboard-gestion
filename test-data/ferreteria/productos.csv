@@ -1,0 +1,31 @@
+nombre,categoria,precio_compra,precio_venta,stock,proveedor,codigo
+Martillo Stanley 16oz,Herramientas manuales,35000,52000,45,Distribuidora Nacional,HM-001
+Destornillador Phillips 1/4,Herramientas manuales,8500,14500,120,Ferreimportaciones,HM-002
+Taladro Percutor Bosch 13mm,Herramientas electricas,285000,389000,12,Bosch Colombia,HE-001
+Sierra Circular DeWalt 7 1/4,Herramientas electricas,420000,559000,8,DeWalt Colombia,HE-002
+Cemento Argos 50kg,Construccion,32000,38500,200,Cementos Argos,CO-001
+Varilla corrugada 1/2 x 6m,Construccion,18500,24000,350,Siderurgica Nacional,CO-002
+Tubo PVC 1/2 x 6m,Plomeria,8200,12800,180,Pavco,PL-001
+Llave de paso 1/2,Plomeria,12000,18500,65,Grival,PL-002
+Cable THW 12 AWG (metro),Electricos,2800,4200,500,Centelsa,EL-001
+Interruptor sencillo,Electricos,4500,7800,90,Legrand,EL-002
+Pintura vinilo blanco 5gal,Pinturas,85000,112000,35,Pintuco,PI-001
+Brocha 4 pulgadas,Pinturas,8000,13500,60,Tiger,PI-002
+Candado Yale 50mm,Seguridad,28000,42000,40,Yale Colombia,SE-001
+Cerradura principal Schlage,Seguridad,95000,138000,25,Schlage,SE-002
+Tornillo drywall 6x1 (caja 100),Tornilleria,5500,8900,300,Tornillos del Valle,TO-001
+Clavo 2 pulgadas (libra),Tornilleria,3200,5500,200,Aceros Industriales,TO-002
+Cinta metrica Stanley 5m,Herramientas manuales,15000,24000,55,Distribuidora Nacional,HM-003
+Nivel de burbuja 24,Herramientas manuales,22000,35000,30,Stanley,HM-004
+Pulidora Angular Makita 4 1/2,Herramientas electricas,195000,275000,15,Makita Colombia,HE-003
+Escalera aluminio 6 pasos,Accesorios,145000,198000,10,Werner,AC-001
+Manguera jardin 1/2 x 20m,Jardineria,32000,48000,25,Pavco,JA-001
+Regadera plastica 10L,Jardineria,18000,28000,20,Rimax,JA-002
+Silicona transparente 280ml,Adhesivos,9500,15000,70,Sika,AD-001
+Pegante PVC 1/4,Adhesivos,12000,18500,45,Pavco,AD-002
+Lija agua #100 (pliego),Abrasivos,2200,3800,150,Norton,AB-001
+Disco corte metal 7x1/16,Abrasivos,5800,9200,80,DeWalt,AB-002
+Flexometro 8m Stanley,Herramientas manuales,28000,42000,35,Stanley,HM-005
+Alicate universal 8,Herramientas manuales,18500,29000,40,Knipex,HM-006
+Guantes carnaza par,Seguridad industrial,8500,14000,100,Segurindustria,SI-001
+Gafas seguridad transparentes,Seguridad industrial,6000,10500,80,3M,SI-002

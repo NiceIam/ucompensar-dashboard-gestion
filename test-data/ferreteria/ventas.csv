@@ -1,0 +1,41 @@
+fecha,producto,cantidad,precio_unitario,total,cliente,metodo_pago
+2025-07-02,Cemento Argos 50kg,10,38500,385000,Carlos Pinzon,efectivo
+2025-07-03,Martillo Stanley 16oz,2,52000,104000,Maria Gutierrez,tarjeta
+2025-07-05,Cable THW 12 AWG (metro),50,4200,210000,Constructora Andes SAS,transferencia
+2025-07-08,Pintura vinilo blanco 5gal,3,112000,336000,Jose Rodriguez,efectivo
+2025-07-10,Taladro Percutor Bosch 13mm,1,389000,389000,Pedro Morales,tarjeta
+2025-07-12,Tornillo drywall 6x1 (caja 100),5,8900,44500,Constructora Andes SAS,transferencia
+2025-07-15,Tubo PVC 1/2 x 6m,20,12800,256000,Plomeria Express,efectivo
+2025-07-18,Varilla corrugada 1/2 x 6m,30,24000,720000,Constructora Andes SAS,transferencia
+2025-07-20,Interruptor sencillo,10,7800,78000,Electricidad Total,efectivo
+2025-07-22,Candado Yale 50mm,3,42000,126000,Ana Lopez,tarjeta
+2025-07-25,Sierra Circular DeWalt 7 1/4,1,559000,559000,Roberto Diaz,tarjeta
+2025-07-28,Brocha 4 pulgadas,8,13500,108000,Pintores Asociados,efectivo
+2025-08-01,Cemento Argos 50kg,15,38500,577500,Constructora Bolivar,transferencia
+2025-08-03,Llave de paso 1/2,5,18500,92500,Juan Hernandez,efectivo
+2025-08-05,Pulidora Angular Makita 4 1/2,2,275000,550000,Taller Metalico SAS,tarjeta
+2025-08-08,Cinta metrica Stanley 5m,4,24000,96000,Maria Gutierrez,efectivo
+2025-08-10,Disco corte metal 7x1/16,10,9200,92000,Taller Metalico SAS,transferencia
+2025-08-12,Escalera aluminio 6 pasos,1,198000,198000,Luis Perez,tarjeta
+2025-08-15,Pintura vinilo blanco 5gal,5,112000,560000,Pintores Asociados,transferencia
+2025-08-18,Clavo 2 pulgadas (libra),15,5500,82500,Constructora Andes SAS,efectivo
+2025-08-20,Silicona transparente 280ml,6,15000,90000,Vidrios y Aluminios JR,efectivo
+2025-08-22,Cerradura principal Schlage,2,138000,276000,Inmobiliaria del Sur,tarjeta
+2025-08-25,Guantes carnaza par,10,14000,140000,Constructora Bolivar,transferencia
+2025-08-28,Cable THW 12 AWG (metro),100,4200,420000,Electricidad Total,transferencia
+2025-09-01,Cemento Argos 50kg,20,38500,770000,MegaConstrucciones,transferencia
+2025-09-03,Martillo Stanley 16oz,3,52000,156000,Diego Torres,efectivo
+2025-09-05,Taladro Percutor Bosch 13mm,1,389000,389000,Santiago Ruiz,tarjeta
+2025-09-08,Manguera jardin 1/2 x 20m,2,48000,96000,Vivero La Primavera,efectivo
+2025-09-10,Lija agua #100 (pliego),20,3800,76000,Taller Metalico SAS,efectivo
+2025-09-12,Tornillo drywall 6x1 (caja 100),8,8900,71200,Drywall Express,transferencia
+2025-09-15,Pegante PVC 1/4,4,18500,74000,Plomeria Express,efectivo
+2025-09-18,Varilla corrugada 1/2 x 6m,25,24000,600000,MegaConstrucciones,transferencia
+2025-09-20,Gafas seguridad transparentes,15,10500,157500,Constructora Bolivar,transferencia
+2025-09-22,Destornillador Phillips 1/4,6,14500,87000,Carlos Pinzon,efectivo
+2025-09-25,Nivel de burbuja 24,2,35000,70000,Constructora Andes SAS,tarjeta
+2025-09-28,Pintura vinilo blanco 5gal,4,112000,448000,Gloria Mendoza,tarjeta
+2025-10-01,Alicate universal 8,3,29000,87000,Electricidad Total,efectivo
+2025-10-03,Flexometro 8m Stanley,2,42000,84000,Pedro Morales,efectivo
+2025-10-05,Cemento Argos 50kg,12,38500,462000,Constructora Andes SAS,transferencia
+2025-10-08,Interruptor sencillo,15,7800,117000,Electricidad Total,transferencia

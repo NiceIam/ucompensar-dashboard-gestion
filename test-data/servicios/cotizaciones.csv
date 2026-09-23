@@ -1,0 +1,31 @@
+fecha,cliente,servicio,valor,estado
+2025-06-05,Juan Carlos Perez,Consultoria Estrategica TI,2500000,aprobada
+2025-06-10,Maria Fernanda Lopez,Diseño de Marca,1800000,aprobada
+2025-06-15,Carlos Eduardo Garcia,Desarrollo Web Full Stack,8500000,aprobada
+2025-06-20,Ana Patricia Rodriguez,Community Management,1200000,pendiente
+2025-06-25,Pedro Antonio Martinez,Soporte Tecnico Mensual,850000,aprobada
+2025-07-01,Laura Isabel Gomez,Implementacion ERP,7500000,en revision
+2025-07-05,Diego Alejandro Hernandez,Diseño de Marca,1800000,aprobada
+2025-07-10,Sofia Valentina Torres,Desarrollo Web Full Stack,9200000,aprobada
+2025-07-15,Andres Felipe Ramirez,Consultoria Estrategica TI,3000000,rechazada
+2025-07-20,Valentina Diaz Ruiz,SEO y Posicionamiento,800000,aprobada
+2025-07-25,Camilo Andres Morales,Campañas Google Ads,1500000,aprobada
+2025-08-01,Isabella Vargas Pinto,Fotografia Corporativa,650000,aprobada
+2025-08-05,Santiago Rojas Mejia,Soporte Tecnico Mensual,850000,aprobada
+2025-08-10,Daniela Cruz Ospina,Desarrollo Web Full Stack,8500000,en revision
+2025-08-15,Nicolas Ortiz Luna,Capacitacion Power BI,450000,aprobada
+2025-08-20,Natalia Reyes Castro,Community Management,1200000,aprobada
+2025-08-25,Sebastian Parra Gil,App Movil iOS/Android,12000000,pendiente
+2025-09-01,Gabriela Castro Mora,Diseño de Marca,1800000,rechazada
+2025-09-05,Felipe Ruiz Duarte,Campañas Google Ads,1500000,aprobada
+2025-09-10,Carolina Mendoza Arias,SEO y Posicionamiento,800000,aprobada
+2025-09-15,Juan Carlos Perez,Migracion a la Nube AWS,5500000,aprobada
+2025-09-20,Maria Fernanda Lopez,Capacitacion Ciberseguridad,350000,aprobada
+2025-09-25,Carlos Eduardo Garcia,Soporte Tecnico Mensual,850000,aprobada
+2025-10-01,Ana Patricia Rodriguez,Asesoria Legal Empresarial,900000,pendiente
+2025-10-05,Pedro Antonio Martinez,Auditoria Financiera,3200000,en revision
+2025-10-10,Laura Isabel Gomez,Capacitacion Power BI,450000,aprobada
+2025-10-15,Diego Alejandro Hernandez,Community Management,1200000,aprobada
+2025-10-20,Andres Felipe Ramirez,Consultoria Estrategica TI,2800000,aprobada
+2025-10-25,Sofia Valentina Torres,App Movil iOS/Android,14000000,pendiente
+2025-11-01,Valentina Diaz Ruiz,Soporte Tecnico Mensual,850000,aprobada
