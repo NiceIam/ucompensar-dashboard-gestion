@@ -50,6 +50,20 @@ class Settings(BaseSettings):
     # Secure flag: si None, se deriva de is_production (default seguro).
     # Override explicito a False solo en deploys HTTP-only sin TLS (ej. VPS sin certificado).
     COOKIES_SECURE: bool | None = None
+    # "strict"/"lax" cuando frontend y backend comparten dominio (VPS con proxy).
+    # "none" cuando viven en dominios/sitios distintos (ej. dos proyectos de
+    # Vercel: *.vercel.app esta en la Public Suffix List, asi que cada
+    # subdominio es un "site" distinto para el navegador -- con strict/lax
+    # la cookie nunca se envia en las llamadas fetch() del frontend al backend.
+    COOKIES_SAMESITE: str = "strict"
+
+    @field_validator("COOKIES_SAMESITE", mode="after")
+    @classmethod
+    def _validate_samesite(cls, v: str) -> str:
+        v = v.lower()
+        if v not in ("strict", "lax", "none"):
+            raise ValueError("COOKIES_SAMESITE debe ser 'strict', 'lax' o 'none'.")
+        return v
 
     @field_validator("APP_SECRET_KEY", mode="after")
     @classmethod
@@ -96,7 +110,13 @@ class Settings(BaseSettings):
 
     @property
     def cookies_secure_effective(self) -> bool:
-        """Secure flag efectivo para set_cookie. None = derivar de is_production."""
+        """Secure flag efectivo para set_cookie. None = derivar de is_production.
+
+        SameSite=None exige Secure=True por especificacion -- los navegadores
+        descartan la cookie si no, asi que se fuerza sin importar COOKIES_SECURE.
+        """
+        if self.COOKIES_SAMESITE == "none":
+            return True
         if self.COOKIES_SECURE is None:
             return self.is_production
         return self.COOKIES_SECURE

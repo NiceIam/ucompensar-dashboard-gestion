@@ -33,7 +33,7 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
         value=access_token,
         httponly=True,
         secure=settings.cookies_secure_effective,
-        samesite="strict",
+        samesite=settings.COOKIES_SAMESITE,
         max_age=settings.JWT_EXPIRE_MINUTES * 60,
         path="/",
     )
@@ -42,7 +42,7 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
         value=refresh_token,
         httponly=True,
         secure=settings.cookies_secure_effective,
-        samesite="strict",
+        samesite=settings.COOKIES_SAMESITE,
         max_age=settings.JWT_REFRESH_EXPIRE_DAYS * 24 * 60 * 60,
         path=_REFRESH_COOKIE_PATH,
     )
@@ -201,12 +201,14 @@ async def logout(request: Request, response: Response, current_user: CurrentUser
         except JWTError:
             pass  # Token ya inválido/expirado — no hay nada que revocar
 
-    response.delete_cookie("access_token", path="/", secure=settings.cookies_secure_effective, samesite="strict")
+    response.delete_cookie(
+        "access_token", path="/", secure=settings.cookies_secure_effective, samesite=settings.COOKIES_SAMESITE
+    )
     response.delete_cookie(
         "refresh_token",
         path=_REFRESH_COOKIE_PATH,
         secure=settings.cookies_secure_effective,
-        samesite="strict",
+        samesite=settings.COOKIES_SAMESITE,
     )
     return MessageResponse(message="Sesión cerrada exitosamente.")
 
