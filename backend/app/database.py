@@ -35,6 +35,11 @@ async def get_main_pool() -> asyncpg.Pool:
             min_size=2,
             max_size=10,
             ssl="require" if s.DATABASE_SSL else None,
+            # Requerido detras de un pooler en modo transaccion (ej. PgBouncer
+            # de Neon): asyncpg cachea prepared statements por defecto, lo
+            # que rompe contra ese tipo de proxy ("prepared statement
+            # already exists"). Sin costo relevante en conexion directa.
+            statement_cache_size=0,
         )
     return _main_pool
 
@@ -53,6 +58,7 @@ async def get_org_pool(org_id: str) -> asyncpg.Pool:
             min_size=1,
             max_size=5,
             ssl="require" if s.DATABASE_SSL else None,
+            statement_cache_size=0,
         )
     return _org_pools[db_name]
 
@@ -442,6 +448,7 @@ async def create_org_database(org_id: str, business_type: str = "ferreteria"):
         password=s.DATABASE_PASSWORD,
         database=s.DATABASE_NAME,
         ssl="require" if s.DATABASE_SSL else None,
+        statement_cache_size=0,
     )
     try:
         # Verificar si ya existe
