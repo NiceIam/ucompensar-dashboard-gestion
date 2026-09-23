@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
   LayoutDashboard,
@@ -133,7 +133,20 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(true)
   const { signOut, loading } = useAuth()
-  const { user } = useAuthContext()
+  const { user, loading: authLoading } = useAuthContext()
+  const router = useRouter()
+
+  // Respaldo del lado del cliente a la proteccion de rutas: el middleware
+  // (basado en la cookie access_token) no puede detectar la sesion cuando
+  // frontend y backend viven en dominios/sitios distintos (ej. dos proyectos
+  // de Vercel) -- ahi la cookie nunca es visible en el dominio del frontend.
+  // Este efecto usa /api/v1/auth/me (que si viaja cross-site con
+  // credentials:"include") como fuente de verdad real.
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace("/login")
+    }
+  }, [authLoading, user, router])
 
   useEffect(() => {
     if (typeof window === "undefined") return
