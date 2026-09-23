@@ -1,0 +1,41 @@
+# Secretos / entorno
+.env
+.env.local
+.env.*.local
+*/.env
+*/.env.local
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+**/.pytest_cache/
+backend/venv/
+agents/venv/
+*.egg-info/
+
+# Node / Next.js
+node_modules/
+**/node_modules/
+frontend/.next/
+frontend/out/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+*.tsbuildinfo
+
+# Contenido de organizaciones (archivos subidos, PII de pilotos) y scripts
+# generados por dashboard (se regeneran solos, ver dashboard_script_service.py)
+backend/uploads/
+backend/dashboard_scripts/
+
+# Herramientas locales / metadata de sesiones de IA, no es parte del proyecto
+.atl/
+.claude/settings.local.json
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
