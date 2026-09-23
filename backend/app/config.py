@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     DATABASE_USER: str = "postgres"
     DATABASE_PASSWORD: str = "postgres"
     DATABASE_NAME: str = "pi_main"
+    # False para Postgres local (Docker). True para proveedores hosted que
+    # exigen SSL (ej. Neon) -- sin esto, asyncpg no negocia SSL y la
+    # conexion falla contra ese tipo de proveedores.
+    DATABASE_SSL: bool = False
 
     # Google AI
     GOOGLE_API_KEY: str = ""

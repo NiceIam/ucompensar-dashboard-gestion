@@ -34,6 +34,7 @@ async def get_main_pool() -> asyncpg.Pool:
             database=s.DATABASE_NAME,
             min_size=2,
             max_size=10,
+            ssl="require" if s.DATABASE_SSL else None,
         )
     return _main_pool
 
@@ -51,6 +52,7 @@ async def get_org_pool(org_id: str) -> asyncpg.Pool:
             database=db_name,
             min_size=1,
             max_size=5,
+            ssl="require" if s.DATABASE_SSL else None,
         )
     return _org_pools[db_name]
 
@@ -439,6 +441,7 @@ async def create_org_database(org_id: str, business_type: str = "ferreteria"):
         user=s.DATABASE_USER,
         password=s.DATABASE_PASSWORD,
         database=s.DATABASE_NAME,
+        ssl="require" if s.DATABASE_SSL else None,
     )
     try:
         # Verificar si ya existe
