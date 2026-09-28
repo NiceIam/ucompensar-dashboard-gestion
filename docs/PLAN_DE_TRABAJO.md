@@ -13,80 +13,111 @@
 | Pasante 1 — QA / Testing | Diseño y ejecución de pruebas formales, automatización de pruebas de regresión |
 | Pasante 2 — Documentación | Documentación técnica completa del sistema |
 
-**Nota sobre la atribución en Fase 1**: los pasantes de QA y documentación se incorporan formalmente al proyecto en la Fase 2 (sprint final). No se les atribuye trabajo de construcción del sistema en la Fase 1 porque, en ese momento, el software que iban a probar y documentar todavía no existía — atribuirles tareas de desarrollo ahí sería inexacto. Su aporte real y verificable empieza cuando hay features concretas sobre las cuales probar y documentar, que es exactamente el enfoque de la Fase 2.
+**Nota sobre la atribución en Fase 1**: los 2 pasantes acompañaron desde esta fase, apoyando en pruebas manuales sobre cada feature a medida que los desarrolladores la iban entregando — no en la metodología formal de casos de prueba que se documenta a partir de la Fase 2 (esa metodología aún no existía), sino como verificación funcional directa. El entregable de esta fase es, ante todo, código: cada semana el equipo construyó y verificó una capa nueva del sistema.
 
 ---
 
 # Fase 1 — Desarrollo base (3 de agosto – 25 de septiembre de 2026)
 
-Trabajo realizado sobre la base de código existente del proyecto, por los 2 desarrolladores, en orden de dependencia técnica.
+Trabajo realizado sobre la base de código existente del proyecto, en orden de dependencia técnica. Cada semana, mientras los desarrolladores construían, los 2 pasantes apoyaban verificando manualmente esa misma entrega.
 
 ## Semana 1 (3–7 de agosto): Arquitectura y modelo de datos
-**Responsable: Desarrollador 1**
 
+**Desarrollador 1** (código):
 - Diseño de la arquitectura multi-tenant: una base de datos PostgreSQL dedicada por organización (`org_<uuid>`), separada de una base de datos principal (`pi_main`) para metadatos globales.
 - Definición del esquema de `pi_main`: tablas `organizations`, `users`, `business_types`.
 - Definición del esquema base replicado en cada base de datos de organización: `org_data_tables`, `org_data_rows`, `uploaded_files`, `etl_jobs`, `agent_sessions`, `agent_results`, `chat_messages`, `dashboards`, `widgets`.
-- Configuración de pools de conexión asíncronos (asyncpg): un pool para la base principal (2-10 conexiones), pools independientes por organización (1-5 conexiones), creados bajo demanda.
-- **Entregable**: `backend/app/database.py` con la lógica de inicialización de esquema y creación dinámica de bases de datos por organización.
+- Configuración de pools de conexión asíncronos (asyncpg): pool principal (2-10 conexiones), pools por organización (1-5 conexiones), creados bajo demanda.
+
+**Pasante 1 y Pasante 2** (apoyo de pruebas):
+- Verificación manual de que cada organización nueva recibe su propia base de datos aislada, y que los datos de una no son visibles desde otra.
+
+**Entregable**: Código (`backend/app/database.py`) + verificación funcional del aislamiento multi-tenant.
 
 ## Semana 2 (10–14 de agosto): Autenticación y registro
-**Responsable: Desarrollador 1**
 
+**Desarrollador 1** (código):
 - Implementación de autenticación JWT local (algoritmo HS256), sin dependencia de proveedores externos de auth.
 - Endpoints: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`.
 - Tokens entregados como cookies HttpOnly (access_token: 60 min; refresh_token: 7 días), nunca expuestos a JavaScript del cliente.
-- Rate limiting por endpoint: 5 solicitudes/minuto en registro, 10/minuto en login, 30/minuto en renovación de token.
-- Hashing de contraseñas con bcrypt (12 rondas) y denylist de tokens revocados en logout.
-- **Entregable**: `backend/app/routers/auth_router.py`, `backend/app/services/auth_service.py`, `backend/app/auth.py`.
+- Rate limiting por endpoint (5/min registro, 10/min login, 30/min renovación) y hashing de contraseñas con bcrypt (12 rondas).
+
+**Pasante 1 y Pasante 2** (apoyo de pruebas):
+- Pruebas manuales de registro, login, logout y expiración de sesión; confirmación de que las credenciales inválidas se rechazan correctamente.
+
+**Entregable**: Código (`backend/app/routers/auth_router.py`, `backend/app/services/auth_service.py`, `backend/app/auth.py`) + verificación funcional del flujo de autenticación.
 
 ## Semana 3 (17–21 de agosto): Tipos de negocio y esquemas por industria
-**Responsable: Desarrollador 2** (revisión de Desarrollador 1)
 
+**Desarrollador 2** (código, con revisión de Desarrollador 1):
 - Definición de 3 tipos de negocio soportados: ferretería, servicios, restaurante, cada uno con su propio esquema de tablas (ej. ferretería: productos, ventas, proveedores, inventario_movimientos).
 - Flujo de registro en 3 pasos: datos de cuenta → selección de tipo de negocio → confirmación.
-- Endpoint `POST /api/v1/templates/initialize`, que asocia el tipo de negocio elegido a la organización y crea las tablas correspondientes.
-- **Entregable**: `backend/app/services/template_service.py`, componente `BusinessTypeSelector` en frontend.
+- Endpoint `POST /api/v1/templates/initialize`.
+
+**Pasante 1 y Pasante 2** (apoyo de pruebas):
+- Registro de prueba con cada uno de los 3 tipos de negocio, verificando que se crean exactamente las tablas correspondientes a cada uno.
+
+**Entregable**: Código (`backend/app/services/template_service.py`, `BusinessTypeSelector`) + verificación de los 3 flujos de tipo de negocio.
 
 ## Semana 4 (24–28 de agosto): Motor de carga inteligente de archivos
-**Responsable: Desarrollador 1**
 
+**Desarrollador 1** (código):
 - Desarrollo de `schema_agent_service.py`: análisis automático de columnas de un archivo CSV/Excel/JSON, inferencia de tipo de dato por columna, comparación por similitud de texto contra columnas de tablas ya existentes.
 - Creación automática de tabla nueva cuando no hay coincidencia suficiente.
-- Endpoint `POST /api/v1/schema/smart-upload`. Diseño deliberado sin uso de modelos de lenguaje en esta ruta (matching determinístico), para mantener costos y latencia bajos.
-- **Entregable**: pipeline de ingesta de datos funcional para CSV, Excel y JSON.
+- Endpoint `POST /api/v1/schema/smart-upload`, deliberadamente sin uso de modelos de lenguaje (matching determinístico) para mantener costos y latencia bajos.
+
+**Pasante 1 y Pasante 2** (apoyo de pruebas):
+- Carga manual de archivos CSV/Excel de prueba con distintas estructuras de columnas, verificando que el mapeo automático a tablas fuera correcto.
+
+**Entregable**: Código (pipeline de ingesta funcional para CSV/Excel/JSON) + verificación con datos de prueba reales.
 
 ## Semana 5 (31 de agosto – 4 de septiembre): Interfaz de usuario base
-**Responsable: Desarrollador 2**
 
+**Desarrollador 2** (código):
 - Configuración de Next.js 14 (App Router), TypeScript, Tailwind CSS y shadcn/ui.
 - Páginas de autenticación (login, registro de 3 pasos) y middleware de protección de rutas.
 - Cliente HTTP centralizado (`lib/api.ts`) con renovación automática de sesión ante un 401.
-- **Entregable**: `frontend/src/app/(auth)/*`, `frontend/src/middleware.ts`, `frontend/src/lib/api.ts`.
+
+**Pasante 1 y Pasante 2** (apoyo de pruebas):
+- Navegación manual por las páginas nuevas, verificando que el middleware bloquea el acceso a rutas protegidas sin sesión activa.
+
+**Entregable**: Código (`frontend/src/app/(auth)/*`, `frontend/src/middleware.ts`, `frontend/src/lib/api.ts`) + verificación del flujo de navegación.
 
 ## Semana 6 (7–11 de septiembre): Generación automática de dashboards
-**Responsable: Desarrollador 1 (backend) y Desarrollador 2 (frontend)**
 
+**Desarrollador 1** (backend) y **Desarrollador 2** (frontend), código:
 - Desarrollador 1: `dashboard_script_service.py` — generación heurística de visualizaciones (texto+número → barras, fecha+número → línea, categorías → pie), generación de un script Python descargable por tablero.
 - Desarrollador 2: renderizado de gráficas con Recharts, páginas de listado y detalle de tableros.
-- **Entregable**: `frontend/src/app/(dashboard)/dashboards/*`, `frontend/src/components/charts/chart-renderer.tsx`, `backend/app/services/dashboard_script_service.py`.
+
+**Pasante 1 y Pasante 2** (apoyo de pruebas):
+- Generación manual de tableros sobre distintos conjuntos de datos de prueba, verificando visualmente que cada tipo de gráfica se renderizara correctamente.
+
+**Entregable**: Código (`frontend/src/app/(dashboard)/dashboards/*`, `chart-renderer.tsx`, `dashboard_script_service.py`) + verificación visual de las gráficas generadas.
 
 ## Semana 7 (14–18 de septiembre): Asistente conversacional con IA
-**Responsable: Desarrollador 1 (backend/IA) y Desarrollador 2 (frontend)**
 
+**Desarrollador 1** (backend/IA) y **Desarrollador 2** (frontend), código:
 - Desarrollador 1: integración con Google Gemini vía `google-genai`; construcción de contexto inyectando datos reales de la organización en el prompt (`agent_tools_service.py`).
 - Desarrollador 2: componente de chat flotante con soporte de formato enriquecido (negritas, listas, tablas, encabezados) y respuesta local de respaldo cuando no hay IA disponible.
-- **Entregable**: `frontend/src/components/chat/floating-chat.tsx`, `backend/app/services/agent_tools_service.py`, `backend/app/services/chat_service.py`.
+
+**Pasante 1 y Pasante 2** (apoyo de pruebas):
+- Pruebas manuales del chat con preguntas variadas (directas, ambiguas, fuera de contexto), verificando que el formato de las respuestas se viera correctamente.
+
+**Entregable**: Código (`floating-chat.tsx`, `agent_tools_service.py`, `chat_service.py`) + verificación funcional del chat.
 
 ## Semana 8 (21–25 de septiembre): Estabilización, corrección de errores y despliegue a producción
-**Responsable: Desarrollador 1 y Desarrollador 2 (trabajo conjunto)**
 
+**Desarrollador 1 y Desarrollador 2** (código, trabajo conjunto):
 - Auditoría completa del sistema y corrección de 5 errores críticos: eliminación de tabla que fallaba siempre por uso indebido de `RETURNING` con función de agregación; filas duplicadas en metadata de tablas por falta de restricción de unicidad; condición de carrera al crear tablas; carga de archivos sin transacción; token de sesión que no se revocaba al rotarlo.
 - Actualización de dependencias críticas: `google-adk` 0.3.0 → 2.9.2; retiro de `google-generativeai` (sin soporte oficial) en favor de `google-genai`; actualización del modelo de Gemini (el anterior fue dado de baja por Google) a `gemini-3.6-flash`.
 - Inicialización de control de versiones (Git) y repositorio remoto en GitHub.
 - Despliegue en producción: backend y frontend en Vercel (proyectos separados), base de datos en Neon; corrección de compatibilidad SSL y de política de cookies entre dominios distintos.
 - Configuración de tablero de seguimiento (GitHub Issues + Projects) con el backlog inicial.
-- **Entregable**: sistema desplegado y accesible públicamente; backlog documentado (10 tareas).
+
+**Pasante 1 y Pasante 2** (apoyo de pruebas):
+- Verificación de cada uno de los 5 bugs corregidos (reproducir el error antes del fix, confirmar que ya no ocurre después), y prueba exploratoria del sistema ya desplegado en producción.
+
+**Entregable**: Código (correcciones + configuración de despliegue) + verificación de los 5 bugs corregidos y del sistema en producción; backlog inicial documentado (10 tareas).
 
 ---
 
