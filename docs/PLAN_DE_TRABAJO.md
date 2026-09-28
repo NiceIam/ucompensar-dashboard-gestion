@@ -21,6 +21,31 @@
 
 Trabajo realizado sobre la base de código existente del proyecto, en orden de dependencia técnica. Cada semana, mientras los desarrolladores construían, los 2 pasantes apoyaban verificando manualmente esa misma entrega.
 
+```mermaid
+gantt
+    title Fase 1 — Desarrollo base (3 ago - 25 sep 2026)
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    excludes weekends
+
+    section Desarrollador 1
+    Arquitectura y modelo de datos      :done, d1_s1, 2026-08-03, 5d
+    Autenticación y registro            :done, d1_s2, 2026-08-10, 5d
+    Motor de carga de archivos          :done, d1_s4, 2026-08-24, 5d
+
+    section Desarrollador 2
+    Tipos de negocio                    :done, d2_s3, 2026-08-17, 5d
+    Interfaz de usuario base            :done, d2_s5, 2026-08-31, 5d
+
+    section Ambos desarrolladores
+    Dashboards                          :done, amb_s6, 2026-09-07, 5d
+    Chat con IA                         :done, amb_s7, 2026-09-14, 5d
+    Estabilización y despliegue         :done, amb_s8, 2026-09-21, 5d
+
+    section Pasantes (apoyo de pruebas)
+    Verificación semanal continua       :done, pas_f1, 2026-08-03, 40d
+```
+
 ## Semana 1 (3–7 de agosto): Arquitectura y modelo de datos
 
 **Desarrollador 1** (código):
@@ -155,6 +180,51 @@ Severidad si falla: [Crítica / Alta / Media / Baja]
 ```
 
 Además de pruebas manuales documentadas, el pasante contribuye **pruebas automatizadas reales** usando la infraestructura que el proyecto ya tiene configurada (Playwright para frontend, pytest para backend) — no solo verificación manual repetitiva. Esto es lo que distingue un plan de pruebas de nivel de tesis de una simple lista de verificación.
+
+```mermaid
+gantt
+    title Fase 2 — Sprint final (28 sep - 16 oct 2026)
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    excludes weekends
+
+    section Desarrollador 1
+    Decisión pipeline IA (#1)           :d1_dec, 2026-09-28, 2d
+    Tests schema_agent_service (#4)     :d1_t1, 2026-09-30, 3d
+    Tests chat/agent_tools (#4)         :d1_t2, 2026-10-05, 2d
+    Soporte PDF - diseño (#2)           :d1_pdf1, 2026-10-07, 3d
+    Soporte PDF - finalización (#2)     :d1_pdf2, 2026-10-12, 3d
+    Buffer de bugs + revisión de PRs    :d1_buf, 2026-10-15, 2d
+
+    section Desarrollador 2
+    Rotar clave Neon (#10)              :d2_key, 2026-09-28, 1d
+    Bug mapeo sector (#3)               :d2_bug, 2026-09-29, 3d
+    Revisión de código                  :d2_rev, 2026-10-02, 1d
+    Regresión y corrección de bugs      :d2_reg, 2026-10-05, 4d
+    Limpieza código muerto - inicio (#9):d2_cl1, 2026-10-09, 1d
+    Limpieza código muerto - fin (#9)   :d2_cl2, 2026-10-12, 3d
+    Apoyo bugs de última hora           :d2_buf, 2026-10-15, 2d
+
+    section Pasante 1 - QA
+    Plan de pruebas (#5)                :qa_plan, 2026-09-28, 2d
+    Casos de prueba - registro y tipos  :qa_c1, 2026-09-30, 2d
+    E2E Playwright - registro           :qa_pw1, 2026-10-02, 1d
+    Casos de prueba - chat/dashboards(#6):qa_c2, 2026-10-05, 3d
+    Casos de prueba - PDF               :qa_pdf, 2026-10-08, 1d
+    E2E Playwright - chat               :qa_pw2, 2026-10-09, 1d
+    Regresión completa                  :qa_reg, 2026-10-12, 3d
+    E2E Playwright - multi-tenancy      :qa_pw3, 2026-10-15, 1d
+    Reporte final de QA                 :qa_rep, 2026-10-16, 1d
+
+    section Pasante 2 - Documentación
+    DATABASE.md                         :doc_db, 2026-09-28, 3d
+    SECURITY.md                         :doc_sec, 2026-10-01, 2d
+    API.md                              :doc_api, 2026-10-05, 2d
+    ARCHITECTURE.md                     :doc_arch, 2026-10-07, 3d
+    DEPLOYMENT.md + DECISIONS.md        :doc_dep, 2026-10-12, 2d
+    MANUAL_USUARIO.md + GLOSARIO.md     :doc_man, 2026-10-14, 1d
+    Consolidación final                 :doc_con, 2026-10-15, 2d
+```
 
 ---
 
