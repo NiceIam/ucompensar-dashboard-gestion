@@ -15,6 +15,11 @@
 
 **Nota sobre la atribución en Fase 1**: los 2 pasantes acompañaron desde esta fase, apoyando en pruebas manuales sobre cada feature a medida que los desarrolladores la iban entregando — no en la metodología formal de casos de prueba que se documenta a partir de la Fase 2 (esa metodología aún no existía), sino como verificación funcional directa. El entregable de esta fase es, ante todo, código: cada semana el equipo construyó y verificó una capa nueva del sistema.
 
+## Metodología de trabajo
+
+- **Fase 1 (3 de agosto – 25 de septiembre)**: desarrollo informal / ad-hoc. El equipo avanzó por capas técnicas en orden de dependencia (arquitectura → autenticación → carga de archivos → dashboards → chat con IA), sin sprints ni ceremonias formales de Scrum — la metodología se formaliza a partir de la Fase 2.
+- **Fase 2 (28 de septiembre – 16 de octubre)**: **Scrum real**, con 3 sprints de 1 semana cada uno (Sprint 1, 2 y 3). Cada sprint incluye Sprint Planning, Daily Standup, Sprint Review y Sprint Retrospective. El backlog vive en GitHub Issues (`NiceIam/ucompensar-dashboard-gestion`, issues #1–#10); cada tarea del plan referencia el número de issue correspondiente.
+
 ---
 
 # Fase 1 — Desarrollo base (3 de agosto – 25 de septiembre de 2026)
@@ -48,6 +53,14 @@ gantt
 
 ## Semana 1 (3–7 de agosto): Arquitectura y modelo de datos
 
+```mermaid
+flowchart TD
+    A[Usuario se registra] --> B[Backend crea fila en pi_main.organizations]
+    B --> C[Backend crea base de datos dedicada org_uuid]
+    C --> D[Se inicializan tablas base: org_data_tables, uploaded_files, etl_jobs]
+    D --> E[Organizacion lista para operar de forma aislada]
+```
+
 **Desarrollador 1** (código):
 - Diseño de la arquitectura multi-tenant: una base de datos PostgreSQL dedicada por organización (`org_<uuid>`), separada de una base de datos principal (`pi_main`) para metadatos globales.
 - Definición del esquema de `pi_main`: tablas `organizations`, `users`, `business_types`.
@@ -60,6 +73,19 @@ gantt
 **Entregable**: Código (`backend/app/database.py`) + verificación funcional del aislamiento multi-tenant.
 
 ## Semana 2 (10–14 de agosto): Autenticación y registro
+
+```mermaid
+flowchart TD
+    A[Usuario envia credenciales] --> B{Credenciales validas?}
+    B -->|No| C[401 No autorizado]
+    B -->|Si| D[Se generan access_token 60min y refresh_token 7dias]
+    D --> E[Tokens guardados como cookies HttpOnly]
+    E --> F[Usuario autenticado]
+    F --> G[Peticiones futuras usan access_token]
+    G --> H{Token expirado?}
+    H -->|Si| I[Se usa refresh_token para renovar]
+    H -->|No| J[Se procesa la peticion]
+```
 
 **Desarrollador 1** (código):
 - Implementación de autenticación JWT local (algoritmo HS256), sin dependencia de proveedores externos de auth.
@@ -86,6 +112,17 @@ gantt
 
 ## Semana 4 (24–28 de agosto): Motor de carga inteligente de archivos
 
+```mermaid
+flowchart TD
+    A[Usuario sube archivo CSV, Excel o JSON] --> B[Se analizan las columnas del archivo]
+    B --> C[Se infiere el tipo de dato de cada columna]
+    C --> D{Coincide con una tabla existente?}
+    D -->|Si, similitud alta| E[Se cargan los datos en la tabla existente]
+    D -->|No hay coincidencia| F[Se crea una tabla nueva automaticamente]
+    F --> E
+    E --> G[Datos disponibles para dashboards y chat]
+```
+
 **Desarrollador 1** (código):
 - Desarrollo de `schema_agent_service.py`: análisis automático de columnas de un archivo CSV/Excel/JSON, inferencia de tipo de dato por columna, comparación por similitud de texto contra columnas de tablas ya existentes.
 - Creación automática de tabla nueva cuando no hay coincidencia suficiente.
@@ -110,6 +147,19 @@ gantt
 
 ## Semana 6 (7–11 de septiembre): Generación automática de dashboards
 
+```mermaid
+flowchart TD
+    A[Usuario solicita generar un tablero] --> B[Se analizan las columnas de la tabla de datos]
+    B --> C{Tipo de columnas detectadas}
+    C -->|Texto mas numero| D[Grafica de barras]
+    C -->|Fecha mas numero| E[Grafica de linea]
+    C -->|Categorias| F[Grafica de pie]
+    D --> G[Script Python generado y ejecutado]
+    E --> G
+    F --> G
+    G --> H[Tablero renderizado en el frontend]
+```
+
 **Desarrollador 1** (backend) y **Desarrollador 2** (frontend), código:
 - Desarrollador 1: `dashboard_script_service.py` — generación heurística de visualizaciones (texto+número → barras, fecha+número → línea, categorías → pie), generación de un script Python descargable por tablero.
 - Desarrollador 2: renderizado de gráficas con Recharts, páginas de listado y detalle de tableros.
@@ -120,6 +170,17 @@ gantt
 **Entregable**: Código (`frontend/src/app/(dashboard)/dashboards/*`, `chart-renderer.tsx`, `dashboard_script_service.py`) + verificación visual de las gráficas generadas.
 
 ## Semana 7 (14–18 de septiembre): Asistente conversacional con IA
+
+```mermaid
+flowchart TD
+    A[Usuario escribe una pregunta] --> B[Se recopilan datos reales de la organizacion]
+    B --> C[Se construye el contexto del prompt]
+    C --> D[Se envia a Google Gemini]
+    D --> E{Respuesta exitosa?}
+    E -->|Si| F[Se muestra la respuesta con formato markdown]
+    E -->|No, fallo de Gemini| G[Se usa respuesta local de respaldo]
+    G --> F
+```
 
 **Desarrollador 1** (backend/IA) y **Desarrollador 2** (frontend), código:
 - Desarrollador 1: integración con Google Gemini vía `google-genai`; construcción de contexto inyectando datos reales de la organización en el prompt (`agent_tools_service.py`).
@@ -148,7 +209,7 @@ gantt
 
 # Fase 2 — Sprint final (28 de septiembre – 16 de octubre de 2026)
 
-Este sprint tiene tres frentes que avanzan **en paralelo sobre las mismas features, semana a semana**: desarrollo, pruebas formales, y documentación. Ninguno de los tres es independiente de los otros — cada semana, QA prueba lo que Desarrollo entregó esa semana (o la anterior), y Documentación redacta sobre lo mismo.
+Esta fase se ejecuta bajo **Scrum real**: 3 sprints de 1 semana (Sprint 1, 2 y 3), cada uno con Sprint Planning, Daily Standup, Sprint Review y Sprint Retrospective. Dentro de cada sprint hay tres frentes que avanzan **en paralelo sobre las mismas features**: desarrollo, pruebas formales, y documentación. Ninguno de los tres es independiente de los otros — en cada sprint, QA prueba lo que Desarrollo entregó ese sprint (o el anterior), y Documentación redacta sobre lo mismo.
 
 ## Documentos que produce el Pasante de Documentación
 
@@ -228,9 +289,16 @@ gantt
 
 ---
 
-## Semana 1 (28 de septiembre – 2 de octubre)
+## Sprint 1 (28 de septiembre – 2 de octubre)
 
-**Tema de la semana: estabilidad de la base (multi-tenancy, autenticación, carga de archivos)**
+**Tema del sprint: estabilidad de la base (multi-tenancy, autenticación, carga de archivos)**
+
+### Ceremonias Scrum
+
+- **Sprint Planning** (lunes 28, primera hora): el equipo completo revisa el backlog de GitHub Issues y confirma el alcance del Sprint 1 — Issues #1, #3, #4 (parte 1), #10, más el arranque de `DATABASE.md` y `SECURITY.md`. Se definen los criterios de aceptación de cada issue antes de empezar a codificar.
+- **Daily Standup** (todos los días, 15 min, asíncrono en un hilo de GitHub o canal del equipo): qué hice ayer, qué haré hoy, qué me bloquea.
+- **Sprint Review** (viernes 2, tarde): demo de lo construido en la semana — se valida en vivo, con los casos de prueba de Pasante 1, que el Issue #3 (mapeo de sector) y el Issue #10 (rotación de clave Neon) quedaron resueltos.
+- **Sprint Retrospective** (viernes 2, después de la review, 15-20 min): qué funcionó bien, qué no, máximo 2 acciones concretas para el Sprint 2.
 
 ### Desarrollador 1
 
@@ -256,9 +324,16 @@ gantt
 
 ---
 
-## Semana 2 (5–9 de octubre)
+## Sprint 2 (5–9 de octubre)
 
-**Tema de la semana: chat con IA, dashboards, y una feature nueva (PDF)**
+**Tema del sprint: chat con IA, dashboards, y una feature nueva (PDF)**
+
+### Ceremonias Scrum
+
+- **Sprint Planning** (lunes 5, primera hora): revisión de lo que quedó pendiente del Sprint 1 (bugs reportados por QA) y confirmación del alcance del Sprint 2 — Issue #4 (parte 2), Issue #2 (inicio de soporte PDF), inicio del Issue #9.
+- **Daily Standup** (todos los días, 15 min, asíncrono): qué hice ayer, qué haré hoy, qué me bloquea — con atención especial a si el soporte de PDF (Desarrollador 1) está listo a tiempo para que Pasante 1 pueda probarlo el jueves.
+- **Sprint Review** (viernes 9, tarde): demo del chat con IA, de los dashboards, y de la primera versión de extracción de PDF; revisión de los bugs de regresión corregidos por Desarrollador 2.
+- **Sprint Retrospective** (viernes 9, después de la review, 15-20 min): qué funcionó bien, qué no, máximo 2 acciones concretas para el Sprint 3 (el sprint de cierre).
 
 ### Desarrollador 1
 
@@ -283,9 +358,16 @@ gantt
 
 ---
 
-## Semana 3 (12–16 de octubre)
+## Sprint 3 (12–16 de octubre)
 
-**Tema de la semana: cierre, regresión completa, y consolidación**
+**Tema del sprint: cierre, regresión completa, y consolidación**
+
+### Ceremonias Scrum
+
+- **Sprint Planning** (lunes 12, primera hora): confirmación del alcance de cierre — finalización del Issue #2 (PDF), finalización del Issue #9 (limpieza de código muerto), regresión completa de QA, y consolidación de los 8 documentos.
+- **Daily Standup** (todos los días, 15 min, asíncrono): qué hice ayer, qué haré hoy, qué me bloquea — en este sprint, prioridad a cualquier bug crítico que la regresión de QA encuentre, ya que no hay un sprint siguiente para corregirlo.
+- **Sprint Review** (viernes 16, tarde): demo final del sistema completo frente al equipo — soporte de PDF terminado, resultado de la regresión completa, y los 8 documentos entregados y enlazados desde el `README.md`. Es también el cierre de la Fase 2 y del sprint final del proyecto.
+- **Sprint Retrospective** (viernes 16, después de la review, 15-20 min): retrospectiva de todo el sprint final — qué funcionó bien, qué no, y lecciones para el trabajo futuro del equipo más allá de esta entrega.
 
 ### Desarrollador 1
 
