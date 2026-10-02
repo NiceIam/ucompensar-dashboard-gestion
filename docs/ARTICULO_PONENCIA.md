@@ -2,7 +2,7 @@
 
 **Código del proyecto**: PI0320251
 **Semillero de investigación** — Fundación Universitaria Ucompensar
-**Autores**: _[completar con los integrantes del equipo: 2 desarrolladores + 2 pasantes de investigación]_
+**Autores**: Juan David Celis Venegas, John Steven Arevalo Solorzano, Carlos Alberto Castellanos Garzon, David Santiago Valencia Blanco
 **Fecha**: octubre de 2026
 
 ---
@@ -87,17 +87,29 @@ Adicionalmente, la migración del SDK `google-generativeai` (discontinuado por G
 
 El aislamiento por base de datos dedicada está implementado y verificado en producción (desplegado en Vercel con base de datos PostgreSQL gestionada en Neon): cada registro de una nueva organización crea su base de datos (`CREATE DATABASE org_<uuid>`), inicializa su esquema base (tablas de datos subidos, archivos, trabajos de ETL, tableros), y queda operando de forma aislada respecto a cualquier otra organización registrada.
 
+![Figura 1. Arquitectura multi-tenant: cada organización registrada queda aislada en su propia base de datos PostgreSQL, separada de la base de datos principal de metadatos.](img/diagrama_arquitectura.png)
+
+![Figura 2. Pantalla de registro de una nueva organización en la plataforma.](img/06_registro.png)
+
 ### 4.2 Motor de ingesta inteligente de archivos
 
 El endpoint de carga (`smart-upload`) acepta CSV, Excel — incluyendo archivos con **múltiples hojas**, cada una procesada y clasificada de forma independiente — y JSON. Por cada archivo, el sistema decide automáticamente si los datos corresponden a una tabla ya existente (por similitud de columnas) o si debe crear una tabla nueva, sin intervención manual del usuario y sin costo de tokens de IA.
+
+![Figura 3. Vista "Mis Datos": el usuario sube un archivo y el sistema lo clasifica automáticamente.](img/03_mis_datos.png)
+
+![Figura 4. Flujo de decisión del motor de ingesta inteligente — enteramente determinístico, sin invocar ningún modelo de IA.](img/diagrama_ingesta.png)
 
 ### 4.3 Generación automática de dashboards
 
 A partir de cualquier conjunto de datos cargado, el sistema genera automáticamente un tablero con visualizaciones apropiadas al tipo de dato detectado, sin que el usuario tenga que configurar manualmente ningún gráfico.
 
+![Figura 5. Tablero generado automáticamente a partir de los datos cargados por el usuario.](img/02_dashboard.png)
+
 ### 4.4 Asistente conversacional
 
 El usuario puede hacer preguntas en lenguaje natural sobre sus propios datos. El asistente construye el contexto del prompt con datos reales de la organización (nunca con datos de otra organización, por el aislamiento descrito en 4.1) y responde usando Gemini; ante un fallo del proveedor de IA, el sistema cuenta con una ruta de respaldo local para no dejar al usuario sin respuesta.
+
+![Figura 6. Flujo del asistente conversacional: contexto real de la organización inyectado en el prompt, con respuesta de respaldo local si Gemini falla.](img/diagrama_chat.png)
 
 ### 4.5 Seguridad
 
