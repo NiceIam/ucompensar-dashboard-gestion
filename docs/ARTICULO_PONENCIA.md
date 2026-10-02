@@ -135,10 +135,14 @@ Como trabajo futuro, el equipo tiene identificadas dos líneas de extensión act
 
 ## Referencias
 
-- Google AI for Developers. Documentación oficial de la API de Gemini y del SDK `google-genai`. https://ai.google.dev
-- OpenAI. Documentación oficial de la API y modelos GPT. https://platform.openai.com
-- Anthropic. Documentación oficial de la API y modelos Claude. https://docs.anthropic.com
-- Documentación oficial de PostgreSQL sobre aislamiento de bases de datos por esquema/instancia.
-- Documentación oficial de FastAPI y `asyncpg` para arquitecturas asíncronas multi-tenant.
-
-> **Nota para el equipo**: las referencias a precios y disponibilidad de cuotas gratuitas de cada proveedor de IA cambian con frecuencia — se recomienda verificar las condiciones vigentes directamente en la documentación oficial antes de presentar cifras exactas en la ponencia.
+1. Bezemer, C-P., & Zaidman, A. (2010). Multi-tenant SaaS applications: maintenance dream or nightmare? En *Proceedings of the Joint ERCIM Workshop on Software Evolution and International Workshop on Principles of Software Evolution (IWPSE-EVOL)*, Amberes, Bélgica (pp. 88-92). ACM.
+2. Guo, C. J., Sun, W., Huang, Y., Wang, Z. H., & Gao, B. (2007). A framework for native multi-tenancy application development and management. En *Proceedings of the 9th IEEE International Conference on E-Commerce Technology and the 4th IEEE International Conference on Enterprise Computing, E-Commerce and E-Services (CEC-EEE 2007)*.
+3. Krebs, R., Momm, C., & Kounev, S. (2012). Architectural concerns in multi-tenant SaaS applications. En *Proceedings of the 2nd International Conference on Cloud Computing and Services Science (CLOSER 2012)*.
+4. Kleppmann, M. (2017). *Designing Data-Intensive Applications: The Big Ideas Behind Reliable, Scalable, and Maintainable Systems*. O'Reilly Media.
+5. Newman, S. (2021). *Building Microservices: Designing Fine-Grained Systems* (2.ª ed.). O'Reilly Media.
+6. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., & Polosukhin, I. (2017). Attention is all you need. En *Advances in Neural Information Processing Systems 30 (NeurIPS 2017)* (pp. 5998-6008).
+7. Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M-A., Lacroix, T., Rozière, B., Goyal, N., Hambro, E., Azhar, F., Rodriguez, A., Joulin, A., Grave, E., & Lample, G. (2023). LLaMA: Open and efficient foundation language models. *arXiv preprint arXiv:2302.13971*.
+8. OpenAI (2023). GPT-4 Technical Report. *arXiv preprint arXiv:2303.08774*.
+9. Gemini Team, Google (2023). Gemini: A family of highly capable multimodal models. *arXiv preprint arXiv:2312.11805*.
+10. Anthropic (2024). *The Claude 3 model family: Opus, Sonnet, Haiku* (Model Card). https://www-cdn.anthropic.com/de8ba9b01c9ab7cbabf5c33b80b7bbc618857627/Model_Card_Claude_3.pdf
+11. Comisión Económica para América Latina y el Caribe — CEPAL (2021). *Transformación digital de las mipymes: elementos para el diseño de políticas*. Naciones Unidas.
