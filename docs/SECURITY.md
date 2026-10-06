@@ -1,7 +1,7 @@
 # Modelo de Seguridad — PI0320251
 
 **Responsable**: Pasante 2 — Documentación
-**Revisado contra**: código de `main` @ `a90a67c` y pruebas en entorno local (30 de septiembre de 2026)
+**Revisado contra**: código de `main` @ `a90a67c` y pruebas en entorno local (30 de septiembre de 2026). Revalidado el 6 de octubre de 2026 (`main` @ `8ba65d7`): sin cambios en `backend/` ni en la autenticación del frontend
 **Archivos principales**: `backend/app/auth.py`, `backend/app/routers/auth_router.py`, `backend/app/services/auth_service.py`, `backend/app/config.py`, `backend/main.py`, `frontend/src/middleware.ts`, `frontend/src/lib/api.ts`
 
 Este documento describe **cómo está protegido el sistema hoy**, qué se corrigió en la Fase 1 y qué riesgos conocidos quedan abiertos. No es una auditoría de penetración.
@@ -12,12 +12,12 @@ Este documento describe **cómo está protegido el sistema hoy**, qué se corrig
 
 | Control | Implementación | Verificado |
 |---|---|---|
-| Autenticación | JWT propio (HS256), sin proveedor externo | TC-009, TC-010 |
-| Transporte del token | Solo cookies HttpOnly; el header `Authorization: Bearer` **no** se acepta | TC-009 |
+| Autenticación | JWT propio (HS256), sin proveedor externo | Sí, entorno local |
+| Transporte del token | Solo cookies HttpOnly; el header `Authorization: Bearer` **no** se acepta | Sí, entorno local |
 | Contraseñas | bcrypt con 12 rondas (configurable 10–15) | Código |
 | Revocación | Denylist en memoria por `jti` (logout y rotación de refresh) | Código; ver riesgo R-01 |
 | Fuerza bruta | Rate limiting por IP en registro, login y refresh | Código |
-| Aislamiento de datos | Una base de datos PostgreSQL por organización | TC-004, TC-011 |
+| Aislamiento de datos | Una base de datos PostgreSQL por organización | Sí, entorno local |
 | CORS | Lista blanca de orígenes con credenciales | Código |
 | Documentación de la API | `/docs`, `/redoc` y `/openapi.json` deshabilitados en producción | Código |
 
@@ -55,7 +55,7 @@ sequenceDiagram
 | Token | Duración | Claims | Uso |
 |---|---|---|---|
 | `access_token` | `JWT_EXPIRE_MINUTES` (60 min por defecto) | `sub` (user_id), `org_id`, `email`, `role`, `exp`, `jti` | Toda petición autenticada |
-| `refresh_token` | 7 días (fijo en código, ver OBS-S1-03) | `sub`, `type: "refresh"`, `exp`, `jti` | Solo `POST /api/v1/auth/refresh` |
+| `refresh_token` | 7 días (fijo en código, ver R-08) | `sub`, `type: "refresh"`, `exp`, `jti` | Solo `POST /api/v1/auth/refresh` |
 
 - **Algoritmo**: HS256 con `APP_SECRET_KEY`. Al arrancar, el backend **rechaza** claves de menos de 32 caracteres o valores triviales (`secret`, `changeme`, `dev-secret-key-change-in-production`…), en `config.py → _validate_secret`.
 - **`org_id` dentro del token**: es lo que decide a qué base de datos se conecta cada petición. Por eso la firma del token es la frontera de aislamiento entre organizaciones: quien conozca `APP_SECRET_KEY` puede firmar tokens para cualquier organización.
@@ -74,7 +74,7 @@ sequenceDiagram
 
 ### 2.4 Mensajes de error
 
-- Login con correo inexistente o contraseña incorrecta → **el mismo** `401 "Credenciales incorrectas."` (no revela si el correo existe). Verificado en TC-010.
+- Login con correo inexistente o contraseña incorrecta → **el mismo** `401 "Credenciales incorrectas."` (no revela si el correo existe). Verificado en entorno local.
 - Registro con correo existente → `400 "El correo ya está registrado."`. Esto **sí** permite saber si un correo está registrado (enumeración de usuarios). El límite de 5/min lo mitiga parcialmente. Riesgo aceptado, R-04.
 
 ---
@@ -106,7 +106,7 @@ Configuradas en `auth_router.py → _set_auth_cookies`:
 ## 4. Contraseñas
 
 - Hash con **bcrypt**, `BCRYPT_ROUNDS=12` por defecto. El backend no arranca con valores fuera del rango 10–15.
-- La API solo exige **mínimo 8 caracteres** (TC-006); no hay reglas de complejidad.
+- La API solo exige **mínimo 8 caracteres** (una contraseña de 6 caracteres recibe 422); no hay reglas de complejidad.
 - `password_hash` nunca se devuelve por la API. La edición de perfil usa una **lista blanca** de campos (`full_name`, `phone`, `avatar_url`, `preferences`): intentar cambiar `password_hash`, `role`, `org_id` o `deleted_at` devuelve 422 (cubierto por `backend/tests/test_auth_service.py`).
 - **No existe** flujo de recuperación ni de cambio de contraseña.
 
@@ -117,7 +117,7 @@ Configuradas en `auth_router.py → _set_auth_cookies`:
 - Cada organización tiene su **propia base de datos** `org_<uuid>` (ver `docs/DATABASE.md`).
 - El backend elige la base con el `org_id` del token **firmado**, nunca con un parámetro que envíe el cliente.
 - No hay consultas que crucen bases de organizaciones.
-- Verificado: la organización B no ve los archivos ni los datos subidos por A (TC-011).
+- Verificado en entorno local: la organización B no ve los archivos ni los datos subidos por A.
 
 ---
 
@@ -209,13 +209,14 @@ En la semana 8 de la Fase 1 (21–25 de septiembre) el equipo auditó el sistema
 
 | ID | Riesgo | Severidad | Estado / propuesta |
 |---|---|---|---|
-| R-01 | **Denylist en memoria en un despliegue serverless.** En Vercel cada petición puede caer en una instancia distinta. Un logout o una rotación registrados en una instancia no se conocen en las demás: el access token puede seguir siendo válido hasta 60 min tras el logout, y la corrección #5 no protege entre instancias | Alta | Propuesto como issue de decisión (OBS-S1-01 en `docs/testing/BUGS_SPRINT1.md`) |
+| R-01 | **Denylist en memoria en un despliegue serverless.** En Vercel cada petición puede caer en una instancia distinta. Un logout o una rotación registrados en una instancia no se conocen en las demás: el access token puede seguir siendo válido hasta 60 min tras el logout, y la corrección #5 no protege entre instancias | Alta | Propuesto como issue de decisión: tabla `revoked_tokens` en `pi_main`, Redis administrado, o aceptar el riesgo y registrarlo en `docs/DECISIONS.md` |
 | R-02 | **CSRF con `SameSite=None`.** Si producción usa `COOKIES_SAMESITE=none`, el navegador envía las cookies en peticiones originadas desde **cualquier** sitio. CORS impide leer la respuesta, pero no impide que se ejecuten las peticiones "simples": un formulario HTML `multipart/form-data` (como `POST /api/v1/files/upload`) no dispara preflight. No hay token anti-CSRF ni verificación del header `Origin` | Media | **A verificar** en producción. Mitigaciones posibles: verificar `Origin`/`Referer` en métodos que modifican datos, o servir frontend y backend bajo el mismo dominio para volver a `lax`/`strict` |
 | R-03 | **Rate limiting por IP detrás de un proxy.** `slowapi` usa `get_remote_address` (IP de la conexión). Detrás del proxy de Vercel podría verse la IP del proxy y no la del cliente: o todos los usuarios comparten el límite, o el límite deja de proteger. Además, el contador está en memoria por instancia | Media | **A verificar** en producción |
 | R-04 | **Enumeración de correos en el registro** (`400 "El correo ya está registrado."`) | Baja | Aceptado; mitigado por el límite de 5/min |
 | R-05 | **Sin política de contraseñas ni recuperación de cuenta.** Solo mínimo 8 caracteres; sin "olvidé mi contraseña" ni cambio de contraseña | Baja | Fuera del alcance de la Fase 2 |
 | R-06 | **Rotación pendiente de la contraseña de la BD de producción (Neon)** | Alta | Issue #10, Sprint 1 — Desarrollador 2. Al cerrarlo, documentar aquí el motivo y la fecha de rotación |
 | R-07 | **Datos personales de pilotos en archivos subidos.** Se guardan en `uploaded_files.file_data` (BYTEA) y en disco (`backend/uploads/`), sin cifrado a nivel de aplicación | Media | Documentado. Depende del cifrado en reposo del proveedor (Neon) |
+| R-08 | **`JWT_REFRESH_EXPIRE_DAYS` no se usa al firmar el refresh token.** `create_refresh_token` usa `timedelta(days=7)` fijo, mientras la cookie usa la variable: si se cambia, cookie y JWT vencen en fechas distintas | Baja | Usar `settings.JWT_REFRESH_EXPIRE_DAYS` en `create_refresh_token` |
 
 ---
 
@@ -226,7 +227,7 @@ En la semana 8 de la Fase 1 (21–25 de septiembre) el equipo auditó el sistema
 | `APP_SECRET_KEY` | — (obligatoria, ≥ 32 caracteres) | Generar con `python -c "import secrets; print(secrets.token_urlsafe(48))"`. **Rotarla invalida todas las sesiones** |
 | `APP_ENV` | `development` | `production` (deshabilita Swagger y activa `Secure` por defecto) |
 | `JWT_EXPIRE_MINUTES` | `60` | |
-| `JWT_REFRESH_EXPIRE_DAYS` | `7` | Solo afecta a la cookie, no al JWT (OBS-S1-03) |
+| `JWT_REFRESH_EXPIRE_DAYS` | `7` | Solo afecta a la cookie, no al JWT (R-08) |
 | `BCRYPT_ROUNDS` | `12` | 10–15 |
 | `CORS_ORIGINS` | `http://localhost:3000` | URL exacta del frontend |
 | `COOKIES_SAMESITE` | `strict` | `none` si frontend y backend están en dominios distintos |
