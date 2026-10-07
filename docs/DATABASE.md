@@ -250,7 +250,7 @@ Restricciones: PK y FK. **Sin índice en `table_id`** (ver sección 8, hallazgo 
 | `data` | jsonb | NO | `'{}'` |
 | `created_at` | timestamptz | sí | `now()` |
 
-Tabla de compatibilidad. La carga de datos **sigue escribiendo** cada fila aquí además de en `org_data_rows`. Candidata a eliminación (ver sección 8, hallazgo H-02; relacionado con el Issue #9).
+Tabla de compatibilidad. La carga de datos **sigue escribiendo** cada fila aquí además de en `org_data_rows`. La leen la vista previa de archivos (`GET /api/v1/files/{id}`) y los agentes de `agents/`. Antes de eliminarla hay que resolver esas dependencias (ver sección 8, hallazgo H-02; relacionado con los Issues #1 y #9).
 
 ---
 
@@ -445,7 +445,7 @@ Observaciones encontradas al verificar el esquema real. No son parte del diccion
 | ID | Hallazgo | Impacto | Relación |
 |---|---|---|---|
 | H-01 | `org_data_rows.table_id` no tiene índice (solo existe la llave primaria) | Las consultas por tabla lógica (dashboards, chat, conteos) recorren todas las filas de la organización | Rendimiento |
-| H-02 | Cada fila cargada se escribe 2 veces: en `org_data_rows` y en la tabla legacy `data_records` | Duplica almacenamiento y llamadas a la BD | Issue #9 (limpieza) |
+| H-02 | Cada fila cargada se escribe 2 veces: en `org_data_rows` y en la tabla legacy `data_records`. La vista previa de archivos la consulta filtrando por id de archivo, pero la carga guarda el nombre de la tabla, así que la vista previa siempre sale vacía | Duplica almacenamiento y llamadas a la BD; vista previa rota | Issues #1 y #9 |
 | H-03 | La carga actual (`/api/v1/files/upload`) no registra filas en `etl_jobs` | El contador "Archivos" del Resumen muestra 0 aunque haya archivos cargados | Bug de interfaz |
 | H-04 | El registro crea las tablas de "servicios" además del tipo elegido | Organizaciones con tablas que no corresponden a su negocio | Issue #3 |
 | H-05 | `columns_definition` no se valida al cargar datos (`required` y tipos son informativos) | Los consumidores de los datos deben tolerar valores faltantes o de otro tipo | Diseño |
