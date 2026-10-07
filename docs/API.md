@@ -248,7 +248,7 @@ Router: `backend/app/routers/dashboards.py` · Servicios: `dashboard_service.py`
 { "name": "Ventas del mes", "description": "Tablero de prueba para la documentación" }
 ```
 
-**Respuesta 201** (real). Además, genera el script Python del tablero (sección 4.7):
+**Respuesta 201** (real). Además, genera el script Python del tablero (sección 4.8):
 
 ```json
 {
