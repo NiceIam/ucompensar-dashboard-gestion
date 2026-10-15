@@ -366,7 +366,9 @@ export function FloatingChat({ isOpen, onToggle }: FloatingChatProps) {
     if (selectedFile) {
       await sendFile(selectedFile, text || undefined)
     } else {
-      await sendMessage(text)
+      const result = await sendMessage(text)
+      // Un 429 (límite/cuota) rechaza el mensaje sin enviarlo: se devuelve el texto al input para no perderlo.
+      if (result?.rateLimited) setInputValue((current) => current || text)
     }
   }, [inputValue, selectedFile, isSending, sendMessage, sendFile])
 

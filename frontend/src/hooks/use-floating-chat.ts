@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { api } from "@/lib/api"
+import { getChatErrorMessage, isChatLimitError } from "@/lib/chat-errors"
 import type { ChatMessage } from "@/types/api"
 
 interface ChatHistory {
@@ -58,6 +59,11 @@ function getPageContext(pathname: string): PageContext {
   }
 }
 
+export interface SendMessageResult {
+  /** El backend rechazó el mensaje por límite/cuota (429): no se envió y el texto conviene restaurarlo. */
+  rateLimited: boolean
+}
+
 export interface FloatingChatState {
   messages: ChatMessage[]
   isLoading: boolean
@@ -65,7 +71,7 @@ export interface FloatingChatState {
   error: string | null
   currentPage: PageContext
   selectedFile: File | null
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (content: string) => Promise<SendMessageResult>
   sendFile: (file: File, message?: string) => Promise<void>
   setSelectedFile: (file: File | null) => void
   clearError: () => void
@@ -102,9 +108,10 @@ export function useFloatingChat(): FloatingChatState {
 
   const sendMessage = useCallback(
     async (content: string) => {
-      if (!content.trim() || isSending) return
+      if (!content.trim() || isSending) return { rateLimited: false }
       setIsSending(true)
       setError(null)
+      let rateLimited = false
 
       // Optimistic user message
       const optimisticUser: ChatMessage = {
@@ -128,9 +135,8 @@ export function useFloatingChat(): FloatingChatState {
         }
         setMessages((prev) => [...prev, assistantMsg])
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Error al enviar el mensaje"
-        )
+        rateLimited = isChatLimitError(err)
+        setError(getChatErrorMessage(err, "Error al enviar el mensaje"))
         // Remove optimistic message on failure
         setMessages((prev) =>
           prev.filter((m) => m.id !== optimisticUser.id)
@@ -138,6 +144,7 @@ export function useFloatingChat(): FloatingChatState {
       } finally {
         setIsSending(false)
       }
+      return { rateLimited }
     },
     [isSending]
   )
