@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3.6-flash"
     GEMINI_MAX_TOKENS: int = 8192
     GEMINI_TEMPERATURE: float = 0.1
+    # Tope de espera por llamada al chat (segundos). Al excederlo el usuario recibe el fallback "timeout".
+    GEMINI_TIMEOUT_SECONDS: float = 25.0
 
     # App
     APP_ENV: str = "development"

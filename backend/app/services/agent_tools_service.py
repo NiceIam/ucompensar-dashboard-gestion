@@ -7,8 +7,11 @@ Herramientas que Gemini puede invocar para responder preguntas sobre los datos:
 4. manage_data: CRUD de tablas y registros
 """
 
+import asyncio
 import json
 import logging
+import math
+import re
 from typing import Any
 
 from app.config import get_settings
@@ -287,6 +290,193 @@ async def manage_data(org_id: str, action: str, **kwargs) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Fallback cuando Gemini falla
+# ---------------------------------------------------------------------------
+
+class _GeminiUnusableResponse(Exception):
+    """Gemini respondio sin error pero sin texto util (vacia o bloqueada)."""
+
+    def __init__(self, kind: str):
+        super().__init__(f"respuesta de Gemini sin texto ({kind})")
+        self.kind = kind
+
+
+# causa -> (por que fallo, que puede hacer el usuario)
+_FAILURE_MESSAGES = {
+    "quota": (
+        "se agotó la cuota de uso del servicio de IA",
+        "Intenta de nuevo en unos minutos; si persiste, avisa al administrador.",
+    ),
+    "unavailable": (
+        "el servicio de IA no está disponible en este momento",
+        "Intenta de nuevo en unos minutos.",
+    ),
+    "timeout": (
+        "el servicio de IA tardó demasiado en responder",
+        "Intenta de nuevo; si la pregunta es muy amplia, prueba con una más específica.",
+    ),
+    "auth": (
+        "el servicio de IA no está configurado correctamente",
+        "Avisa al administrador para que revise la configuración.",
+    ),
+    "blocked": (
+        "la IA bloqueó esta pregunta con sus filtros de seguridad",
+        "Intenta reformular la pregunta.",
+    ),
+    "truncated": (
+        "la respuesta de la IA se cortó antes de generar texto",
+        "Prueba con una pregunta más específica.",
+    ),
+    "empty": (
+        "la IA no devolvió una respuesta",
+        "Intenta de nuevo o reformula la pregunta.",
+    ),
+    "unknown": (
+        "ocurrió un error inesperado con el servicio de IA",
+        "Intenta de nuevo; si el problema continúa, avisa al administrador.",
+    ),
+}
+
+_BLOCKED_FINISH_REASONS = {
+    "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII",
+    "IMAGE_SAFETY", "IMAGE_PROHIBITED_CONTENT", "IMAGE_RECITATION",
+}
+
+_NUMERIC_TYPES = ("number", "integer", "float")
+
+_DEFAULT_GEMINI_TIMEOUT_SECONDS = 25.0
+
+
+def _empty_response_kind(response) -> str:
+    """'blocked' si Gemini filtro el prompt o la respuesta; 'empty' si solo vino vacia."""
+    block_reason = getattr(getattr(response, "prompt_feedback", None), "block_reason", None)
+    if block_reason is not None and not getattr(block_reason, "name", str(block_reason)).endswith("UNSPECIFIED"):
+        return "blocked"
+    for candidate in getattr(response, "candidates", None) or []:
+        reason = getattr(candidate, "finish_reason", None)
+        if reason is not None and getattr(reason, "name", str(reason)) in _BLOCKED_FINISH_REASONS:
+            return "blocked"
+        if reason is not None and getattr(reason, "name", str(reason)) == "MAX_TOKENS":
+            return "truncated"
+    return "empty"
+
+
+def _classify_gemini_failure(exc: BaseException) -> str:
+    """Clasifica la falla en una clave de _FAILURE_MESSAGES. Nunca lanza: corre dentro de un `except`."""
+    try:
+        return _classify(exc)
+    except Exception:
+        return "unknown"
+
+
+def _classify(exc: BaseException) -> str:
+    import httpx
+    from google.genai import errors as genai_errors
+
+    if isinstance(exc, _GeminiUnusableResponse):
+        return exc.kind
+    if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+        return "timeout"
+    if isinstance(exc, genai_errors.APIError):
+        code = exc.code or 0
+        status = (exc.status or "").upper()
+        message = (exc.message or "").lower()
+        if code == 429 or status == "RESOURCE_EXHAUSTED":
+            return "quota"
+        if code in (401, 403) or status in ("UNAUTHENTICATED", "PERMISSION_DENIED") or "api key" in message:
+            return "auth"
+        if code == 504 or status == "DEADLINE_EXCEEDED":
+            return "timeout"
+        if code >= 500:
+            return "unavailable"
+        return "unknown"
+    if isinstance(exc, (ConnectionError, OSError, httpx.TransportError)):
+        return "unavailable"
+    if isinstance(exc, ValueError) and "api key" in str(exc).lower():
+        return "auth"  # el SDK lanza ValueError('No API key was provided...') si GOOGLE_API_KEY esta vacia
+    return "unknown"
+
+
+def _gemini_timeout_seconds(settings) -> float:
+    value = settings.GEMINI_TIMEOUT_SECONDS
+    return value if value and value > 0 else _DEFAULT_GEMINI_TIMEOUT_SECONDS
+
+
+def _redact(text: str, api_key: str | None) -> str:
+    """Quita la API key (exacta o con forma de clave de Google) y acota el largo para logs."""
+    if api_key:
+        text = text.replace(api_key, "***")
+    return re.sub(r"AIza[\w-]{10,}", "***", text)[:500]
+
+
+def _fmt_number(value: float):
+    """Numero legible: entero si lo es, 2 decimales, cientifico si es enorme, sin lanzar nunca."""
+    if not math.isfinite(value):
+        return "no calculable"
+    if abs(value) >= 1e15:
+        return f"{value:.3e}"
+    return int(value) if value == int(value) else round(value, 2)
+
+
+_MAX_CELL_CHARS = 80
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]+")
+
+
+def _clean_cell(value) -> str:
+    """Valor apto para mostrar en una linea de markdown: sin saltos ni control, acotado."""
+    text = _CONTROL_CHARS.sub(" ", str(value)[: _MAX_CELL_CHARS * 2]).strip()
+    return text[:_MAX_CELL_CHARS] + "…" if len(text) > _MAX_CELL_CHARS else text
+
+
+def _build_fallback_text(kind: str, tables, query_results: dict, numeric_cols: dict) -> str:
+    """Mensaje amable + resumen determinista de los datos reales (sin LLM)."""
+    cause, hint = _FAILURE_MESSAGES[kind]
+    parts = [f"No pude consultar al asistente de IA porque {cause}. {hint}"]
+
+    with_data = [t for t in tables if (t["row_count"] or 0) > 0]
+    if not with_data:
+        parts.append(
+            "Además, aún no hay datos cargados en tu organización. "
+            "Sube un archivo CSV o Excel para empezar a analizarlos."
+        )
+        return "\n\n".join(parts)
+
+    summary = ["Mientras tanto, este es el resumen de tus datos:"]
+    summary += [f"- **{t['display_name']}**: {t['row_count']} filas" for t in with_data]
+    parts.append("\n".join(summary))
+
+    for display, info in query_results.items():
+        data = info["data"]
+        if not data:
+            continue
+        block = [f"**{display}** (calculado sobre {len(data)} filas):"]
+        for col in numeric_cols.get(display, [])[:3]:
+            nums = []
+            for row in data:
+                raw = row.get(col)
+                if isinstance(raw, bool):
+                    continue
+                try:
+                    value = float(raw)
+                except (ValueError, TypeError, OverflowError):
+                    continue
+                if math.isfinite(value):
+                    nums.append(value)
+            if nums:
+                block.append(
+                    f"- {_clean_cell(col)}: suma {_fmt_number(sum(nums))}, promedio {_fmt_number(sum(nums) / len(nums))}, "
+                    f"mínimo {_fmt_number(min(nums))}, máximo {_fmt_number(max(nums))}"
+                )
+        for row in data[:3]:
+            block.append(
+                "- Ejemplo: " + ", ".join(f"{_clean_cell(k)}: {_clean_cell(v)}" for k, v in list(row.items())[:4])
+            )
+        parts.append("\n".join(block))
+
+    return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # Gemini + Tools orchestrator
 # ---------------------------------------------------------------------------
 
@@ -326,11 +516,15 @@ async def process_with_gemini(
         )
 
     tables_context = []
+    numeric_cols = {}
     for t in tables:
         cols = t["columns_definition"]
         if isinstance(cols, str):
             cols = json.loads(cols)
         col_names = [c["name"] for c in cols] if cols else []
+        numeric_cols[t["display_name"]] = [
+            c["name"] for c in (cols or []) if c.get("type") in _NUMERIC_TYPES
+        ]
         tables_context.append(
             f"- {t['display_name']} ({t['table_name']}): {t['row_count'] or 0} filas. Columnas: {', '.join(col_names)}"
         )
@@ -368,7 +562,12 @@ REGLAS:
         from google import genai
         from google.genai import types as genai_types
 
-        client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+        timeout_s = _gemini_timeout_seconds(settings)
+        # HttpOptions.timeout va en MILISEGUNDOS (verificado en google-genai 2.24).
+        client = genai.Client(
+            api_key=settings.GOOGLE_API_KEY,
+            http_options=genai_types.HttpOptions(timeout=int(timeout_s * 1000)),
+        )
 
         # Construir historial
         history = []
@@ -382,23 +581,32 @@ REGLAS:
                     )
                 )
 
-        chat = client.chats.create(
-            model=settings.GEMINI_MODEL,
-            config=genai_types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                max_output_tokens=2048,
-                temperature=0.3,
-            ),
-            history=history,
-        )
+        # API async del SDK: no bloquea el event loop mientras Gemini responde.
+        aio = client.aio
+        try:
+            chat = aio.chats.create(
+                model=settings.GEMINI_MODEL,
+                config=genai_types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    max_output_tokens=2048,
+                    temperature=0.3,
+                ),
+                history=history,
+            )
+            # wait_for es el tope duro: el timeout del SDK es por fase de la conexion, no total.
+            response = await asyncio.wait_for(chat.send_message(user_message), timeout=timeout_s)
+        finally:
+            try:
+                await aio.aclose()
+            except Exception:
+                logger.debug("No se pudo cerrar el cliente async de Gemini")
 
-        response = chat.send_message(user_message)
-
-        text = response.text or "No pude generar una respuesta."
+        text = response.text
+        if not text or not text.strip():
+            raise _GeminiUnusableResponse(_empty_response_kind(response))
 
         # Extraer charts del texto
         charts = []
-        import re
         chart_pattern = r"```chart\s*\n(.*?)\n```"
         for match in re.finditer(chart_pattern, text, re.DOTALL):
             try:
@@ -417,10 +625,23 @@ REGLAS:
         }
 
     except Exception as exc:
-        logger.error(f"Gemini error: {exc}")
-        # Fallback a respuesta local
+        kind = _classify_gemini_failure(exc)
+        # El detalle real solo va a logs (con la API key redactada), nunca al usuario.
+        try:
+            logger.error(
+                "Gemini falló (causa=%s): %s: %s",
+                kind, type(exc).__name__, _redact(str(exc), settings.GOOGLE_API_KEY),
+            )
+        except Exception:
+            logger.error("Gemini falló (causa=%s): %s", kind, type(exc).__name__)
+        try:
+            fallback_text = _build_fallback_text(kind, tables, query_results, numeric_cols)
+        except Exception:
+            logger.exception("No se pudo armar el resumen local del fallback")
+            fallback_text = _build_fallback_text(kind, [], {}, {})
         return {
-            "text": f"Error con Gemini: {str(exc)[:200]}. Usando datos locales.",
+            "text": fallback_text,
             "charts": [],
             "actions": [],
+            "fallback_reason": kind,
         }

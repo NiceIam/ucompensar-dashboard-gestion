@@ -15,6 +15,12 @@ bugs o pueden causarlos:
 - jsonb rechaza NaN / Infinity.
 - Cada sentencia fuera de conn.transaction() se confirma sola (autocommit);
   dentro de una transaccion, una excepcion revierte todo.
+- asyncpg devuelve columnas jsonb como TEXTO (no hay codec registrado en
+  app/database.py); por eso `jsonb_as_text` es True por defecto en las lecturas
+  de `data` (tambien columns_definition, que ya se guarda como texto JSON).
+
+Tambien emula las lecturas que usa agent_tools_service (query_data,
+analyze_table, create_chart) y la tabla chat_messages (chat_service).
 """
 
 import copy
@@ -46,6 +52,8 @@ class FakeOrgDB:
         self.tables: dict[uuid.UUID, dict] = {}
         self.rows: list[dict] = []
         self.records: list[dict] = []
+        self.chat: list[dict] = []
+        self.jsonb_as_text = True
         self.sql_log: list[str] = []
         # Inyeccion de fallos: callable(sql_normalizado, args) -> bool
         self.fail_when: Optional[Callable[[str, tuple], bool]] = None
@@ -59,13 +67,17 @@ class FakeOrgDB:
         rows: Optional[list[dict]] = None,
         display_name: Optional[str] = None,
         legacy_records: int = 0,
+        column_types: Optional[dict[str, str]] = None,
     ) -> uuid.UUID:
         table_id = uuid.uuid4()
+        types = column_types or {}
         self.tables[table_id] = {
             "id": table_id,
             "table_name": table_name,
             "display_name": display_name or table_name.title(),
-            "columns_definition": json.dumps([{"name": c, "type": "text"} for c in columns]),
+            "columns_definition": json.dumps(
+                [{"name": c, "type": types.get(c, "text")} for c in columns]
+            ),
             "row_count": len(rows or []),
         }
         for data in rows or []:
@@ -154,6 +166,59 @@ class FakeConn:
 
         if q == "select id, table_name, display_name, columns_definition from org_data_tables":
             return [dict(r) for r in t.values()]
+
+        # -- lecturas de agent_tools_service ---------------------------------
+        _all_cols = "select id, table_name, display_name, row_count, columns_definition from org_data_tables"
+        if q == _all_cols:
+            return [dict(r) for r in t.values()]
+
+        if q == _all_cols + " where table_name = $1":
+            return [dict(r) for r in t.values() if r["table_name"] == args[0]]
+
+        if q == _all_cols + " where row_count > 0":
+            return [dict(r) for r in t.values() if (r["row_count"] or 0) > 0]
+
+        if q == "select table_name, display_name, row_count, columns_definition from org_data_tables":
+            return [
+                {k: r[k] for k in ("table_name", "display_name", "row_count", "columns_definition")}
+                for r in t.values()
+            ]
+
+        if q == "select id, display_name from org_data_tables where table_name = $1":
+            return [
+                {"id": r["id"], "display_name": r["display_name"]}
+                for r in t.values()
+                if r["table_name"] == args[0]
+            ]
+
+        m = re.fullmatch(r"select data from org_data_rows where table_id = \$1(?: limit (\d+))?", q)
+        if m:
+            rows = [r for r in db.rows if r["table_id"] == args[0]]
+            if m.group(1):
+                rows = rows[: int(m.group(1))]
+            return [
+                {"data": json.dumps(r["data"]) if db.jsonb_as_text else r["data"]} for r in rows
+            ]
+
+        # -- chat_messages (chat_service) ------------------------------------
+        m = re.fullmatch(
+            r"insert into chat_messages \(id, user_id, role, content, created_at\) "
+            r"values \(\$1, \$2, '(user|assistant)', \$3, \$4\)",
+            q,
+        )
+        if m:
+            db.chat.append(
+                {"id": args[0], "user_id": args[1], "role": m.group(1), "content": args[2], "created_at": args[3]}
+            )
+            return []
+
+        if q == "select role, content from chat_messages order by created_at desc limit 8":
+            ordered = sorted(enumerate(db.chat), key=lambda p: (p[1]["created_at"], p[0]), reverse=True)
+            return [{"role": m_["role"], "content": m_["content"]} for _, m_ in ordered[:8]]
+
+        if q == "select id, role, content, created_at from chat_messages order by created_at asc limit $1":
+            ordered = sorted(enumerate(db.chat), key=lambda p: (p[1]["created_at"], p[0]))
+            return [dict(m_) for _, m_ in ordered[: args[0]]]
 
         if q == "select id, table_name, display_name, columns_definition from org_data_tables where id = $1":
             r = t.get(args[0])
@@ -264,3 +329,28 @@ class FakeOrgDBs:
     async def get_org_pool(self, org_id: str) -> FakePool:
         self.requested_org_ids.append(org_id)
         return FakePool(self.db(org_id))
+
+
+class FakeMainPool:
+    """BD principal: solo `SELECT name, sector, city FROM organizations WHERE id = $1`."""
+
+    def __init__(self) -> None:
+        self.orgs: dict[str, dict] = {}
+
+    async def get_main_pool(self) -> "FakeMainPool":
+        return self
+
+    def acquire(self) -> "FakeMainPool":
+        return self
+
+    async def __aenter__(self) -> "FakeMainPool":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    async def fetchrow(self, sql: str, org_id):
+        assert re.sub(r"\s+", " ", sql).strip().lower() == (
+            "select name, sector, city from organizations where id = $1"
+        ), f"SQL no soportado por FakeMainPool: {sql}"
+        return self.orgs.get(str(org_id))
