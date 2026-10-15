@@ -182,12 +182,6 @@ class TestLoadCsvToTable:
         assert db.records == []
         assert db.tables[tid]["row_count"] == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:398-401 isinstance(val,(int,float)) es False para numpy.int64: un "
-               "DataFrame solo con enteros se guarda como strings ('5'); con otra columna decimal los "
-               "enteros salen como float (5.0) por el upcast de iterrows()",
-    )
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "df",
@@ -206,11 +200,6 @@ class TestLoadCsvToTable:
 
         assert type(db.rows_of(tid)[0]["cantidad"]) is int
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:396-407 pd.isna(val) sobre una lista (JSON anidado) devuelve un array y "
-               "`if array` lanza ValueError: [{'id':1,'tags':['a','b']}] aborta la carga",
-    )
     @pytest.mark.asyncio
     async def test_celdas_con_listas_de_json_anidado(self, org_dbs):
         from app.services.schema_agent_service import load_csv_to_table
@@ -222,12 +211,8 @@ class TestLoadCsvToTable:
         result = await load_csv_to_table(df, ORG_A, str(tid))
 
         assert result["rows_inserted"] == 1
+        assert db.rows_of(tid) == [{"id": "1", "tags": '["a", "b"]'}]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:399,406 float('inf') pasa como numero y json.dumps emite 'Infinity', "
-               "que jsonb de Postgres rechaza: una sola celda inf aborta (y revierte) todo el archivo",
-    )
     @pytest.mark.asyncio
     async def test_valores_infinitos_no_rompen_la_carga(self, org_dbs):
         from app.services.schema_agent_service import load_csv_to_table
@@ -240,11 +225,6 @@ class TestLoadCsvToTable:
 
         assert result["rows_inserted"] == 2
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:386-394 'Nombre' y 'nombre' limpian al mismo nombre; row[col] devuelve "
-               "una Serie y pd.isna(Serie) lanza ValueError. Falla despues de create_table",
-    )
     @pytest.mark.asyncio
     async def test_encabezados_que_colisionan_al_limpiar(self, org_dbs):
         from app.services.schema_agent_service import load_csv_to_table
@@ -256,6 +236,7 @@ class TestLoadCsvToTable:
         result = await load_csv_to_table(df, ORG_A, str(tid))
 
         assert result["rows_inserted"] == 1
+        assert db.rows_of(tid) == [{"nombre": "Ana", "nombre_2": "Luis"}]
 
 
 # ---------------------------------------------------------------------------
@@ -381,12 +362,6 @@ class TestSmartUpload:
         assert result["rows_inserted"] == 1
         assert [c["name"] for c in org_dbs.db(ORG_A).columns_of(tid)] == ["a", "a.1", "b"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:513-531 al chocar el nombre sugerido ('datos_importados') con una tabla "
-               "existente NO relacionada, carga ahi sin modify_table: las filas nuevas quedan con claves que "
-               "columns_definition no declara",
-    )
     @pytest.mark.asyncio
     async def test_archivo_no_relacionado_no_se_mezcla_sin_declarar_sus_columnas(self, org_dbs):
         from app.services.schema_agent_service import smart_upload
@@ -401,27 +376,16 @@ class TestSmartUpload:
         claves = {k for fila in db.rows_of(tid) for k in fila}
         assert claves <= declaradas, f"claves sin declarar: {claves - declaradas} ({result['status']})"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:452-513 smart_upload no valida entrada: un DataFrame sin columnas "
-               "(JSON '[]' o Excel con hoja en blanco) crea una tabla fantasma 'datos_importados' sin columnas",
-    )
     @pytest.mark.asyncio
     async def test_dataframe_sin_columnas_no_crea_tabla(self, org_dbs):
         from app.services.schema_agent_service import smart_upload
 
-        try:
+        with pytest.raises(HTTPException) as exc_info:
             await smart_upload(pd.DataFrame(), ORG_A, "vacio.json")
-        except (ValueError, HTTPException):
-            pass
 
+        assert exc_info.value.status_code == 422
         assert org_dbs.db(ORG_A).tables == {}
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:513-531 + 386-394 'Nombre'/'nombre' colisionan al limpiar: la carga "
-               "revienta con ValueError despues de haber creado la tabla (queda huerfana)",
-    )
     @pytest.mark.asyncio
     async def test_encabezados_que_colisionan_cargan_sin_error(self, org_dbs):
         from app.services.schema_agent_service import smart_upload
@@ -430,7 +394,40 @@ class TestSmartUpload:
 
         result = await smart_upload(df, ORG_A, "f.csv")
 
+        db = org_dbs.db(ORG_A)
+        tid = next(iter(db.tables))
         assert result["rows_inserted"] == 1
+        assert [c["name"] for c in db.columns_of(tid)] == ["nombre", "nombre_2"]
+        assert db.rows_of(tid) == [{"nombre": "Ana", "nombre_2": "Luis"}]
+
+    @pytest.mark.asyncio
+    async def test_celdas_con_lista_y_dict_pasan_por_smart_upload(self, org_dbs):
+        """JSON anidado: analyze_csv (unicos) + carga completa, y el valor guardado es el esperado."""
+        from app.services.schema_agent_service import smart_upload
+
+        df = pd.DataFrame([
+            {"id": 1, "tags": ["a", "b"], "meta": {"k": 1}},
+            {"id": 2, "tags": ["a", "b"], "meta": {"k": 2}},
+        ])
+
+        result = await smart_upload(df, ORG_A, "anidado.json")
+
+        db = org_dbs.db(ORG_A)
+        tid = next(iter(db.tables))
+        assert result["rows_inserted"] == 2
+        assert db.rows_of(tid)[0] == {"id": 1, "tags": '["a", "b"]', "meta": '{"k": 1}'}
+
+    @pytest.mark.asyncio
+    async def test_falla_de_carga_no_deja_tabla_huerfana(self, org_dbs):
+        from app.services.schema_agent_service import smart_upload
+
+        db = org_dbs.db(ORG_A)
+        db.fail_when = lambda q, args: q.startswith("insert into org_data_rows")
+
+        with pytest.raises(Exception):
+            await smart_upload(pd.DataFrame({"producto": ["a"], "stock": [1]}), ORG_A, "f.csv")
+
+        assert db.tables == {}
 
 
 # ---------------------------------------------------------------------------
@@ -572,11 +569,6 @@ class TestSmartUploadEndToEnd:
 
         assert exc_info.value.status_code == 422
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="file_service.py:66,113 pd.read_csv sin encoding: un CSV exportado en latin-1 (tipico de Excel "
-               "en Colombia, 'Cédula', 'Año') falla con UnicodeDecodeError y se rechaza con 422",
-    )
     @pytest.mark.asyncio
     async def test_csv_latin1(self, org_dbs):
         csv = "cédula,año\n123,2024\n".encode("latin-1")
@@ -584,14 +576,76 @@ class TestSmartUploadEndToEnd:
         body = await _router_upload(_upload(csv, "datos.csv", "text/csv"))
 
         assert body["rows_inserted"] == 1
+        assert [c["clean_name"] for c in body["analysis"]["columns"]] == ["cédula", "año"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="file_service.py:66,113 pd.read_csv usa sep=',': un CSV con ';' (Excel en configuracion regional "
-               "es-CO) se lee como UNA sola columna 'a;b;c'",
-    )
+    @pytest.mark.asyncio
+    async def test_csv_utf16_sin_bom_responde_422(self, org_dbs):
+        """UTF-16 sin BOM trae NULs: se rechaza en vez de ingerirse como basura."""
+        csv = "nombre,edad\nAna,30\n".encode("utf-16-le")
+
+        with pytest.raises(HTTPException) as exc_info:
+            await _router_upload(_upload(csv, "datos.csv", "text/csv"))
+
+        assert exc_info.value.status_code == 422
+        assert org_dbs.requested_org_ids == []
+
     @pytest.mark.asyncio
     async def test_csv_separado_por_punto_y_coma(self, org_dbs):
         body = await _router_upload(_upload(b"nombre;edad;ciudad\nAna;30;Cali\n", "datos.csv", "text/csv"))
 
         assert body["analysis"]["column_count"] == 3
+
+
+# ---------------------------------------------------------------------------
+# file_service._read_csv: encoding y delimitador
+# ---------------------------------------------------------------------------
+
+class TestReadCsv:
+    @pytest.mark.parametrize(
+        "content, columns",
+        [
+            ("﻿nombre,edad\nAna,30\n".encode("utf-8"), ["nombre", "edad"]),   # BOM UTF-8
+            (b"nombre;edad;ciudad\nAna;30;Cali\n", ["nombre", "edad", "ciudad"]),   # punto y coma
+            (b"nombre\tedad\nAna\t30\n", ["nombre", "edad"]),                       # tab
+            (b'"a;b",c\n1,2\n', ["a;b", "c"]),                                      # delimitador entre comillas
+            ("cédula;año\n1;2\n".encode("latin-1"), ["cédula", "año"]),             # latin-1
+            ("cédula;año\n1;2\n".encode("utf-8"), ["cédula", "año"]),               # UTF-8 sin BOM
+            ("nombre;edad\nAna;30\n".encode("utf-16"), ["nombre", "edad"]),         # UTF-16 con BOM (Excel "Unicode")
+            ("\n\nnombre;edad\nAna;30\n".encode("utf-8"), ["nombre", "edad"]),      # lineas en blanco iniciales
+        ],
+    )
+    def test_lee_encodings_y_delimitadores_tipicos(self, content, columns):
+        from app.services.file_service import _read_csv
+
+        df = _read_csv(content)
+
+        assert df.columns.tolist() == columns
+        assert len(df) == 1
+
+    def test_utf16_con_bom_conserva_tildes_y_valores(self):
+        from app.services.file_service import _read_csv
+
+        df = _read_csv("cédula;año\n123;2024\n".encode("utf-16"))
+
+        assert df.columns.tolist() == ["cédula", "año"]
+        assert df.iloc[0].tolist() == [123, 2024]
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "nombre,edad\nAna,30\n".encode("utf-16-le"),   # UTF-16 sin BOM: NULs
+            b"nombre,edad\nAna\x00,30\n",                  # NUL suelto
+        ],
+    )
+    def test_rechaza_contenido_con_nul(self, content):
+        from app.services.file_service import _read_csv
+
+        with pytest.raises(ValueError):
+            _read_csv(content)
+
+    @pytest.mark.parametrize("content", [b"", b"\n\n"])
+    def test_archivo_vacio_lanza_error(self, content):
+        from app.services.file_service import _read_csv
+
+        with pytest.raises(ValueError):  # EmptyDataError hereda de ValueError
+            _read_csv(content)

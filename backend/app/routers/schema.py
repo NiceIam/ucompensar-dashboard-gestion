@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/schema", tags=["Schema Agent"])
 
 
+def _table_uuid(table_id: str):
+    """UUID de la tabla; 404 (no 500 por ValueError) si el id viene mal formado."""
+    import uuid as _uuid
+
+    try:
+        return _uuid.UUID(table_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tabla no encontrada")
+
+
 class CreateTableRequest(BaseModel):
     table_name: str = Field(min_length=1, max_length=100)
     display_name: str = Field(min_length=1, max_length=150)
@@ -132,20 +142,20 @@ async def get_table_rows(
 ):
     """Retorna filas reales de org_data_rows para una tabla."""
     from app.database import get_org_pool
-    import uuid as _uuid
 
+    table_uuid = _table_uuid(table_id)
     pool = await get_org_pool(current_user.org_id)
     async with pool.acquire() as conn:
         table = await conn.fetchrow(
             "SELECT table_name, display_name, row_count FROM org_data_tables WHERE id = $1",
-            _uuid.UUID(table_id),
+            table_uuid,
         )
         if not table:
             raise HTTPException(status_code=404, detail="Tabla no encontrada")
 
         rows = await conn.fetch(
             "SELECT id, data, created_at FROM org_data_rows WHERE table_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-            _uuid.UUID(table_id), min(limit, 100), offset,
+            table_uuid, min(limit, 100), offset,
         )
 
     import json as _json
@@ -177,17 +187,24 @@ async def delete_row(table_id: str, row_id: str, current_user: CurrentUserDep = 
     from app.database import get_org_pool
     import uuid as _uuid
 
+    # Ids mal formados: 404 (el recurso no existe) en vez de un 500 por ValueError
+    table_uuid = _table_uuid(table_id)
+    try:
+        row_uuid = _uuid.UUID(row_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fila no encontrada")
+
     pool = await get_org_pool(current_user.org_id)
     async with pool.acquire() as conn:
         await conn.execute(
             "DELETE FROM org_data_rows WHERE id = $1 AND table_id = $2",
-            _uuid.UUID(row_id), _uuid.UUID(table_id),
+            row_uuid, table_uuid,
         )
         count = await conn.fetchval(
-            "SELECT count(*) FROM org_data_rows WHERE table_id = $1", _uuid.UUID(table_id),
+            "SELECT count(*) FROM org_data_rows WHERE table_id = $1", table_uuid,
         )
         await conn.execute(
-            "UPDATE org_data_tables SET row_count = $1 WHERE id = $2", count, _uuid.UUID(table_id),
+            "UPDATE org_data_tables SET row_count = $1 WHERE id = $2", count, table_uuid,
         )
     return {"deleted": True, "new_count": count}
 
@@ -197,14 +214,14 @@ async def download_template(table_id: str, current_user: CurrentUserDep = None):
     """CSV vacio con headers y fila ejemplo."""
     from app.database import get_org_pool
     from fastapi.responses import Response
-    import uuid as _uuid
     import json as _json
 
+    table_uuid = _table_uuid(table_id)
     pool = await get_org_pool(current_user.org_id)
     async with pool.acquire() as conn:
         table = await conn.fetchrow(
             "SELECT table_name, columns_definition FROM org_data_tables WHERE id = $1",
-            _uuid.UUID(table_id),
+            table_uuid,
         )
     if not table:
         raise HTTPException(status_code=404, detail="Tabla no encontrada")
@@ -291,23 +308,23 @@ async def export_table_data(table_id: str, current_user: CurrentUserDep = None):
     """Descarga todos los datos de una tabla como CSV."""
     from app.database import get_org_pool
     from fastapi.responses import Response
-    import uuid as _uuid
     import json as _json
     import io
     import csv as _csv
 
+    table_uuid = _table_uuid(table_id)
     pool = await get_org_pool(current_user.org_id)
     async with pool.acquire() as conn:
         table = await conn.fetchrow(
             "SELECT table_name, display_name, columns_definition FROM org_data_tables WHERE id = $1",
-            _uuid.UUID(table_id),
+            table_uuid,
         )
         if not table:
             raise HTTPException(status_code=404, detail="Tabla no encontrada")
 
         rows = await conn.fetch(
             "SELECT data FROM org_data_rows WHERE table_id = $1 ORDER BY created_at",
-            _uuid.UUID(table_id),
+            table_uuid,
         )
 
     cols = table["columns_definition"]

@@ -120,30 +120,40 @@ class TestInferColumnType:
         assert _infer_column_type("col_x", pd.Series(["-5", "-10", "3"])) == "integer"
         assert _infer_column_type("col_x", pd.Series(["1e3", "2.5e-1"])) == "number"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:105-107 hace match por SUBCADENA ('dia' in 'diagnostico'): "
-               "una columna de texto clinico se tipifica como 'date'",
-    )
     def test_nombre_con_subcadena_de_hint_no_fuerza_tipo(self):
         from app.services.schema_agent_service import _infer_column_type
 
         assert _infer_column_type("diagnostico", pd.Series(["gripe", "asma", "migraña"])) == "text"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:105-107 'iva' in 'narrativa': texto libre se tipifica como 'number'",
-    )
     def test_nombre_narrativa_no_es_numero(self):
         from app.services.schema_agent_service import _infer_column_type
 
         assert _infer_column_type("narrativa", pd.Series(["paciente estable", "sin cambios"])) == "text"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:114-118 pd.to_numeric convierte booleanos y datetimes a enteros: "
-               "columnas bool (JSON) y fechas de Excel sin hint en el nombre salen como 'integer'",
+    @pytest.mark.parametrize(
+        "name, expected",
+        [
+            # plural simple, sufijo numerico y raices pegadas (camelCase de JSON limpiado)
+            ("fechas", "date"), ("fecha1", "date"), ("fecha2", "date"), ("periodos", "date"),
+            ("fechanacimiento", "date"), ("fechacita", "date"),
+            ("precios", "number"), ("costos", "number"), ("totales", "number"),
+            ("precioventa", "number"), ("valortotal", "number"),
+            ("cantidades", "integer"), ("activos", "boolean"),
+        ],
     )
+    def test_hint_tolera_plural_sufijo_numerico_y_raiz_pegada(self, name, expected):
+        from app.services.schema_agent_service import _infer_column_type
+
+        assert _infer_column_type(name, pd.Series(["x"])) == expected
+
+    @pytest.mark.parametrize(
+        "name", ["valoracion", "periodontitis", "totalidad", "diagnostico_principal", "preciosa"]
+    )
+    def test_hint_no_matchea_palabras_clinicas_que_solo_empiezan_igual(self, name):
+        from app.services.schema_agent_service import _infer_column_type
+
+        assert _infer_column_type(name, pd.Series(["gripe", "asma"])) == "text"
+
     @pytest.mark.parametrize(
         "series, expected",
         [
@@ -232,17 +242,26 @@ class TestAnalyzeCsv:
 
         json.dumps(analyze_csv(df))
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:68 col.strip() asume encabezados str: Excel con anios como "
-               "encabezado (2023, 2024) o JSON [[1,2],[3,4]] revientan con AttributeError (500 en el router)",
-    )
     def test_encabezados_numericos(self):
         from app.services.schema_agent_service import analyze_csv
 
         result = analyze_csv(pd.DataFrame({2023: [1], 2024: [2]}))
 
         assert [c["clean_name"] for c in result["columns"]] == ["2023", "2024"]
+        json.dumps(result)  # original_name tambien debe ser serializable (JSONResponse)
+
+    def test_celdas_con_listas_y_dicts_no_rompen_el_conteo_de_unicos(self):
+        from app.services.schema_agent_service import analyze_csv
+
+        df = pd.DataFrame([
+            {"id": 1, "tags": ["a", "b"], "meta": {"k": 1}},
+            {"id": 2, "tags": ["a", "b"], "meta": {"k": 2}},
+        ])
+
+        cols = {c["clean_name"]: c for c in analyze_csv(df)["columns"]}
+
+        assert cols["tags"]["unique_count"] == 1
+        assert cols["meta"]["unique_count"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -434,11 +453,6 @@ class TestFindMatchingTable:
         assert await find_matching_table(ORG_A, _cols("nombre", "ciudad", "edad")) is None
         assert org_dbs.requested_org_ids == [ORG_A]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:190-192 el bonus fuzzy cuenta tambien los pares IDENTICOS (sim=1.0), "
-               "asi que match_score supera 1.0 (un match perfecto reporta 1.3 'de 1.0')",
-    )
     @pytest.mark.asyncio
     async def test_match_score_no_excede_uno(self, org_dbs):
         from app.services.schema_agent_service import find_matching_table
@@ -447,6 +461,20 @@ class TestFindMatchingTable:
 
         result = await find_matching_table(ORG_A, _cols("alfa", "beta", "gamma"))
 
+        assert result["match_score"] <= 1.0
+
+    @pytest.mark.asyncio
+    async def test_tope_de_score_no_rompe_el_desempate(self, org_dbs):
+        """La tabla exacta (3 cols) gana a la mas amplia (4 cols) aunque esta ultima se creo antes."""
+        from app.services.schema_agent_service import find_matching_table
+
+        db = org_dbs.db(ORG_A)
+        db.add_table("amplia", ["nombre", "edad", "ciudad", "telefono"])
+        db.add_table("exacta", ["nombre", "edad", "ciudad"])
+
+        result = await find_matching_table(ORG_A, _cols("nombre", "edad", "ciudad"))
+
+        assert result["table_name"] == "exacta"
         assert result["match_score"] <= 1.0
 
 
@@ -559,11 +587,6 @@ class TestModifyTable:
 
         assert db.tables[tid]["display_name"] == "Original"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:308 columns_added = len(add_columns) cuenta las columnas "
-               "SOLICITADAS, no las realmente agregadas (las que ya existian se ignoran)",
-    )
     @pytest.mark.asyncio
     async def test_columns_added_cuenta_solo_las_realmente_agregadas(self, org_dbs):
         from app.services.schema_agent_service import modify_table
@@ -574,11 +597,6 @@ class TestModifyTable:
 
         assert result["columns_added"] == 0
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:283-286 solo compara contra existing_names (calculado antes del "
-               "loop): dos columnas con el mismo nombre en un mismo add_columns se agregan ambas",
-    )
     @pytest.mark.asyncio
     async def test_no_agrega_columnas_duplicadas_dentro_de_la_misma_llamada(self, org_dbs):
         from app.services.schema_agent_service import modify_table
@@ -591,11 +609,6 @@ class TestModifyTable:
         names = [c["name"] for c in db.columns_of(tid)]
         assert names.count("x") == 1
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:271 uuid.UUID(table_id) lanza ValueError con un id mal formado "
-               "(el router lo deja subir como 500 en vez de 404/422)",
-    )
     @pytest.mark.asyncio
     async def test_table_id_mal_formado_retorna_error(self, org_dbs):
         from app.services.schema_agent_service import modify_table

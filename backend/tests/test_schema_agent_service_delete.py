@@ -210,12 +210,6 @@ class TestDeleteTable:
 
     # -- atomicidad / entradas invalidas -------------------------------------
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:319-341 delete_table ejecuta 3 DELETE sin conn.transaction() "
-               "(load_csv_to_table si la usa): si falla el borrado de data_records las filas ya "
-               "quedaron borradas y la tabla sigue existiendo con row_count obsoleto",
-    )
     @pytest.mark.asyncio
     async def test_fallo_a_mitad_del_borrado_no_deja_estado_parcial(self, org_dbs):
         from app.services.schema_agent_service import delete_table
@@ -231,11 +225,6 @@ class TestDeleteTable:
         assert victima in db.tables
         assert len(db.rows_of(victima)) == 3
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="schema_agent_service.py:322 uuid.UUID(table_id) lanza ValueError con un id mal formado; "
-               "routers/schema.py:120 no lo captura y responde 500 en vez de 404/422",
-    )
     @pytest.mark.asyncio
     async def test_table_id_mal_formado_retorna_error(self, org_dbs):
         from app.services.schema_agent_service import delete_table
@@ -337,10 +326,6 @@ class TestDeleteRow:
         else:
             assert result["deleted"] is False
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="routers/schema.py:183 uuid.UUID(row_id) lanza ValueError sin capturar: 500 en vez de 404/422",
-    )
     @pytest.mark.asyncio
     async def test_ids_mal_formados_dan_error_http_controlado(self, org_dbs):
         from fastapi import HTTPException
@@ -348,5 +333,26 @@ class TestDeleteRow:
 
         tid = org_dbs.db(ORG_A).add_table("t", ["a"])
 
-        with pytest.raises(HTTPException):
+        with pytest.raises(HTTPException) as exc_info:
             await schema_router.delete_row(str(tid), "no-es-uuid", current_user=_user(ORG_A))
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Fila no encontrada"
+
+        with pytest.raises(HTTPException) as exc_info:
+            await schema_router.delete_row("no-es-uuid", str(uuid.uuid4()), current_user=_user(ORG_A))
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Tabla no encontrada"
+
+    @pytest.mark.asyncio
+    async def test_table_id_mal_formado_en_otros_endpoints_da_404(self, org_dbs):
+        from fastapi import HTTPException
+        from app.routers import schema as schema_router
+
+        for endpoint in (
+            schema_router.get_table_rows,
+            schema_router.download_template,
+            schema_router.export_table_data,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await endpoint("no-es-uuid", current_user=_user(ORG_A))
+            assert exc_info.value.status_code == 404, endpoint.__name__

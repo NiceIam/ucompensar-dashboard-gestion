@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import re
 import uuid
 from typing import Any, Optional
 
@@ -20,6 +21,38 @@ ALLOWED_TYPES = {
     "application/vnd.ms-excel": "xlsx",
     "application/json": "json",
 }
+
+
+def _read_csv(content: bytes) -> pd.DataFrame:
+    """Lee un CSV tolerando lo tipico de Excel en Colombia: latin-1 y separador ';'.
+
+    Lanza ValueError si el contenido no es texto valido (el caller lo traduce a 422).
+    """
+    if content.startswith((b"\xff\xfe", b"\xfe\xff")):
+        # "Texto Unicode" de Excel: UTF-16 con BOM
+        text = content.decode("utf-16")
+    else:
+        # UTF-8 (con o sin BOM); si no decodifica, cp1252/latin-1 (este ultimo no falla
+        # nunca). Limitacion conocida: un UTF-8 con un solo byte latin-1 suelto cae a
+        # cp1252 completo y el resto de tildes sale con mojibake.
+        for encoding in ("utf-8-sig", "cp1252", "latin-1"):
+            try:
+                text = content.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+
+    # Un NUL (UTF-16 sin BOM, binarios) se ingeriria como basura y jsonb lo rechaza
+    if "\x00" in text:
+        raise ValueError("El contenido no es texto CSV valido")
+
+    # Separador: el mas frecuente en el encabezado (fuera de comillas); en empate o
+    # sin ninguno, ',' (max devuelve el primero)
+    header = text.lstrip().split("\n", 1)[0]
+    header = re.sub(r'"[^"]*"', "", header)
+    sep = max((",", ";", "\t"), key=header.count)
+
+    return pd.read_csv(io.StringIO(text), sep=sep)
 
 
 def _infer_columns(df: pd.DataFrame) -> list[ColumnInfo]:
@@ -63,7 +96,7 @@ async def parse_file(upload: UploadFile) -> pd.DataFrame:
 
     try:
         if file_type == "csv":
-            df = pd.read_csv(io.BytesIO(content))
+            df = _read_csv(content)
         elif file_type == "xlsx":
             df = pd.read_excel(io.BytesIO(content), engine="openpyxl")
         else:
@@ -110,7 +143,7 @@ async def parse_file_sheets(upload: UploadFile) -> list[tuple[Optional[str], pd.
 
     try:
         if file_type == "csv":
-            return [(None, pd.read_csv(io.BytesIO(content)))]
+            return [(None, _read_csv(content))]
         elif file_type == "xlsx":
             sheets = pd.read_excel(io.BytesIO(content), engine="openpyxl", sheet_name=None)
             return list(sheets.items())
