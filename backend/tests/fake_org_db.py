@@ -216,8 +216,8 @@ class FakeConn:
             ordered = sorted(enumerate(db.chat), key=lambda p: (p[1]["created_at"], p[0]), reverse=True)
             return [{"role": m_["role"], "content": m_["content"]} for _, m_ in ordered[:8]]
 
-        if q == "select id, role, content, created_at from chat_messages order by created_at asc limit $1":
-            ordered = sorted(enumerate(db.chat), key=lambda p: (p[1]["created_at"], p[0]))
+        if q == "select id, role, content, created_at from chat_messages order by created_at desc limit $1":
+            ordered = sorted(enumerate(db.chat), key=lambda p: (p[1]["created_at"], p[0]), reverse=True)
             return [dict(m_) for _, m_ in ordered[: args[0]]]
 
         if q == "select id, table_name, display_name, columns_definition from org_data_tables where id = $1":

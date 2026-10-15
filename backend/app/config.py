@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     GEMINI_TEMPERATURE: float = 0.1
     # Tope de espera por llamada al chat (segundos). Al excederlo el usuario recibe el fallback "timeout".
     GEMINI_TIMEOUT_SECONDS: float = 25.0
+    # Mensajes al chat permitidos por usuario (formato slowapi). Cada mensaje consume la API key compartida de Gemini.
+    CHAT_RATE_LIMIT: str = "20/minute"
 
     # App
     APP_ENV: str = "development"

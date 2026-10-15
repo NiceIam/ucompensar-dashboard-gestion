@@ -279,6 +279,17 @@ async def send_message(
     pool = await get_org_pool(org_id)
     now = datetime.now(timezone.utc)
 
+    # Historial reciente para contexto. Se lee ANTES de guardar el mensaje actual:
+    # process_with_gemini ya envia `content` como mensaje nuevo, y leerlo despues lo
+    # duplicaria como ultimo turno del historial.
+    async with pool.acquire() as conn:
+        recent = await conn.fetch(
+            "SELECT role, content FROM chat_messages ORDER BY created_at DESC LIMIT 8"
+        )
+    chat_history = [
+        {"role": r["role"], "content": r["content"]} for r in reversed(recent)
+    ]
+
     # Guardar mensaje del usuario
     user_msg_id = str(uuid.uuid4())
     async with pool.acquire() as conn:
@@ -292,15 +303,6 @@ async def send_message(
             content,
             now,
         )
-
-    # Obtener historial reciente para contexto
-    async with pool.acquire() as conn:
-        recent = await conn.fetch(
-            "SELECT role, content FROM chat_messages ORDER BY created_at DESC LIMIT 8"
-        )
-    chat_history = [
-        {"role": r["role"], "content": r["content"]} for r in reversed(recent)
-    ]
 
     # Usar Gemini con tools
     from app.services.agent_tools_service import process_with_gemini
@@ -459,11 +461,14 @@ async def get_history(org_id: str, limit: int = 50) -> ChatHistoryResponse:
             """
             SELECT id, role, content, created_at
             FROM chat_messages
-            ORDER BY created_at ASC
+            ORDER BY created_at DESC
             LIMIT $1
             """,
             limit,
         )
+
+    # Se piden los ULTIMOS `limit` mensajes (DESC) y se devuelven en orden cronologico.
+    rows = list(reversed(rows))
 
     messages = [
         ChatMessageResponse(

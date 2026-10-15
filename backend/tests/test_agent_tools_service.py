@@ -238,6 +238,14 @@ class TestQueryData:
         assert [r["producto"] for r in out_b["Ventas"]["data"]] == ["SECRETO_DE_B"]
         assert env.dbs.requested_org_ids == [ORG_A, ORG_B]
 
+    async def test_row_count_truncado_no_baja_del_total_real_ni_del_conteo_cargado(self, env):
+        tid = seed_ventas(env, rows=[{"producto": f"p{i}", "total": i} for i in range(1005)])
+        env.dbs.db(ORG_A).tables[tid]["row_count"] = 500   # contador desactualizado
+
+        out = await query_data(ORG_A, "ventas")
+
+        assert out["Ventas"]["row_count"] == 1000
+
     async def test_limita_a_1000_filas_por_tabla(self, env):
         seed_ventas(env, rows=[{"producto": f"p{i}", "total": i} for i in range(1005)])
 
@@ -245,11 +253,6 @@ class TestQueryData:
 
         assert len(out["Ventas"]["data"]) == 1000
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG agent_tools_service.py:78 -- row_count = len(data) (truncado a 1000) en vez del conteo real "
-        "de la tabla; el contexto del LLM (linea 539) afirma '1000 filas' en una tabla de 1005.",
-    )
     async def test_row_count_refleja_el_total_real_aunque_se_trunque_la_muestra(self, env):
         seed_ventas(env, rows=[{"producto": f"p{i}", "total": i} for i in range(1005)])
 
@@ -450,18 +453,38 @@ class TestProcessWithGeminiContexto:
         assert "prod09" in prompt
         assert "prod10" not in prompt
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG agent_tools_service.py:539 y 553 -- el prompt manda solo 10 filas bajo '(N filas)' y le pide "
-        "al modelo 'hacer sumas/promedios con los datos dados': los totales saldran sobre 10 filas sin avisar que es "
-        "una muestra. No hay agregados precalculados.",
-    )
     async def test_el_prompt_avisa_que_los_datos_son_una_muestra(self, env, gemini):
         seed_ventas(env, rows=[{"producto": f"prod{i:02d}", "total": i} for i in range(25)])
 
         await process_with_gemini(ORG_A, "ventas")
 
         assert re.search(r"muestra|primeras 10|10 de 25", system_prompt(gemini).lower())
+
+    async def test_tabla_truncada_se_etiqueta_como_muestra_con_el_total_real(self, env, gemini):
+        seed_ventas(env, rows=[{"producto": f"p{i}", "total": i} for i in range(1005)])
+
+        await process_with_gemini(ORG_A, "ventas")
+
+        prompt = system_prompt(gemini)
+        assert "Datos de Ventas (MUESTRA de las primeras 10 de 1005 filas)" in prompt
+        assert "- Ventas (ventas): 1005 filas" in prompt
+
+    async def test_tabla_completa_no_se_etiqueta_como_muestra(self, env, gemini):
+        seed_ventas(env)
+
+        await process_with_gemini(ORG_A, "ventas")
+
+        prompt = system_prompt(gemini)
+        assert "Datos de Ventas (3 filas)" in prompt
+        assert "Datos de Ventas (MUESTRA" not in prompt
+
+    async def test_el_prompt_pide_no_afirmar_totales_sobre_una_muestra(self, env, gemini):
+        seed_ventas(env)
+
+        await process_with_gemini(ORG_A, "ventas")
+
+        prompt = system_prompt(gemini)
+        assert "MUESTRA" in prompt and "aproximado" in prompt and "NO afirmes totales" in prompt
 
     async def test_historial_usa_ultimos_6_y_mapea_roles(self, env, gemini):
         history = [

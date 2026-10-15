@@ -56,6 +56,16 @@ def chat_env():
         )
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """El limiter es un singleton en memoria (app.auth.limiter): sin reset, los cupos se acumulan entre tests."""
+    from app.auth import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
 @pytest.fixture
 def as_user(app):
     """Autentica las peticiones como un usuario de una org dada."""
@@ -207,12 +217,6 @@ class TestMessage:
 
         assert "bloque" in body["content"].lower()
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG chat_service.py:296-308 -- el mensaje del usuario se guarda ANTES de leer el historial, asi "
-        "que `chat_history` ya lo incluye y process_with_gemini lo vuelve a enviar con send_message: Gemini lo "
-        "recibe duplicado (como ultimo turno del historial y como mensaje nuevo).",
-    )
     def test_el_mensaje_actual_no_se_envia_duplicado_a_gemini(self, client: TestClient, chat_env, as_user):
         as_user(ORG_A)
         seed_chat(chat_env, ORG_A, 2)
@@ -222,6 +226,34 @@ class TestMessage:
         history = chat_env.create.call_args.kwargs["history"]
         assert [c.parts[0].text for c in history].count("pregunta actual") == 0
         chat_env.send.assert_called_once_with("pregunta actual")
+
+    def test_el_historial_enviado_a_gemini_son_exactamente_los_mensajes_previos(
+        self, client: TestClient, chat_env, as_user
+    ):
+        as_user(ORG_A)
+        seed_chat(chat_env, ORG_A, 3)
+
+        client.post("/api/v1/chat/message", json={"content": "pregunta actual"})
+
+        sent = chat_env.create.call_args.kwargs["history"]
+        assert [(c.role, c.parts[0].text) for c in sent] == [
+            ("user", "mensaje 0"), ("model", "mensaje 1"), ("user", "mensaje 2"),
+        ]
+
+    def test_el_mensaje_actual_se_persiste_igual_aunque_no_vaya_en_el_historial(
+        self, client: TestClient, chat_env, as_user
+    ):
+        as_user(ORG_A)
+        seed_chat(chat_env, ORG_A, 2)
+
+        client.post("/api/v1/chat/message", json={"content": "pregunta actual"})
+
+        saved = chat_env.dbs.db(ORG_A).chat
+        assert [(m["role"], m["content"]) for m in saved[-2:]] == [
+            ("user", "pregunta actual"), ("assistant", "Respuesta de prueba"),
+        ]
+        hist = client.get("/api/v1/chat/history").json()["messages"]
+        assert [m["content"] for m in hist][-2:] == ["pregunta actual", "Respuesta de prueba"]
 
     def test_el_historial_enviado_a_gemini_son_los_mensajes_previos_de_la_org(
         self, client: TestClient, chat_env, as_user
@@ -269,13 +301,18 @@ class TestHistory:
         seed_chat(chat_env, ORG_A, 205)
 
         assert client.get("/api/v1/chat/history?limit=2").json()["total"] == 2
-        assert client.get("/api/v1/chat/history?limit=1000").json()["total"] == 200
+        capped = client.get("/api/v1/chat/history?limit=1000").json()["messages"]
+        assert len(capped) == 200
+        assert capped[0]["content"] == "mensaje 5" and capped[-1]["content"] == "mensaje 204"  # los 200 ULTIMOS
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG chat_service.py:458-466 -- `ORDER BY created_at ASC LIMIT $1` devuelve los PRIMEROS N mensajes "
-        "de la org: con >50 mensajes (limit por defecto) el usuario ve la conversacion mas vieja y nunca la reciente.",
-    )
+    def test_limit_pequeno_devuelve_los_ultimos_en_orden_cronologico(self, client: TestClient, chat_env, as_user):
+        as_user(ORG_A)
+        seed_chat(chat_env, ORG_A, 10)
+
+        contents = [m["content"] for m in client.get("/api/v1/chat/history?limit=3").json()["messages"]]
+
+        assert contents == ["mensaje 7", "mensaje 8", "mensaje 9"]
+
     def test_con_mas_mensajes_que_el_limit_se_devuelven_los_mas_recientes(
         self, client: TestClient, chat_env, as_user
     ):
@@ -286,3 +323,113 @@ class TestHistory:
 
         assert "mensaje 59" in contents
         assert contents == sorted(contents, key=lambda c: int(c.split()[1]))  # sigue en orden cronologico
+
+
+# ---------------------------------------------------------------------------
+# Rate limit de POST /message (slowapi, mismo limiter que auth)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def chat_limit():
+    """Fija CHAT_RATE_LIMIT para el test (el router lo lee en cada peticion)."""
+
+    def _set(value: str):
+        return patch("app.routers.chat.get_settings", return_value=SimpleNamespace(CHAT_RATE_LIMIT=value))
+
+    return _set
+
+
+class TestRateLimit:
+    def test_la_peticion_n_mas_1_recibe_429_y_no_consume_gemini(self, client: TestClient, chat_env, as_user, chat_limit):
+        as_user(ORG_A, USER_A)
+
+        with chat_limit("3/minute"):
+            statuses = [
+                client.post("/api/v1/chat/message", json={"content": f"m{i}"}).status_code for i in range(5)
+            ]
+
+        assert statuses == [200, 200, 200, 429, 429]
+        assert chat_env.send.call_count == 3                      # el 429 no llama a Gemini (cuesta dinero)
+        assert len(chat_env.dbs.db(ORG_A).chat) == 6              # ni guarda mensajes
+
+    def test_otro_usuario_de_otra_org_no_se_ve_afectado(self, client: TestClient, chat_env, as_user, chat_limit):
+        with chat_limit("2/minute"):
+            as_user(ORG_A, USER_A)
+            assert [client.post("/api/v1/chat/message", json={"content": "x"}).status_code for _ in range(3)] == [
+                200, 200, 429,
+            ]
+            as_user(ORG_B, USER_B)
+            assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 200
+
+    def test_otro_usuario_de_la_misma_org_tiene_su_propio_cupo(self, client: TestClient, chat_env, as_user, chat_limit):
+        with chat_limit("1/minute"):
+            as_user(ORG_A, USER_A)
+            assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 200
+            assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 429
+            as_user(ORG_A, USER_B)
+            assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 200
+
+    def test_peticiones_sin_sesion_no_consumen_cupo(self, client: TestClient, chat_env, chat_limit):
+        client.cookies.clear()
+        with chat_limit("2/minute"):
+            statuses = [client.post("/api/v1/chat/message", json={"content": "x"}).status_code for _ in range(5)]
+
+        assert statuses == [401] * 5
+
+    def test_history_no_esta_limitado(self, client: TestClient, chat_env, as_user, chat_limit):
+        as_user(ORG_A)
+        with chat_limit("1/minute"):
+            assert all(client.get("/api/v1/chat/history").status_code == 200 for _ in range(5))
+
+    def test_el_cupo_se_reinicia_con_reset(self, client: TestClient, chat_env, as_user, chat_limit):
+        from app.auth import limiter
+
+        as_user(ORG_A)
+        with chat_limit("1/minute"):
+            assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 200
+            assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 429
+            limiter.reset()
+            assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 200
+
+    def test_respuesta_429_es_json_con_error(self, client: TestClient, chat_env, as_user, chat_limit):
+        as_user(ORG_A)
+        with chat_limit("1/minute"):
+            client.post("/api/v1/chat/message", json={"content": "x"})
+            resp = client.post("/api/v1/chat/message", json={"content": "x"})
+
+        assert resp.status_code == 429
+        assert "error" in resp.json()
+
+    def test_default_20_por_minuto_y_configurable_por_entorno(self, monkeypatch):
+        from app.config import Settings
+
+        monkeypatch.delenv("CHAT_RATE_LIMIT", raising=False)
+        assert Settings(_env_file=None).CHAT_RATE_LIMIT == "20/minute"
+        monkeypatch.setenv("CHAT_RATE_LIMIT", "5/minute")
+        assert Settings(_env_file=None).CHAT_RATE_LIMIT == "5/minute"
+
+    def test_con_el_default_real_el_21_recibe_429(self, client: TestClient, chat_env, as_user):
+        """Sin parchear la configuracion: usa el default real de Settings."""
+        as_user(ORG_A)
+
+        statuses = [client.post("/api/v1/chat/message", json={"content": "x"}).status_code for _ in range(21)]
+
+        assert statuses[:20] == [200] * 20 and statuses[20] == 429
+
+    def test_con_jwt_real_en_cookie_cada_usuario_tiene_su_cupo(self, client: TestClient, chat_env, chat_limit):
+        """Sin dependency_overrides: la clave sale del usuario del token validado, no de la IP."""
+        from app.auth import create_access_token
+
+        def login(user_id: str, org_id: str) -> None:
+            client.cookies.clear()
+            client.cookies.set("access_token", create_access_token(user_id, org_id, "u@example.com", "owner"))
+
+        try:
+            with chat_limit("1/minute"):
+                login(USER_A, ORG_A)
+                assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 200
+                assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 429
+                login(USER_B, ORG_B)
+                assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 200
+        finally:
+            client.cookies.clear()

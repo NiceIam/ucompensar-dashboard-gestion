@@ -74,9 +74,11 @@ async def query_data(org_id: str, question: str) -> dict:
             if isinstance(d, dict):
                 data.append(d)
 
+        # El LIMIT trunca las filas devueltas; si se alcanzo, el total real es el de la tabla.
+        truncated = len(rows) >= 1000
         results[t["display_name"]] = {
             "table_name": t["table_name"],
-            "row_count": len(data),
+            "row_count": max(t["row_count"] or 0, len(data)) if truncated else len(data),
             "columns": [c["name"] for c in cols],
             "data": data,
         }
@@ -536,8 +538,13 @@ async def process_with_gemini(
     data_context = ""
     for table_display, info in query_results.items():
         if info["data"]:
-            sample = json.dumps(info["data"][:10], ensure_ascii=False, default=str)
-            data_context += f"\n\nDatos de {table_display} ({info['row_count']} filas):\n{sample}"
+            shown = info["data"][:10]
+            sample = json.dumps(shown, ensure_ascii=False, default=str)
+            if len(shown) < info["row_count"]:
+                label = f"MUESTRA de las primeras {len(shown)} de {info['row_count']} filas"
+            else:
+                label = f"{info['row_count']} filas"
+            data_context += f"\n\nDatos de {table_display} ({label}):\n{sample}"
 
     system_prompt = f"""Eres el asistente de datos de la empresa "{org_name}".
 Tu rol es analizar los datos, responder preguntas con números exactos, y ayudar a gestionar la información.
@@ -550,7 +557,7 @@ TABLAS DISPONIBLES:
 REGLAS:
 - Responde SIEMPRE en español
 - Usa los DATOS REALES proporcionados, no inventes números
-- Si necesitas hacer cálculos (sumas, promedios, conteos), hazlos con los datos dados
+- Si necesitas hacer cálculos (sumas, promedios, conteos), hazlos con los datos dados. Si los datos son una MUESTRA, aclara que el resultado es aproximado y NO afirmes totales de la tabla completa (el número total de filas sí es exacto)
 - Si te piden un gráfico, genera un bloque ```chart con JSON válido
 - Formato de gráfico: ```chart\n{{"type":"bar|line|pie","title":"titulo","data":[{{"name":"x","value":123}}],"x":"name","y":"value","color":"#3b82f6"}}\n```
 - Si te piden crear/eliminar datos, indica qué acción se realizaría
