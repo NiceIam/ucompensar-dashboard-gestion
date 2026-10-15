@@ -23,21 +23,14 @@ async def process_analytical_query(
     Intenta el pipeline ADK primero. Si no esta disponible, cae al
     fallback directo con Gemini.
     """
+    from app.services.chat_service import reserve_user_message
+
     pool = await get_org_pool(org_id)
     now = datetime.now(timezone.utc)
-    user_msg_id = str(uuid.uuid4())
 
-    async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            INSERT INTO chat_messages (id, user_id, role, content, created_at)
-            VALUES ($1, $2, 'user', $3, $4)
-            """,
-            user_msg_id,
-            user_id,
-            query,
-            now,
-        )
+    # Esta ruta puede llegar a Gemini (pipeline ADK o _fallback_analysis): comparte los topes de uso del
+    # chat. Si se excede lanza 429 ANTES de gastar nada y sin guardar el mensaje.
+    await reserve_user_message(pool, user_id, query, now)
 
     try:
         agents_path = os.path.abspath(

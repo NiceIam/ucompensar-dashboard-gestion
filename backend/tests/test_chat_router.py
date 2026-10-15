@@ -391,14 +391,38 @@ class TestRateLimit:
             limiter.reset()
             assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 200
 
-    def test_respuesta_429_es_json_con_error(self, client: TestClient, chat_env, as_user, chat_limit):
+    def test_el_429_de_slowapi_en_el_chat_usa_la_misma_estructura_que_el_de_cuota(
+        self, client: TestClient, chat_env, as_user, chat_limit
+    ):
         as_user(ORG_A)
         with chat_limit("1/minute"):
             client.post("/api/v1/chat/message", json={"content": "x"})
             resp = client.post("/api/v1/chat/message", json={"content": "x"})
 
         assert resp.status_code == 429
-        assert "error" in resp.json()
+        detail = resp.json()["detail"]
+        assert set(detail) == {"code", "message", "retry_after_seconds", "retry_at"}
+        assert detail["code"] == "rate_limit_user"
+        assert detail["retry_after_seconds"] == 60
+        assert resp.headers["Retry-After"] == "60"
+        assert "60 segundos" in detail["message"]
+
+    def test_el_429_de_slowapi_fuera_del_chat_conserva_su_cuerpo_por_defecto(self, client: TestClient):
+        """auth sigue devolviendo {"error": "Rate limit exceeded: ..."}: el handler solo cambia /api/v1/chat."""
+        from fastapi import HTTPException
+
+        from unittest.mock import AsyncMock
+
+        client.cookies.clear()
+        with patch("app.routers.auth_router.login_user", AsyncMock(side_effect=HTTPException(401, "no"))):
+            responses = [
+                client.post("/api/v1/auth/login", json={"email": "a@example.com", "password": "Secret123!"})
+                for _ in range(11)
+            ]
+
+        limited = [r for r in responses if r.status_code == 429]
+        assert limited, [r.status_code for r in responses]
+        assert limited[0].json() == {"error": "Rate limit exceeded: 10 per 1 minute"}
 
     def test_default_20_por_minuto_y_configurable_por_entorno(self, monkeypatch):
         from app.config import Settings
@@ -433,3 +457,326 @@ class TestRateLimit:
                 assert client.post("/api/v1/chat/message", json={"content": "x"}).status_code == 200
         finally:
             client.cookies.clear()
+
+
+# ---------------------------------------------------------------------------
+# Topes de uso compartidos (contados en Postgres sobre chat_messages)
+# ---------------------------------------------------------------------------
+
+def quota_settings(user: int = 20, window: int = 60, org: int = 300):
+    """Parchea los topes que lee chat_service (los defaults reales se prueban aparte)."""
+    return patch(
+        "app.services.chat_service.get_settings",
+        return_value=SimpleNamespace(
+            CHAT_USER_MAX_MESSAGES=user, CHAT_USER_WINDOW_SECONDS=window, CHAT_ORG_DAILY_MESSAGES=org
+        ),
+    )
+
+
+def seed_user_messages(chat_env, org_id: str, user_id: str, ages_seconds: list[float], role: str = "user") -> None:
+    """Un mensaje por cada edad (segundos hacia atras desde ahora, hora UTC como la que guarda send_message)."""
+    now = datetime.now(timezone.utc)
+    for age in ages_seconds:
+        chat_env.dbs.db(org_id).chat.append({
+            "id": str(uuid.uuid4()), "user_id": user_id, "role": role,
+            "content": f"{role} hace {age}s", "created_at": now - timedelta(seconds=age),
+        })
+
+
+def post(client: TestClient, content: str = "hola"):
+    return client.post("/api/v1/chat/message", json={"content": content})
+
+
+def assert_sin_efectos(chat_env, org_id: str, mensajes_antes: int) -> None:
+    """Un 429 por cuota no guarda mensaje ni toca a Gemini."""
+    assert len(chat_env.dbs.db(org_id).chat) == mensajes_antes
+    chat_env.ctor.assert_not_called()
+    chat_env.send.assert_not_called()
+
+
+class TestCuotaCompartida:
+    def test_tope_por_usuario_responde_429_con_detalle_y_retry_after(self, client: TestClient, chat_env, as_user):
+        as_user(ORG_A, USER_A)
+        seed_user_messages(chat_env, ORG_A, USER_A, [10, 20, 30])
+
+        with quota_settings(user=3, window=60):
+            resp = post(client)
+
+        assert resp.status_code == 429
+        detail = resp.json()["detail"]
+        assert set(detail) == {"code", "message", "retry_after_seconds", "retry_at", "limit"}
+        assert detail["code"] == "rate_limit_user" and detail["limit"] == 3
+        # el cupo se libera cuando sale de la ventana el 3er mensaje mas nuevo (hace 30 s): en ~30 s
+        assert 29 <= detail["retry_after_seconds"] <= 31
+        assert resp.headers["Retry-After"] == str(detail["retry_after_seconds"])
+        assert "30 segundos" in detail["message"] and "3 mensajes" in detail["message"]
+        retry_at = datetime.fromisoformat(detail["retry_at"])
+        assert abs((retry_at - datetime.now(timezone.utc)).total_seconds() - detail["retry_after_seconds"]) < 3
+        assert_sin_efectos(chat_env, ORG_A, mensajes_antes=3)
+
+    def test_bajo_el_tope_pasa(self, client: TestClient, chat_env, as_user):
+        as_user(ORG_A, USER_A)
+        seed_user_messages(chat_env, ORG_A, USER_A, [10, 20])
+
+        with quota_settings(user=3, window=60):
+            assert post(client).status_code == 200
+
+    def test_mensajes_fuera_de_la_ventana_no_cuentan(self, client: TestClient, chat_env, as_user):
+        as_user(ORG_A, USER_A)
+        seed_user_messages(chat_env, ORG_A, USER_A, [120, 300, 3600])
+
+        with quota_settings(user=3, window=60):
+            assert post(client).status_code == 200
+
+    def test_los_mensajes_del_asistente_no_cuentan(self, client: TestClient, chat_env, as_user):
+        as_user(ORG_A, USER_A)
+        seed_user_messages(chat_env, ORG_A, USER_A, [5, 6, 7, 8, 9], role="assistant")
+
+        with quota_settings(user=3, window=60, org=3):
+            assert post(client).status_code == 200
+
+    def test_el_tope_por_usuario_no_afecta_a_otro_usuario_de_la_misma_org(self, client: TestClient, chat_env, as_user):
+        seed_user_messages(chat_env, ORG_A, USER_A, [10, 20, 30])
+
+        with quota_settings(user=3, window=60):
+            as_user(ORG_A, USER_A)
+            assert post(client).status_code == 429
+            as_user(ORG_A, USER_B)
+            assert post(client).status_code == 200
+
+    def test_tope_diario_de_la_org_responde_429_y_otra_org_no_se_ve_afectada(self, client: TestClient, chat_env, as_user):
+        seed_user_messages(chat_env, ORG_A, USER_A, [3600])
+        seed_user_messages(chat_env, ORG_A, USER_B, [7200, 10800])
+
+        with quota_settings(user=100, org=3):
+            as_user(ORG_A, USER_A)
+            resp = post(client)
+            as_user(ORG_B, USER_B)
+            ok = post(client)
+
+        assert resp.status_code == 429
+        detail = resp.json()["detail"]
+        assert detail["code"] == "quota_org_daily" and detail["limit"] == 3
+        # se libera cuando sale de la ventana de 24 h el 3er mensaje mas nuevo (hace 3 h): en ~21 h
+        assert abs(detail["retry_after_seconds"] - 21 * 3600) <= 2
+        assert resp.headers["Retry-After"] == str(detail["retry_after_seconds"])
+        assert "límite diario" in detail["message"] and "21 horas" in detail["message"]
+        assert ok.status_code == 200
+        assert len(chat_env.dbs.db(ORG_A).chat) == 3          # el 429 no guardo nada en la org bloqueada
+
+    def test_el_tope_diario_cuenta_ventana_de_24h_los_mas_viejos_no_cuentan(self, client: TestClient, chat_env, as_user):
+        as_user(ORG_A, USER_A)
+        seed_user_messages(chat_env, ORG_A, USER_B, [25 * 3600, 30 * 3600, 48 * 3600, 3600, 7200])
+
+        with quota_settings(user=100, org=3):
+            assert post(client).status_code == 200            # solo 2 dentro de 24 h
+
+        # ahora hay 3 dentro de la ventana (2 + el recien enviado): el siguiente se bloquea
+        with quota_settings(user=100, org=3):
+            assert post(client).status_code == 429
+
+    def test_si_ambos_topes_estan_excedidos_se_informa_el_diario(self, client: TestClient, chat_env, as_user):
+        as_user(ORG_A, USER_A)
+        seed_user_messages(chat_env, ORG_A, USER_A, [10, 20, 30])
+
+        with quota_settings(user=3, org=3):
+            assert post(client).json()["detail"]["code"] == "quota_org_daily"
+
+    @pytest.mark.parametrize("user, org", [(0, 0), (-1, -1)])
+    def test_un_valor_menor_o_igual_a_cero_desactiva_el_tope(self, client: TestClient, chat_env, as_user, user, org):
+        as_user(ORG_A, USER_A)
+        seed_user_messages(chat_env, ORG_A, USER_A, [1] * 50)
+
+        with quota_settings(user=user, org=org):
+            assert post(client).status_code == 200
+
+    def test_el_tope_es_compartido_entre_instancias_no_depende_del_limiter_en_memoria(
+        self, client: TestClient, chat_env, as_user
+    ):
+        """Simula varias instancias serverless: el contador de slowapi se reinicia en cada peticion
+        (como si cada una cayera en un proceso distinto) y el tope en Postgres igual bloquea."""
+        from app.auth import limiter
+
+        as_user(ORG_A, USER_A)
+        statuses = []
+        with quota_settings(user=2, window=60):
+            for _ in range(4):
+                limiter.reset()
+                statuses.append(post(client).status_code)
+
+        assert statuses == [200, 200, 429, 429]
+        assert chat_env.send.call_count == 2
+        assert len(chat_env.dbs.db(ORG_A).chat) == 4          # 2 pares user/assistant; los 429 no guardan
+
+    def test_los_topes_se_cuentan_con_el_created_at_que_guarda_el_chat(self, client: TestClient, chat_env, as_user):
+        """Los mensajes que guarda send_message (hora UTC de la app) son los que luego cuenta el tope."""
+        as_user(ORG_A, USER_A)
+
+        with quota_settings(user=100, org=2):
+            assert post(client).status_code == 200
+            assert post(client).status_code == 200
+            resp = post(client)
+
+        assert resp.status_code == 429 and resp.json()["detail"]["code"] == "quota_org_daily"
+
+    def test_slowapi_sigue_siendo_la_primera_capa_y_no_interfiere(self, client: TestClient, chat_env, as_user, chat_limit):
+        as_user(ORG_A, USER_A)
+
+        with chat_limit("2/minute"), quota_settings(user=100, org=100):
+            statuses = [post(client).status_code for _ in range(3)]
+
+        assert statuses == [200, 200, 429]
+        assert chat_env.send.call_count == 2                  # el 429 de slowapi tampoco llama a Gemini
+
+    def test_error_de_bd_al_contar_no_se_traga_y_no_llama_a_gemini(self, client: TestClient, chat_env, as_user):
+        """Politica documentada: falla cerrado (500), nunca deja pasar sin contar."""
+        as_user(ORG_A, USER_A)
+        chat_env.dbs.db(ORG_A).fail_when = lambda q, args: "created_at > $" in q
+
+        with quota_settings():
+            resp = post(client)
+
+        assert resp.status_code == 500
+        assert_sin_efectos(chat_env, ORG_A, mensajes_antes=0)
+
+
+class TestDefaultsDeCuota:
+    def test_defaults_y_sobrescritura_por_entorno(self, monkeypatch):
+        from app.config import Settings
+
+        for name in ("CHAT_USER_MAX_MESSAGES", "CHAT_USER_WINDOW_SECONDS", "CHAT_ORG_DAILY_MESSAGES"):
+            monkeypatch.delenv(name, raising=False)
+        s = Settings(_env_file=None)
+        assert (s.CHAT_USER_MAX_MESSAGES, s.CHAT_USER_WINDOW_SECONDS, s.CHAT_ORG_DAILY_MESSAGES) == (20, 60, 300)
+
+        monkeypatch.setenv("CHAT_USER_MAX_MESSAGES", "5")
+        monkeypatch.setenv("CHAT_USER_WINDOW_SECONDS", "30")
+        monkeypatch.setenv("CHAT_ORG_DAILY_MESSAGES", "50")
+        s = Settings(_env_file=None)
+        assert (s.CHAT_USER_MAX_MESSAGES, s.CHAT_USER_WINDOW_SECONDS, s.CHAT_ORG_DAILY_MESSAGES) == (5, 30, 50)
+
+
+class TestCuotaAtomica:
+    def test_chequeo_e_insert_van_en_una_transaccion_bajo_lock_y_gemini_fuera(
+        self, client: TestClient, chat_env, as_user
+    ):
+        as_user(ORG_A, USER_A)
+        db = chat_env.dbs.db(ORG_A)
+        gemini_en_tx: list[int] = []
+
+        async def send(_msg):
+            gemini_en_tx.append(db.tx_depth)   # 0 = fuera de toda transaccion (y del lock)
+            return text_response("ok")
+
+        chat_env.send.side_effect = send
+
+        with quota_settings(user=5, org=100):
+            assert post(client).status_code == 200
+
+        log = list(zip(db.sql_log, db.tx_flags))
+        idx = {
+            "historial": next(i for i, (q, _) in enumerate(log) if q.startswith("select role, content from chat_messages")),
+            "lock": next(i for i, (q, _) in enumerate(log) if "pg_advisory_xact_lock" in q),
+            "org": next(i for i, (q, _) in enumerate(log) if q.startswith("select created_at") and "user_id" not in q),
+            "user": next(i for i, (q, _) in enumerate(log) if q.startswith("select created_at") and "user_id = $1" in q),
+            "insert": next(i for i, (q, _) in enumerate(log) if "'user'" in q and q.startswith("insert into chat_messages")),
+        }
+        assert idx["historial"] < idx["lock"] < idx["org"] < idx["user"] < idx["insert"]
+        assert not log[idx["historial"]][1]                      # el historial se lee antes y fuera de la transaccion
+        assert all(log[idx[k]][1] for k in ("lock", "org", "user", "insert"))
+        assert gemini_en_tx == [0]
+
+    def test_un_429_deja_la_transaccion_sin_insertar(self, client: TestClient, chat_env, as_user):
+        as_user(ORG_A, USER_A)
+        seed_user_messages(chat_env, ORG_A, USER_A, [10, 20])
+        db = chat_env.dbs.db(ORG_A)
+
+        with quota_settings(user=2):
+            assert post(client).status_code == 429
+
+        assert not any(q.startswith("insert into chat_messages") for q in db.sql_log)
+        assert db.tx_depth == 0
+        assert len(db.chat) == 2
+
+
+class TestCuotaEnAnalytics:
+    """POST /api/v1/analytics/query puede llegar a Gemini: comparte los topes del chat."""
+
+    @pytest.fixture
+    def analytics_env(self, chat_env):
+        from unittest.mock import AsyncMock
+
+        fallback = AsyncMock(return_value="Analisis de prueba")
+        with patch("app.services.analytics_service.get_org_pool", chat_env.dbs.get_org_pool), patch(
+            "app.services.analytics_service._fallback_analysis", fallback
+        ):
+            yield SimpleNamespace(fallback=fallback)
+
+    @staticmethod
+    def query(client: TestClient):
+        return client.post("/api/v1/analytics/query", json={"query": "analiza mis ventas"})
+
+    def test_bajo_el_tope_responde_y_guarda_ambos_mensajes(self, client: TestClient, chat_env, as_user, analytics_env):
+        as_user(ORG_A, USER_A)
+
+        with quota_settings(user=5):
+            resp = self.query(client)
+
+        assert resp.status_code == 200 and resp.json()["content"] == "Analisis de prueba"
+        assert [(m["role"], m["content"]) for m in chat_env.dbs.db(ORG_A).chat] == [
+            ("user", "analiza mis ventas"), ("assistant", "Analisis de prueba"),
+        ]
+
+    def test_tope_por_usuario_429_antes_de_gastar_y_sin_guardar(self, client: TestClient, chat_env, as_user, analytics_env):
+        as_user(ORG_A, USER_A)
+        seed_user_messages(chat_env, ORG_A, USER_A, [10, 20, 30])
+
+        with quota_settings(user=3):
+            resp = self.query(client)
+
+        assert resp.status_code == 429
+        assert resp.json()["detail"]["code"] == "rate_limit_user"
+        assert "Retry-After" in resp.headers
+        analytics_env.fallback.assert_not_called()
+        chat_env.ctor.assert_not_called()
+        assert len(chat_env.dbs.db(ORG_A).chat) == 3
+
+    def test_tope_diario_de_la_org_aplica_y_otra_org_no_se_ve_afectada(self, client: TestClient, chat_env, as_user, analytics_env):
+        seed_user_messages(chat_env, ORG_A, USER_B, [3600, 7200, 10800])
+
+        with quota_settings(user=100, org=3):
+            as_user(ORG_A, USER_A)
+            blocked = self.query(client)
+            as_user(ORG_B, USER_B)
+            ok = self.query(client)
+
+        assert blocked.status_code == 429 and blocked.json()["detail"]["code"] == "quota_org_daily"
+        assert ok.status_code == 200
+        analytics_env.fallback.assert_called_once()
+
+    def test_comparte_cupo_con_el_chat(self, client: TestClient, chat_env, as_user, analytics_env):
+        """Chat y analytics suman en el mismo contador: alternar entre ambos no evade el tope."""
+        as_user(ORG_A, USER_A)
+
+        with quota_settings(user=2):
+            assert post(client).status_code == 200
+            assert self.query(client).status_code == 200
+            assert post(client).status_code == 429
+            assert self.query(client).status_code == 429
+
+
+class TestPrefijoDelHandlerDeSlowapi:
+    @pytest.mark.parametrize(
+        "path, es_chat",
+        [("/api/v1/chat/message", True), ("/api/v1/chatty", False), ("/api/v1/chat", False), ("/api/v1/auth/login", False)],
+    )
+    def test_solo_las_rutas_bajo_chat_usan_el_formato_estructurado(self, path, es_chat):
+        import main
+
+        request = SimpleNamespace(url=SimpleNamespace(path=path))
+        exc = SimpleNamespace(limit=SimpleNamespace(limit=SimpleNamespace(get_expiry=lambda: 60)))
+
+        with patch("main._rate_limit_exceeded_handler", return_value="DEFAULT"):
+            resp = main._on_rate_limit_exceeded(request, exc)
+
+        assert (resp != "DEFAULT") is es_chat

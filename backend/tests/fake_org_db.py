@@ -55,6 +55,8 @@ class FakeOrgDB:
         self.chat: list[dict] = []
         self.jsonb_as_text = True
         self.sql_log: list[str] = []
+        self.tx_depth = 0
+        self.tx_flags: list[bool] = []   # paralelo a sql_log: la sentencia corrio dentro de una transaccion
         # Inyeccion de fallos: callable(sql_normalizado, args) -> bool
         self.fail_when: Optional[Callable[[str, tuple], bool]] = None
 
@@ -101,10 +103,10 @@ class FakeOrgDB:
     # -- transacciones ------------------------------------------------------
 
     def snapshot(self):
-        return copy.deepcopy((self.tables, self.rows, self.records))
+        return copy.deepcopy((self.tables, self.rows, self.records, self.chat))
 
     def restore(self, snap) -> None:
-        self.tables, self.rows, self.records = snap
+        self.tables, self.rows, self.records, self.chat = snap
 
 
 class _Tx:
@@ -114,9 +116,11 @@ class _Tx:
 
     async def __aenter__(self):
         self.snap = self.db.snapshot()
+        self.db.tx_depth += 1
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        self.db.tx_depth -= 1
         if exc_type is not None:
             self.db.restore(self.snap)
         return False
@@ -154,6 +158,7 @@ class FakeConn:
         db = self.db
         q = _norm(sql)
         db.sql_log.append(q)
+        db.tx_flags.append(db.tx_depth > 0)
 
         returning = q.split(" returning ", 1)[1] if " returning " in q else ""
         if re.search(r"\b(count|sum|avg|min|max)\s*\(", returning):
@@ -211,6 +216,28 @@ class FakeConn:
                 {"id": args[0], "user_id": args[1], "role": m.group(1), "content": args[2], "created_at": args[3]}
             )
             return []
+
+        if q == (
+            "select created_at from chat_messages where role = 'user' and user_id = $1 "
+            "and created_at > $2 order by created_at desc offset $3 limit 1"
+        ):
+            mine = [m for m in db.chat if m["role"] == "user" and m["user_id"] == args[0] and m["created_at"] > args[1]]
+            mine.sort(key=lambda m: m["created_at"], reverse=True)
+            return [{"created_at": mine[args[2]]["created_at"]}] if len(mine) > args[2] else []
+
+        if q == (
+            "select created_at from chat_messages where role = 'user' and created_at > $1 "
+            "order by created_at desc offset $2 limit 1"
+        ):
+            mine = [m for m in db.chat if m["role"] == "user" and m["created_at"] > args[0]]
+            mine.sort(key=lambda m: m["created_at"], reverse=True)
+            return [{"created_at": mine[args[1]]["created_at"]}] if len(mine) > args[1] else []
+
+        if q == "select pg_advisory_xact_lock(hashtext('chat_messages_quota'))":
+            # En el fake no hay concurrencia real; la exclusion mutua se verifica contra Postgres real.
+            if db.tx_depth == 0:
+                raise FakeDBError("pg_advisory_xact_lock fuera de una transaccion no protege nada")
+            return [{"pg_advisory_xact_lock": None}]
 
         if q == "select role, content from chat_messages order by created_at desc limit 8":
             ordered = sorted(enumerate(db.chat), key=lambda p: (p[1]["created_at"], p[0]), reverse=True)

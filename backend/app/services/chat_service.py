@@ -1,7 +1,8 @@
 import json
 import logging
+import math
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 
@@ -269,6 +270,108 @@ async def _local_chat_response(context: str, user_message: str, org_id: str) -> 
     )
 
 
+_ORG_QUOTA_WINDOW = timedelta(hours=24)
+
+# Devuelve la fila numero `limite` (OFFSET limite-1) de los mensajes de usuario dentro de la ventana,
+# de mas nuevo a mas viejo: existe <=> ya se alcanzo el tope, y su created_at es el mensaje que, al
+# salir de la ventana, libera un cupo. Una sola consulta da "excedido?" y "cuando se libera".
+_USER_QUOTA_SQL = (
+    "SELECT created_at FROM chat_messages "
+    "WHERE role = 'user' AND user_id = $1 AND created_at > $2 "
+    "ORDER BY created_at DESC OFFSET $3 LIMIT 1"
+)
+_ORG_QUOTA_SQL = (
+    "SELECT created_at FROM chat_messages "
+    "WHERE role = 'user' AND created_at > $1 "
+    "ORDER BY created_at DESC OFFSET $2 LIMIT 1"
+)
+
+
+def _quota_exceeded(
+    code: str, message: str, limit: int, window: timedelta, release_at: datetime, now: datetime
+) -> HTTPException:
+    retry_after = max(1, math.ceil((release_at - now).total_seconds()))
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "code": code,
+            "message": message.format(retry=_human_wait(retry_after), limit=limit, window=_human_wait(int(window.total_seconds()))),
+            "retry_after_seconds": retry_after,
+            "retry_at": release_at.astimezone(timezone.utc).isoformat(),
+            "limit": limit,
+        },
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
+def _human_wait(seconds: int) -> str:
+    if seconds < 90:
+        return f"{seconds} segundos"
+    if seconds < 5400:
+        return f"{math.ceil(seconds / 60)} minutos"
+    return f"{math.ceil(seconds / 3600)} horas"
+
+
+# Lock consultivo de transaccion que serializa "contar + insertar" de los mensajes de usuario. La BD ya
+# es una por organizacion y los locks consultivos son por base de datos, asi que esta clave constante
+# equivale a un lock por organizacion.
+_QUOTA_LOCK_SQL = "SELECT pg_advisory_xact_lock(hashtext('chat_messages_quota'))"
+_INSERT_USER_MESSAGE_SQL = """
+    INSERT INTO chat_messages (id, user_id, role, content, created_at)
+    VALUES ($1, $2, 'user', $3, $4)
+    """
+
+
+async def reserve_user_message(pool, user_id: str | None, content: str, now: datetime) -> str:
+    """Verifica los topes de uso del chat Y guarda el mensaje del usuario, de forma atomica.
+
+    Devuelve el id del mensaje guardado. Si se excede un tope: 429 y NO se guarda nada. Se llama antes de
+    cualquier gasto (Gemini); lo usan el chat y analytics/query, que consumen la misma cuota.
+    - Los topes se cuentan en Postgres para que valgan entre instancias serverless.
+    - Chequeo + INSERT van en UNA transaccion con pg_advisory_xact_lock: sin eso, peticiones simultaneas
+      pasaban todas el chequeo antes de que alguna insertara (30 concurrentes con tope 5 llamaron a
+      Gemini 13 veces). El lock solo cubre estas consultas (milisegundos); la llamada a Gemini ocurre
+      despues, fuera de la transaccion, y NO se serializa.
+    - Se revisa primero el tope diario de la organizacion (protege la API key compartida): si ambos
+      estan excedidos, avisar solo del de 1 minuto seria enganoso porque el diario sigue bloqueando.
+    - `now` es la hora UTC de la aplicacion, la misma con la que se guarda created_at.
+    - Politica ante error de BD: NO se captura. Fallar cerrado protege el costo, y con la BD caida
+      el resto de send_message falla igual.
+    - Limitacion conocida: /chat/upload guarda una fila role='user' por archivo, y chat_messages no tiene
+      ninguna columna que distinga mensajes de archivo (solo id, user_id, role, content, created_at), asi
+      que cada subida tambien cuenta para estos topes sin llamar a Gemini.
+    """
+    settings = get_settings()
+    org_limit = settings.CHAT_ORG_DAILY_MESSAGES
+    user_limit = settings.CHAT_USER_MAX_MESSAGES
+    user_window = timedelta(seconds=settings.CHAT_USER_WINDOW_SECONDS)
+    user_msg_id = str(uuid.uuid4())
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(_QUOTA_LOCK_SQL)
+            if org_limit > 0:
+                row = await conn.fetchrow(_ORG_QUOTA_SQL, now - _ORG_QUOTA_WINDOW, org_limit - 1)
+                if row:
+                    raise _quota_exceeded(
+                        "quota_org_daily",
+                        "La organización alcanzó el límite diario de {limit} mensajes del asistente. "
+                        "Se libera en aproximadamente {retry}.",
+                        org_limit, _ORG_QUOTA_WINDOW, row["created_at"] + _ORG_QUOTA_WINDOW, now,
+                    )
+            if user_limit > 0 and user_id:
+                row = await conn.fetchrow(_USER_QUOTA_SQL, user_id, now - user_window, user_limit - 1)
+                if row:
+                    raise _quota_exceeded(
+                        "rate_limit_user",
+                        "Alcanzaste el límite de {limit} mensajes del asistente cada {window}. "
+                        "Intenta de nuevo en {retry}.",
+                        user_limit, user_window, row["created_at"] + user_window, now,
+                    )
+            await conn.execute(_INSERT_USER_MESSAGE_SQL, user_msg_id, user_id, content, now)
+    return user_msg_id
+
+
 async def send_message(
     org_id: str,
     user_id: str,
@@ -290,19 +393,8 @@ async def send_message(
         {"role": r["role"], "content": r["content"]} for r in reversed(recent)
     ]
 
-    # Guardar mensaje del usuario
-    user_msg_id = str(uuid.uuid4())
-    async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            INSERT INTO chat_messages (id, user_id, role, content, created_at)
-            VALUES ($1, $2, 'user', $3, $4)
-            """,
-            user_msg_id,
-            user_id,
-            content,
-            now,
-        )
+    # Verifica topes y guarda el mensaje del usuario (atomico); si hay 429 no se guarda nada ni se llama a Gemini.
+    user_msg_id = await reserve_user_message(pool, user_id, content, now)
 
     # Usar Gemini con tools
     from app.services.agent_tools_service import process_with_gemini
@@ -358,7 +450,8 @@ async def send_file_message(
     now = datetime.now(timezone.utc)
     filename = file.filename or "archivo.csv"
 
-    # Guardar mensaje del usuario
+    # Guardar mensaje del usuario. OJO: esta fila role='user' cuenta para los topes de uso del chat
+    # (ver reserve_user_message) aunque aqui no se llame a Gemini; no hay columna para distinguirla.
     user_text = user_message or f"Subiendo archivo: {filename}"
     user_msg_id = str(uuid.uuid4())
     async with pool.acquire() as conn:

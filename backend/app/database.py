@@ -238,6 +238,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     content TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- Los topes de uso del chat cuentan mensajes recientes por created_at.
+-- Solo orgs creadas despues de este cambio lo reciben (ORG_BASE_SCHEMA_SQL corre al crear la BD).
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages (created_at);
 
 -- Dashboards
 CREATE TABLE IF NOT EXISTS dashboards (

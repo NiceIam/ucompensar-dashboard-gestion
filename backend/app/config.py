@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     GEMINI_TIMEOUT_SECONDS: float = 25.0
     # Mensajes al chat permitidos por usuario (formato slowapi). Cada mensaje consume la API key compartida de Gemini.
     CHAT_RATE_LIMIT: str = "20/minute"
+    # Topes COMPARTIDOS entre instancias (se cuentan en Postgres sobre chat_messages, role='user').
+    # El de la organizacion por dia es el que protege el costo de la API key compartida de Gemini.
+    # Un valor <= 0 desactiva ese tope.
+    CHAT_USER_MAX_MESSAGES: int = 20
+    CHAT_USER_WINDOW_SECONDS: int = 60
+    CHAT_ORG_DAILY_MESSAGES: int = 300
 
     # App
     APP_ENV: str = "development"
