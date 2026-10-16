@@ -1,0 +1,129 @@
+# CI: tests del backend (incluidos los que necesitan Postgres real) y del frontend.
+# Sin secretos, sin despliegues y sin llamadas a Gemini (GOOGLE_API_KEY vacia; los tests usan un cliente simulado).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (pytest + Postgres 18)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: tester
+          POSTGRES_DB: postgres
+          # Contenedor desechable solo para tests: sin contrasena (los tests conectan a 127.0.0.1 sin password).
+          POSTGRES_HOST_AUTH_METHOD: trust
+          # Mismo locale que las pruebas locales: proveedor builtin C.UTF-8 (lower() entiende Unicode).
+          POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C --locale-provider=builtin --builtin-locale=C.UTF-8"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tester -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      GOOGLE_API_KEY: ""
+      CHAT_TOOLS_TEST_PG_PORT: "5432"
+      CHAT_TOOLS_TEST_PG_USER: tester
+      CHAT_QUOTA_TEST_PG_PORT: "5432"
+      CHAT_QUOTA_TEST_PG_USER: tester
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"   # la del venv del proyecto (3.13.14)
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: libmagic (la usa python-magic)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libmagic1
+
+      - name: Dependencias
+        run: python -m pip install -r requirements.txt
+
+      - name: El locale de la BD compara sin mayusculas en Unicode
+        run: |
+          python - <<'PY'
+          import asyncio
+          import os
+
+          import asyncpg
+
+
+          async def main():
+              conn = await asyncpg.connect(host="127.0.0.1", port=int(os.environ["CHAT_TOOLS_TEST_PG_PORT"]),
+                                           user=os.environ["CHAT_TOOLS_TEST_PG_USER"], database="postgres")
+              try:
+                  ok = await conn.fetchval("SELECT lower('ÑANDÚ') = 'ñandú'")
+              finally:
+                  await conn.close()
+              if not ok:
+                  raise SystemExit("lower('ÑANDÚ') <> 'ñandú': revisar POSTGRES_INITDB_ARGS (locale)")
+              print("locale OK: lower('ÑANDÚ') = 'ñandú'")
+
+
+          asyncio.run(main())
+          PY
+
+      - name: pytest (sin Gemini ni secretos; falla si se omiten los tests de Postgres)
+        run: |
+          set -o pipefail
+          python -m pytest -q -rs -p no:cacheprovider | tee pytest.log
+          if grep -q "TEST_PG_PORT" pytest.log; then
+            echo "::error::Se omitieron tests de Postgres: revisar el servicio y CHAT_*_TEST_PG_PORT"
+            exit 1
+          fi
+
+  frontend:
+    name: Frontend (vitest + tsc)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      # pnpm-workspace.yaml deja sin decidir (allowBuilds) los scripts de esbuild, msw y unrs-resolver; con
+      # CI=true pnpm 12 lo trata como error (ERR_PNPM_IGNORED_BUILDS). Esto conserva el comportamiento local
+      # (no se ejecutan) sin decidir por el proyecto. Para quitarlo: "pnpm approve-builds" y commitear el yaml.
+      PNPM_CONFIG_STRICT_DEP_BUILDS: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.5.1   # la que genero el lockfile local (package.json no declara packageManager)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"   # la del entorno local (v24.14.0)
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Tests unitarios
+        run: pnpm vitest run
+
+      - name: Tipos
+        run: pnpm exec tsc --noEmit
