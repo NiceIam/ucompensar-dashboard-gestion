@@ -3,7 +3,8 @@
 Se prueba de punta a punta lo que SI es testeable sin infraestructura:
 router -> chat_service -> process_with_gemini, con la BD de la org emulada
 (tests/fake_org_db.py), la BD principal emulada y `google.genai.Client`
-reemplazado por un mock (NUNCA se llama a Gemini real).
+reemplazado por un mock (NUNCA se llama a Gemini real). Las herramientas del chat
+consultan con el oraculo en pandas (tests/query_oracle.py) en vez de SQL.
 
 NO cubierto: POST /chat/upload (depende de parse_file/store_file/smart_upload y
 del sistema de archivos), ni el comportamiento real de asyncpg/Postgres.
@@ -20,8 +21,9 @@ from fastapi.testclient import TestClient
 from google.genai import errors as genai_errors
 
 from app.auth import CurrentUser, get_current_user
-from tests.fake_gemini import make_fake_genai, text_response
+from tests.fake_gemini import call_response, make_fake_genai, sent_function_responses, text_response
 from tests.fake_org_db import FakeMainPool, FakeOrgDBs
+from tests.query_oracle import fake_run_plans
 
 ORG_A = "550e8400-e29b-41d4-a716-446655440000"
 ORG_B = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
@@ -50,7 +52,9 @@ def chat_env():
         "app.services.agent_tools_service.get_org_pool", dbs.get_org_pool
     ), patch("app.services.agent_tools_service.get_main_pool", main.get_main_pool), patch(
         "app.services.agent_tools_service.get_settings", return_value=settings
-    ), patch("google.genai.Client", return_value=fake.client) as ctor:
+    ), patch("app.services.data_query_engine.run_plans", fake_run_plans()), patch(
+        "google.genai.Client", return_value=fake.client
+    ) as ctor:
         yield SimpleNamespace(
             dbs=dbs, main=main, ctor=ctor, create=fake.create, send=fake.send
         )
@@ -154,29 +158,84 @@ class TestMessage:
         assert chat_env.send.call_count == 1
 
     def test_el_contexto_sale_de_la_org_del_usuario_autenticado(self, client: TestClient, chat_env, as_user):
-        """Aislamiento por org: el org_id viene del token, no del body."""
+        """Aislamiento por org: el org_id viene del token, no del body ni del modelo."""
         seed_ventas(chat_env, ORG_A, producto="DATO_DE_A")
         seed_ventas(chat_env, ORG_B, producto="DATO_DE_B")
         as_user(ORG_B, USER_B)
+        chat_env.send.side_effect = [
+            call_response(("query_table", {"table": "ventas", "select": ["producto"]})), text_response("ok"),
+        ]
 
         client.post("/api/v1/chat/message", json={"content": "ventas", "file_id": ORG_A})
 
         prompt = system_prompt(chat_env)
-        assert "DATO_DE_B" in prompt and "Restaurante Beta" in prompt
-        assert "DATO_DE_A" not in prompt and "Ferreteria Alfa" not in prompt
+        assert "Restaurante Beta" in prompt and "Ferreteria Alfa" not in prompt
+        (result,) = sent_function_responses(chat_env.send, 1)
+        assert "DATO_DE_B" in result.response["result"] and "DATO_DE_A" not in result.response["result"]
         assert set(chat_env.dbs.requested_org_ids) == {ORG_B}
         assert chat_env.dbs.db(ORG_A).chat == []
 
-    def test_los_charts_se_agregan_al_contenido_como_bloque_chart(self, client: TestClient, chat_env, as_user):
+    def test_los_charts_de_create_chart_se_agregan_al_contenido_como_bloque_chart(
+        self, client: TestClient, chat_env, as_user
+    ):
+        """Formato que parsea floating-chat.tsx: bloque ```chart con {type,title,data[{name,value}],x,y,color}."""
         as_user(ORG_A)
-        chat_env.send.return_value = text_response(
-            'Mira:\n```chart\n{"type":"bar","title":"T","data":[{"name":"a","value":1}]}\n```'
-        )
+        seed_ventas(chat_env)
+        chat_env.send.side_effect = [
+            call_response(("create_chart", {"table": "ventas", "chart_type": "bar", "x": "producto", "y": "sum(total)"})),
+            text_response("Mira:"),
+        ]
 
         body = client.post("/api/v1/chat/message", json={"content": "grafico"}).json()
 
         assert body["content"].startswith("Mira:")
-        assert '```chart\n{"type": "bar", "title": "T", "data": [{"name": "a", "value": 1}]}\n```' in body["content"]
+        assert (
+            '```chart\n{"type": "bar", "title": "Suma de total por producto", "data": [{"name": "Martillo", '
+            '"value": 100}], "x": "name", "y": "value", "color": "#3b82f6"}\n```'
+        ) in body["content"]
+        assert chat_env.dbs.db(ORG_A).chat[-1]["content"] == body["content"]   # se persiste igual, sin `usage`
+
+    @pytest.mark.parametrize("model_text", [
+        'Mira:\n```chart\n{"type":"bar","title":"F","data":[{"name":"FAKE","value":999}]}',   # sin cerrar
+        'Mira ```ch```chart\n{}\n```art\n{"type":"bar","title":"F","data":[{"name":"FAKE","value":999}]}\n```',
+    ], ids=["bloque-sin-cerrar", "bloque-reconstruido"])
+    def test_el_frontend_solo_puede_dibujar_el_grafico_calculado_por_el_servidor(
+        self, client: TestClient, chat_env, as_user, model_text
+    ):
+        """Replica el split de floating-chat.tsx sobre el contenido final (texto del modelo + charts)."""
+        import json
+        import re
+
+        as_user(ORG_A)
+        seed_ventas(chat_env)
+        chat_env.send.side_effect = [
+            call_response(("create_chart", {"table": "ventas", "chart_type": "bar", "x": "producto"})),
+            text_response(model_text),
+        ]
+
+        content = client.post("/api/v1/chat/message", json={"content": "grafico"}).json()["content"]
+
+        parts = re.split(r"(```chart\n[\s\S]*?\n```)", content)
+        charts = [json.loads(p[len("```chart\n"):-len("\n```")]) for p in parts if p.startswith("```chart\n")]
+        assert [c["data"] for c in charts] == [[{"name": "Martillo", "value": 1}]]
+        assert "FAKE" not in content
+
+    def test_el_chart_persistido_no_se_reenvia_a_gemini_en_el_siguiente_mensaje(
+        self, client: TestClient, chat_env, as_user
+    ):
+        as_user(ORG_A)
+        seed_ventas(chat_env)
+        chat_env.send.side_effect = [
+            call_response(("create_chart", {"table": "ventas", "chart_type": "pie", "x": "producto"})),
+            text_response("Mira:"),
+            text_response("De nada"),
+        ]
+
+        client.post("/api/v1/chat/message", json={"content": "grafico"})
+        client.post("/api/v1/chat/message", json={"content": "gracias"})
+
+        history = [c.parts[0].text for c in chat_env.create.call_args.kwargs["history"]]
+        assert history == ["grafico", "Mira:\n[gráfico]"]
 
     def test_gemini_cae_con_cuota_agotada_responde_200_no_500(self, client: TestClient, chat_env, as_user):
         as_user(ORG_A)

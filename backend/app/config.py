@@ -37,8 +37,30 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3.6-flash"
     GEMINI_MAX_TOKENS: int = 8192
     GEMINI_TEMPERATURE: float = 0.1
-    # Tope de espera por llamada al chat (segundos). Al excederlo el usuario recibe el fallback "timeout".
+    # Tope de espera del chat (segundos). Es el presupuesto TOTAL de un mensaje: todas las llamadas a Gemini
+    # y las herramientas del bucle. Al excederlo el usuario recibe el fallback "timeout".
     GEMINI_TIMEOUT_SECONDS: float = 25.0
+    # Tokens de salida por llamada del chat. OJO: en los modelos con razonamiento ("thinking") ese razonamiento
+    # se descuenta de este mismo tope; si se agota, Gemini corta con MAX_TOKENS sin texto util (fallback
+    # "truncated") y aun asi cobra todo lo generado. Es un tope, no un gasto: se cobra lo que se genera. 2048
+    # es el valor con el que el chat funcionaba antes de este cambio; con razonamiento largo, subirlo.
+    GEMINI_CHAT_MAX_OUTPUT_TOKENS: int = 2048
+    # Nivel de razonamiento del chat (ThinkingConfig.thinking_level: minimal | low | medium | high).
+    # Vacio = no se envia y el modelo usa su default. No se activa por defecto: no esta verificado con una
+    # llamada real que el modelo configurado lo acepte (un valor no soportado haria fallar cada mensaje).
+    GEMINI_THINKING_LEVEL: str = ""
+    # Function calling del chat: una ronda = el modelo pide herramientas y el servidor las ejecuta. Tras la
+    # ultima ronda el modelo debe responder con texto, asi que un mensaje hace como maximo rondas + 1 llamadas.
+    CHAT_MAX_TOOL_ROUNDS: int = 4
+    # Cotas de lo que una herramienta le devuelve al modelo (cada caracter vuelve a costar en la ronda siguiente).
+    CHAT_TOOL_MAX_ROWS: int = 50
+    CHAT_TOOL_MAX_CHARS: int = 3000
+    # Presupuesto ACUMULADO de caracteres de resultados de herramientas por mensaje (todas las rondas). Al
+    # agotarse, las siguientes consultas devuelven un error corto y el modelo responde con lo que ya tiene.
+    CHAT_TOOL_MAX_TOTAL_CHARS: int = 6000
+    # Columnas con estadisticas por llamada a describe_table (las primeras del catalogo). Cada columna cuesta
+    # leer y contar toda la tabla: con 40 columnas x 50k filas se rozaba el statement_timeout de 8 s.
+    CHAT_DESCRIBE_MAX_COLUMNS: int = 12
     # Mensajes al chat permitidos por usuario (formato slowapi). Cada mensaje consume la API key compartida de Gemini.
     CHAT_RATE_LIMIT: str = "20/minute"
     # Topes COMPARTIDOS entre instancias (se cuentan en Postgres sobre chat_messages, role='user').
