@@ -93,6 +93,10 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        brand: {
+          DEFAULT: "hsl(var(--brand-panel))",
+          foreground: "hsl(var(--brand-panel-foreground))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

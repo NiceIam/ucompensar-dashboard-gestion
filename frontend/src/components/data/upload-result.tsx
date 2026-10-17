@@ -298,11 +298,11 @@ export function UploadResult({
 
       {/* Preguntas */}
       {questions.length > 0 && (
-        <section aria-labelledby="ask-now" className="rounded-2xl bg-primary p-5 text-primary-foreground sm:p-6">
+        <section aria-labelledby="ask-now" className="rounded-2xl bg-brand p-5 text-brand-foreground ring-1 ring-inset ring-primary/20 sm:p-6">
           <h4 id="ask-now" className="font-display text-xl font-semibold">
             Pregúntale a tus datos
           </h4>
-          <p className="mb-4 mt-1 text-sm text-primary-foreground/80">Toca una pregunta y el asistente la responde con tus cifras.</p>
+          <p className="mb-4 mt-1 text-sm text-brand-foreground/80">Toca una pregunta y el asistente la responde con tus cifras.</p>
           <SuggestionChips questions={questions} onPick={onAsk} className="[&_button]:border-transparent" />
         </section>
       )}

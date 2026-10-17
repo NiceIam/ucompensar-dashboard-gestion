@@ -69,6 +69,10 @@
 
     --shadow: 164 26% 14.3%;
 
+    /* Paneles de marca (asistente, portada de acceso): sólido en claro, profundo en oscuro. */
+    --brand-panel: 167 69.9% 22.2%; /* #11604F */
+    --brand-panel-foreground: 40 100% 98.8%;
+
     --sidebar-background: 42 31.7% 92%; /* #F1EDE4 */
     --sidebar-foreground: 164 27.3% 10.8%;
     --sidebar-primary: 167 69.9% 22.2%;
@@ -140,6 +144,9 @@
     --chart-axis: 150 5.2% 62.4%;
 
     --shadow: 0 0% 0%;
+
+    --brand-panel: 165 55.3% 16.7%; /* #134236, texto 9,3:1 */
+    --brand-panel-foreground: 40 30.6% 90.4%;
 
     --sidebar-background: 164 24.4% 8.8%;
     --sidebar-foreground: 40 30.6% 90.4%;

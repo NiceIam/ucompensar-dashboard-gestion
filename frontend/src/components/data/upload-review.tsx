@@ -94,7 +94,18 @@ function ColumnCard({ column }: { column: AnalysisColumn }) {
 }
 
 /** Tabla con las primeras filas tal como vienen en el archivo. */
-export function SampleTable({ header, rows, caption }: { header: string[]; rows: (Cell | unknown)[][]; caption: string }) {
+export function SampleTable({
+  header,
+  rows,
+  caption,
+  kinds,
+}: {
+  header: string[]
+  rows: (Cell | unknown)[][]
+  caption: string
+  /** Clase de cada columna (si se conoce) para mostrar fechas, pesos y sí/no legibles. */
+  kinds?: ColumnKind[]
+}) {
   const cols = header.slice(0, MAX_PREVIEW_COLUMNS)
   const hidden = header.length - cols.length
   return (
@@ -115,7 +126,9 @@ export function SampleTable({ header, rows, caption }: { header: string[]; rows:
             {rows.map((r, ri) => (
               <tr key={ri} className="border-b last:border-0">
                 {cols.map((_, ci) => {
-                  const text = cellText(r[ci])
+                  const raw = r[ci]
+                  const kind = kinds?.[ci]
+                  const text = kind && typeof raw === "string" && raw !== "" ? friendlySample(raw, kind) : cellText(raw)
                   return (
                     <td key={ci} className="max-w-[220px] truncate whitespace-nowrap px-3 py-2.5 tabular" title={text}>
                       {text || <span className="text-muted-foreground/60">—</span>}
@@ -290,7 +303,16 @@ export function UploadReview({
           <h4 id="sample-title" className="text-sm font-semibold">
             Así se ven las primeras filas{multi && activeSheet?.name ? ` de «${activeSheet.name}»` : ""}
           </h4>
-          <SampleTable header={sample.header} rows={sample.rows} caption={`Primeras filas de ${file.name}`} />
+          <SampleTable
+            header={sample.header}
+            rows={sample.rows}
+            caption={`Primeras filas de ${file.name}`}
+            kinds={
+              analysis && (!multi || sheetIndex === 0) && sample.header.length === analysis.columns.length
+                ? analysis.columns.map((c) => columnKind({ name: c.clean_name, label: c.original_name, type: c.inferred_type }))
+                : undefined
+            }
+          />
         </section>
       )}
 

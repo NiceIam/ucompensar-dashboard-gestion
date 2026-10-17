@@ -29,7 +29,7 @@ export function AskBox({
     <section
       aria-labelledby="ask-title"
       className={cn(
-        "relative overflow-hidden rounded-3xl bg-primary px-5 py-7 text-primary-foreground shadow-raised sm:px-8 sm:py-9",
+        "relative overflow-hidden rounded-3xl bg-brand px-5 py-7 text-brand-foreground shadow-raised ring-1 ring-inset ring-primary/20 sm:px-8 sm:py-9",
         className
       )}
     >
@@ -37,7 +37,7 @@ export function AskBox({
       <svg
         viewBox="0 0 200 200"
         aria-hidden="true"
-        className="pointer-events-none absolute -right-10 -top-12 h-64 w-64 text-primary-foreground/[0.07] sm:-right-6 sm:h-72 sm:w-72"
+        className="pointer-events-none absolute -right-10 -top-12 h-64 w-64 text-brand-foreground/[0.07] sm:-right-6 sm:h-72 sm:w-72"
       >
         <circle cx="100" cy="100" r="92" fill="none" stroke="currentColor" strokeWidth="2" />
         <circle cx="100" cy="100" r="64" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 7" />
@@ -54,7 +54,7 @@ export function AskBox({
           <h2 id="ask-title" className="font-display text-[28px] font-semibold leading-tight sm:text-[34px]">
             Pregúntale a tus datos
           </h2>
-          <p className="max-w-xl text-[15px] text-primary-foreground/80">
+          <p className="max-w-xl text-[15px] text-brand-foreground/80">
             Escribe como le hablarías a un colega. Te respondemos con cifras de tus propias hojas.
           </p>
         </div>
@@ -90,7 +90,7 @@ export function AskBox({
 
         {suggestions.length > 0 && (
           <div className="space-y-2">
-            <p className="text-sm font-medium text-primary-foreground/75">O prueba con una de estas:</p>
+            <p className="text-sm font-medium text-brand-foreground/75">O prueba con una de estas:</p>
             <SuggestionChips questions={suggestions} onPick={onAsk} className="[&_button]:border-transparent" />
           </div>
         )}

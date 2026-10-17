@@ -13,9 +13,9 @@ const BENEFITS = [
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh bg-background">
-      <aside className="relative hidden w-[46%] max-w-[640px] flex-col justify-between overflow-hidden bg-primary p-10 text-primary-foreground lg:flex xl:p-14">
+      <aside className="relative hidden w-[46%] max-w-[640px] flex-col justify-between overflow-hidden bg-brand p-10 text-brand-foreground lg:flex xl:p-14">
         {/* Rosa de los vientos decorativa */}
-        <svg viewBox="0 0 400 400" aria-hidden="true" className="pointer-events-none absolute -bottom-32 -right-40 h-[560px] w-[560px] text-primary-foreground/[0.07]">
+        <svg viewBox="0 0 400 400" aria-hidden="true" className="pointer-events-none absolute -bottom-32 -right-40 h-[560px] w-[560px] text-brand-foreground/[0.07]">
           <circle cx="200" cy="200" r="190" fill="none" stroke="currentColor" strokeWidth="2" />
           <circle cx="200" cy="200" r="140" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 10" />
           <circle cx="200" cy="200" r="90" fill="none" stroke="currentColor" strokeWidth="1.5" />
@@ -26,7 +26,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-highlight/20 blur-3xl" aria-hidden="true" />
 
         <div className="relative flex items-center gap-3">
-          <BrandMark className="h-11 w-11 [&_rect]:fill-primary-foreground/10" />
+          <BrandMark className="h-11 w-11" />
           <span className="font-display text-2xl font-semibold">{BRAND.name}</span>
         </div>
 
@@ -35,19 +35,19 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           <ul className="space-y-5">
             {BENEFITS.map((b) => (
               <li key={b.title} className="flex items-start gap-4">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-foreground/10 text-highlight">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-foreground/10 text-highlight">
                   <b.icon className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <div>
                   <p className="font-semibold">{b.title}</p>
-                  <p className="text-sm text-primary-foreground/75">{b.text}</p>
+                  <p className="text-sm text-brand-foreground/75">{b.text}</p>
                 </div>
               </li>
             ))}
           </ul>
         </div>
 
-        <p className="relative min-h-4 text-xs text-primary-foreground/60">{BRAND.credit}</p>
+        <p className="relative min-h-4 text-xs text-brand-foreground/70">{BRAND.credit}</p>
       </aside>
 
       <main className="paper-glow flex flex-1 flex-col items-center justify-center px-4 py-10 sm:px-8">
