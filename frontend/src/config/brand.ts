@@ -1,0 +1,24 @@
+/**
+ * Identidad del producto en UN solo lugar. Cambiar el nombre, la frase o el
+ * crédito aquí lo cambia en toda la interfaz (títulos, login, barra lateral,
+ * metadatos de la página).
+ */
+export const BRAND = {
+  /** Nombre visible del producto. */
+  name: "Brújula",
+  /** Frase corta que acompaña al nombre. */
+  tagline: "Tu negocio, explicado.",
+  /** Descripción para metadatos y la portada del login. */
+  description:
+    "Sube tus archivos, entiende tus números y pregúntale a tus datos en lenguaje natural.",
+  /**
+   * Crédito institucional del proyecto. Se muestra discreto en el pie de la
+   * barra lateral y del login; déjalo en `null` para ocultarlo.
+   */
+  credit: "Proyecto PI0320251 · Ucompensar" as string | null,
+} as const
+
+/** Título de pestaña: "Página · Brújula". */
+export function pageTitle(section?: string): string {
+  return section ? `${section} · ${BRAND.name}` : `${BRAND.name} · ${BRAND.tagline}`
+}

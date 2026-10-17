@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { api } from "@/lib/api"
-import { getChatErrorMessage, isChatLimitError } from "@/lib/chat-errors"
+import { describeChatError, getChatErrorMessage, isChatLimitError, type ChatErrorInfo } from "@/lib/chat-errors"
+import { humanizeError } from "@/lib/errors"
 import type { ChatMessage } from "@/types/api"
 
+// El backend devuelve `message_id` en el historial; se normaliza a `id`.
+type HistoryMessage = Omit<ChatMessage, "id"> & { id?: string; message_id?: string }
+
 interface ChatHistory {
-  messages: ChatMessage[]
+  messages: HistoryMessage[]
   total: number
 }
 
@@ -25,20 +29,20 @@ interface PageContext {
 
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   "/": {
-    label: "Dashboard",
-    placeholder: "Pregunta sobre tu dashboard...",
+    label: "Inicio",
+    placeholder: "Pregúntale algo a tus datos…",
   },
   "/data": {
-    label: "Datos",
-    placeholder: "Pregunta sobre tus datos...",
+    label: "Mis datos",
+    placeholder: "Por ejemplo: ¿cuántas ventas hubo este mes?",
   },
   "/dashboards": {
     label: "Tableros",
-    placeholder: "Pregunta sobre tus tableros...",
+    placeholder: "Pregunta lo que quieras ver en un gráfico…",
   },
   "/settings": {
     label: "Configuración",
-    placeholder: "Pregunta sobre configuración...",
+    placeholder: "Pregúntale algo a tus datos…",
   },
 }
 
@@ -55,7 +59,7 @@ function getPageContext(pathname: string): PageContext {
   }
   return {
     label: "Asistente",
-    placeholder: "Escribe un mensaje...",
+    placeholder: "Pregúntale algo a tus datos…",
   }
 }
 
@@ -68,10 +72,16 @@ export interface FloatingChatState {
   messages: ChatMessage[]
   isLoading: boolean
   isSending: boolean
+  /** Mensaje de error ya traducido a lenguaje humano (o null). */
   error: string | null
+  /** El mismo error con título, descripción y si se puede reintentar. */
+  errorInfo: ChatErrorInfo | null
+  /** Texto del último mensaje que falló por red/servidor (para "Reintentar"). */
+  lastFailed: string | null
   currentPage: PageContext
   selectedFile: File | null
   sendMessage: (content: string) => Promise<SendMessageResult>
+  retryLast: () => Promise<SendMessageResult>
   sendFile: (file: File, message?: string) => Promise<void>
   setSelectedFile: (file: File | null) => void
   clearError: () => void
@@ -83,6 +93,8 @@ export function useFloatingChat(): FloatingChatState {
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorInfo, setErrorInfo] = useState<ChatErrorInfo | null>(null)
+  const [lastFailed, setLastFailed] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const hasFetched = useRef(false)
 
@@ -94,7 +106,14 @@ export function useFloatingChat(): FloatingChatState {
     setIsLoading(true)
     try {
       const data = await api.get<ChatHistory>("/api/v1/chat/history?limit=50")
-      setMessages(data.messages)
+      setMessages(
+        data.messages.map((m, i) => ({
+          id: m.id ?? m.message_id ?? `history-${i}`,
+          role: m.role,
+          content: m.content,
+          created_at: m.created_at,
+        }))
+      )
     } catch {
       // History load failure is non-critical; start with empty state
     } finally {
@@ -111,6 +130,8 @@ export function useFloatingChat(): FloatingChatState {
       if (!content.trim() || isSending) return { rateLimited: false }
       setIsSending(true)
       setError(null)
+      setErrorInfo(null)
+      setLastFailed(null)
       let rateLimited = false
 
       // Optimistic user message
@@ -136,7 +157,10 @@ export function useFloatingChat(): FloatingChatState {
         setMessages((prev) => [...prev, assistantMsg])
       } catch (err) {
         rateLimited = isChatLimitError(err)
-        setError(getChatErrorMessage(err, "Error al enviar el mensaje"))
+        setError(getChatErrorMessage(err, "No pudimos enviar tu mensaje. Inténtalo de nuevo."))
+        const info = describeChatError(err)
+        setErrorInfo(info)
+        if (info.retryable) setLastFailed(content.trim())
         // Remove optimistic message on failure
         setMessages((prev) =>
           prev.filter((m) => m.id !== optimisticUser.id)
@@ -154,6 +178,8 @@ export function useFloatingChat(): FloatingChatState {
       if (isSending) return
       setIsSending(true)
       setError(null)
+      setErrorInfo(null)
+      setLastFailed(null)
 
       const optimisticUser: ChatMessage = {
         id: `optimistic-file-${Date.now()}`,
@@ -181,9 +207,9 @@ export function useFloatingChat(): FloatingChatState {
         setMessages((prev) => [...prev, assistantMsg])
         setSelectedFile(null)
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Error al subir el archivo"
-        )
+        const h = humanizeError(err, "upload")
+        setError(`${h.title}. ${h.description}`)
+        setErrorInfo({ title: h.title, description: h.description, retryable: false, rateLimited: false })
         setMessages((prev) =>
           prev.filter((m) => m.id !== optimisticUser.id)
         )
@@ -194,16 +220,27 @@ export function useFloatingChat(): FloatingChatState {
     [isSending]
   )
 
-  const clearError = useCallback(() => setError(null), [])
+  const clearError = useCallback(() => {
+    setError(null)
+    setErrorInfo(null)
+  }, [])
+
+  const retryLast = useCallback(async () => {
+    if (!lastFailed) return { rateLimited: false }
+    return sendMessage(lastFailed)
+  }, [lastFailed, sendMessage])
 
   return {
     messages,
     isLoading,
     isSending,
     error,
+    errorInfo,
+    lastFailed,
     currentPage,
     selectedFile,
     sendMessage,
+    retryLast,
     sendFile,
     setSelectedFile,
     clearError,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { getChatErrorMessage, isChatLimitError } from "./chat-errors"
+import { describeChatError, getChatErrorMessage, isChatLimitError } from "./chat-errors"
 
 const FALLBACK = "Error al enviar el mensaje"
 const apiError = (body: unknown) => new Error(typeof body === "string" ? body : JSON.stringify(body))
@@ -70,15 +70,40 @@ describe("getChatErrorMessage", () => {
     )
   })
 
-  test("otros errores conservan su mensaje original", () => {
-    expect(getChatErrorMessage(apiError({ detail: "Token invalido" }), FALLBACK)).toBe('{"detail":"Token invalido"}')
-    expect(getChatErrorMessage(new Error("Failed to fetch"), FALLBACK)).toBe("Failed to fetch")
-    expect(getChatErrorMessage(apiError("texto plano"), FALLBACK)).toBe("texto plano")
+  // Cambio deliberado del rediseño: antes estos errores mostraban el texto crudo del
+  // servidor (por ejemplo '{"detail":"Token invalido"}'); ahora pasan por el traductor
+  // central y nunca llega JSON a la pantalla.
+  test("otros errores se traducen a lenguaje humano (nunca JSON crudo)", () => {
+    const tokenMsg = getChatErrorMessage(apiError({ detail: "Token invalido" }), FALLBACK)
+    expect(tokenMsg).not.toContain("{")
+    expect(tokenMsg).toContain("Token invalido")
+    expect(getChatErrorMessage(new Error("Failed to fetch"), FALLBACK)).toBe(
+      "No pudimos conectarnos. Revisa tu conexión a internet e inténtalo de nuevo en un momento."
+    )
+    expect(getChatErrorMessage(apiError("texto plano"), FALLBACK)).toBe(
+      "El asistente no pudo responder. Texto plano."
+    )
   })
 
   test("valores que no son Error usan el fallback", () => {
     expect(getChatErrorMessage("boom", FALLBACK)).toBe(FALLBACK)
     expect(getChatErrorMessage(undefined, FALLBACK)).toBe(FALLBACK)
+  })
+})
+
+describe("describeChatError", () => {
+  test("los límites no se reintentan y conservan el mensaje del 429", () => {
+    const info = describeChatError(apiError({ detail: { code: "rate_limit_user", retry_after_seconds: 5 } }))
+    expect(info.rateLimited).toBe(true)
+    expect(info.retryable).toBe(false)
+    expect(info.description).toContain("en 5 segundos")
+  })
+
+  test("un fallo de red se puede reintentar", () => {
+    const info = describeChatError(new TypeError("Failed to fetch"))
+    expect(info.rateLimited).toBe(false)
+    expect(info.retryable).toBe(true)
+    expect(info.title).toBe("No pudimos conectarnos")
   })
 })
 

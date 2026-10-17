@@ -2,84 +2,157 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-}
-
+/*
+ * Sistema de diseño de Brújula.
+ * Los colores viven como canales HSL (para poder usar opacidad: bg-primary/10).
+ * Cada estado tiene tres variantes: sólido (iconos, barras), suave (fondos)
+ * y fuerte (texto sobre el fondo suave, contraste AA verificado >= 4.5:1).
+ * Valores de referencia en hex en el comentario de cada línea.
+ */
 @layer base {
   :root {
-    /* Ucompensar brand: #F37021 (naranja) + #1A1A1A (negro) */
-    --background: 0 0% 100%;
-    --foreground: 0 0% 10%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 10%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 10%;
-    --primary: 24 90% 54%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 24 15% 96%;
-    --secondary-foreground: 0 0% 10%;
-    --muted: 24 10% 96%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 24 20% 95%;
-    --accent-foreground: 0 0% 10%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 24 10% 90%;
-    --input: 24 10% 90%;
-    --ring: 24 90% 54%;
-    --radius: 0.5rem;
-    --chart-1: 24 90% 54%;
-    --chart-2: 270 30% 55%;
-    --chart-3: 174 50% 42%;
-    --chart-4: 270 45% 30%;
-    --chart-5: 36 85% 58%;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 0 0% 20%;
-    --sidebar-primary: 24 90% 54%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 24 20% 95%;
-    --sidebar-accent-foreground: 0 0% 10%;
-    --sidebar-border: 24 10% 90%;
-    --sidebar-ring: 24 90% 54%;
+    --background: 40 36% 95.1%; /* #F7F4EE papel cálido */
+    --foreground: 164 27.3% 10.8%; /* #14231F tinta verde */
+    --card: 40 100% 98.8%; /* #FFFDF9 */
+    --card-foreground: 164 27.3% 10.8%;
+    --popover: 40 100% 98.8%;
+    --popover-foreground: 164 27.3% 10.8%;
+
+    --primary: 167 69.9% 22.2%; /* #11604F verde azulado profundo */
+    --primary-foreground: 40 100% 98.8%;
+    --primary-soft: 150 26.1% 91%; /* #E2EEE8 */
+    --primary-strong: 167 72.3% 18.4%; /* #0D5142 */
+
+    --secondary: 40 33.3% 89.4%; /* #EDE7DB */
+    --secondary-foreground: 164 27.3% 10.8%;
+    --muted: 40 31.9% 90.8%; /* #EFEAE0 */
+    --muted-foreground: 155 6.5% 36.1%; /* #56625D */
+    --accent: 40 34.6% 89.8%; /* #EEE8DC (hover) */
+    --accent-foreground: 164 27.3% 10.8%;
+
+    --highlight: 40 78.7% 49.8%; /* #E3A11B azafrán */
+    --highlight-foreground: 164 27.3% 10.8%;
+    --highlight-soft: 42 82.2% 91.2%; /* #FBF0D6 */
+    --highlight-strong: 39 100% 23.9%; /* #7A5000 */
+
+    --destructive: 9 64.3% 43.9%; /* #B83E28 coral */
+    --destructive-foreground: 40 100% 98.8%;
+    --danger-soft: 12 76.5% 93.3%; /* #FBE6E1 */
+    --danger-strong: 9 69.9% 36.5%; /* #9E2F1C */
+    --success: 139 49.2% 36.3%; /* #2F8A4C */
+    --success-soft: 129 33.3% 91.8%; /* #E3F1E5 */
+    --success-strong: 138 54.7% 26.9%; /* #1F6A35 */
+    --warning: 39 83.9% 46.3%; /* #D99413 */
+    --warning-soft: 42 82.2% 91.2%; /* #FBF0D6 */
+    --warning-strong: 39 100% 23.9%; /* #7A5000 */
+    --info: 225 50.2% 47.3%; /* #3C5BB5 */
+    --info-soft: 221 57.6% 93.5%; /* #E5EBF8 */
+    --info-strong: 224 52.9% 36.7%; /* #2C478F */
+
+    --border: 39 23.9% 86.1%; /* #E4DED3 */
+    --input: 38 19.6% 78%; /* #D2CABC */
+    --ring: 167 69.9% 22.2%;
+    --radius: 0.875rem;
+
+    /* Paleta categórica de gráficos: orden fijo, validado para daltonismo
+       (protan/deutan ΔE >= 8 entre vecinos) en claro y oscuro. */
+    --chart-1: 167 66.7% 32.9%; /* #1C8C74 verde azulado */
+    --chart-2: 39 88.6% 41.4%; /* #C7870C azafrán */
+    --chart-3: 228 53.4% 53.7%; /* #4A64C8 añil */
+    --chart-4: 10 70.8% 58.4%; /* #E0644A coral */
+    --chart-5: 286 33.3% 49.4%; /* #9454A8 ciruela */
+    --chart-6: 93 55.6% 38.8%; /* #5E9A2C musgo */
+    --chart-7: 331 59.6% 60.2%; /* #D65D97 rosa */
+    --chart-8: 30 62.4% 41.8%; /* #AD6A28 tierra */
+    --chart-grid: 40 25.4% 88.4%; /* #E9E4DA */
+    --chart-axis: 155 5.3% 44.3%; /* #6B7772 */
+
+    --shadow: 164 26% 14.3%;
+
+    --sidebar-background: 42 31.7% 92%; /* #F1EDE4 */
+    --sidebar-foreground: 164 27.3% 10.8%;
+    --sidebar-primary: 167 69.9% 22.2%;
+    --sidebar-primary-foreground: 40 100% 98.8%;
+    --sidebar-accent: 42 28.6% 86.3%; /* #E6E0D2 */
+    --sidebar-accent-foreground: 164 27.3% 10.8%;
+    --sidebar-border: 39 23.9% 86.1%;
+    --sidebar-ring: 167 69.9% 22.2%;
+
+    --shadow-card: 0 1px 2px hsl(var(--shadow) / 0.05), 0 6px 16px -6px hsl(var(--shadow) / 0.08);
+    --shadow-raised: 0 2px 4px hsl(var(--shadow) / 0.06), 0 16px 32px -12px hsl(var(--shadow) / 0.18);
+    --shadow-float: 0 4px 8px hsl(var(--shadow) / 0.06), 0 24px 48px -16px hsl(var(--shadow) / 0.28);
+
+    --bottom-nav-height: 0px;
   }
 
   .dark {
-    /* Ucompensar dark mode — naranja se mantiene como acento */
-    --background: 0 0% 7%;
-    --foreground: 0 0% 95%;
-    --card: 0 0% 9%;
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 9%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 24 90% 54%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 24 10% 15%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 65%;
-    --accent: 24 15% 15%;
-    --accent-foreground: 0 0% 95%;
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 0 0% 95%;
-    --border: 0 0% 18%;
-    --input: 0 0% 18%;
-    --ring: 24 90% 54%;
-    --chart-1: 24 85% 58%;
-    --chart-2: 270 35% 65%;
-    --chart-3: 174 45% 50%;
-    --chart-4: 270 40% 45%;
-    --chart-5: 36 80% 62%;
-    --sidebar-background: 0 0% 7%;
-    --sidebar-foreground: 0 0% 90%;
-    --sidebar-primary: 24 90% 54%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 24 15% 15%;
-    --sidebar-accent-foreground: 0 0% 90%;
-    --sidebar-border: 0 0% 15%;
-    --sidebar-ring: 24 90% 54%;
+    --background: 167 24.3% 7.3%; /* #0E1715 */
+    --foreground: 40 30.6% 90.4%; /* #EEE9DF */
+    --card: 164 20.8% 10.4%; /* #15201D */
+    --card-foreground: 40 30.6% 90.4%;
+    --popover: 165 18.8% 12.5%; /* #1A2623 */
+    --popover-foreground: 40 30.6% 90.4%;
+
+    --primary: 162 47% 54.9%; /* #56C2A2 */
+    --primary-foreground: 166 68.4% 7.5%; /* #06201A */
+    --primary-soft: 164 40.5% 14.5%; /* #16342C */
+    --primary-strong: 161 49.7% 70.4%; /* #8ED9C1 */
+
+    --secondary: 162 17.3% 14.7%;
+    --secondary-foreground: 40 30.6% 90.4%;
+    --muted: 164 16.4% 13.1%;
+    --muted-foreground: 147 5.5% 68%; /* #A9B2AD */
+    --accent: 163 17.1% 16.1%;
+    --accent-foreground: 40 30.6% 90.4%;
+
+    --highlight: 39 77.5% 60%; /* #E8B04A */
+    --highlight-foreground: 164 27.3% 10.8%;
+    --highlight-soft: 40 56.8% 14.5%;
+    --highlight-strong: 39 82.4% 71%;
+
+    --destructive: 10 75.3% 63.5%; /* #E8735C */
+    --destructive-foreground: 12 62.5% 6.3%;
+    --danger-soft: 10 43.5% 16.7%;
+    --danger-strong: 10 80.7% 77.6%;
+    --success: 137 38% 50%;
+    --success-soft: 150 35.1% 14.5%;
+    --success-strong: 138 48.3% 70.4%;
+    --warning: 39 76.7% 56.3%;
+    --warning-soft: 40 56.8% 14.5%;
+    --warning-strong: 39 82.4% 71%;
+    --info: 226 69.5% 70.4%;
+    --info-soft: 225 39.1% 18%;
+    --info-strong: 225 74.7% 82.9%;
+
+    --border: 157 14.3% 17.8%; /* #27342F */
+    --input: 160 12.6% 23.3%;
+    --ring: 162 47% 54.9%;
+
+    --chart-1: 165 55% 41%; /* #2FA285 */
+    --chart-2: 39 76.5% 41.8%; /* #BC8419 */
+    --chart-3: 227 59.8% 63.9%; /* #6C83DA */
+    --chart-4: 11 70.5% 58.8%; /* #E0664C */
+    --chart-5: 284 37.4% 58%; /* #A66CBC */
+    --chart-6: 91 47.3% 43.1%; /* #6CA23A */
+    --chart-7: 329 53% 60.8%; /* #D0669D */
+    --chart-8: 30 48.4% 47.8%; /* #B57A3F */
+    --chart-grid: 162 15.3% 16.7%;
+    --chart-axis: 150 5.2% 62.4%;
+
+    --shadow: 0 0% 0%;
+
+    --sidebar-background: 164 24.4% 8.8%;
+    --sidebar-foreground: 40 30.6% 90.4%;
+    --sidebar-primary: 162 47% 54.9%;
+    --sidebar-primary-foreground: 166 68.4% 7.5%;
+    --sidebar-accent: 162 17.8% 14.3%;
+    --sidebar-accent-foreground: 40 30.6% 90.4%;
+    --sidebar-border: 163 17.1% 16.1%;
+    --sidebar-ring: 162 47% 54.9%;
+
+    --shadow-card: 0 1px 2px hsl(var(--shadow) / 0.3), 0 0 0 1px hsl(0 0% 100% / 0.02);
+    --shadow-raised: 0 2px 4px hsl(var(--shadow) / 0.35), 0 16px 32px -12px hsl(var(--shadow) / 0.6);
+    --shadow-float: 0 4px 8px hsl(var(--shadow) / 0.4), 0 24px 48px -16px hsl(var(--shadow) / 0.7);
   }
 }
 
@@ -87,7 +160,82 @@
   * {
     @apply border-border;
   }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  /* Titulares en el serif de display, con su eje "suave" para un tono cálido
+     (el tamaño óptico lo ajusta la fuente sola: font-optical-sizing auto). */
+  .font-display {
+    font-variation-settings: "SOFT" 60;
+    font-optical-sizing: auto;
+    letter-spacing: -0.012em;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: hsl(var(--highlight) / 0.35);
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer components {
+  /* Superficie de tarjeta: fondo, aro fino y sombra en capas casi imperceptible. */
+  .surface {
+    @apply rounded-2xl border bg-card text-card-foreground;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Halo cálido de fondo para las áreas principales. */
+  .paper-glow {
+    background-image:
+      radial-gradient(1100px 520px at 100% -8%, hsl(var(--highlight) / 0.09), transparent 62%),
+      radial-gradient(900px 480px at -12% -4%, hsl(var(--primary) / 0.07), transparent 58%);
+  }
+
+  /* Cifras en columnas alineadas (tablas, ejes). */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Movimiento: todo se apaga si la persona pidió reducirlo. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

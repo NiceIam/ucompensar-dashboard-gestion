@@ -1,3 +1,5 @@
+import { humanizeError, humanizeErrorText } from "@/lib/errors"
+
 interface ChatLimitDetail {
   code?: string
   message?: string
@@ -35,14 +37,8 @@ function formatWhen(retryAt?: string, retryAfterSeconds?: number): string | null
   return `el ${date.toLocaleDateString("es-CO", { day: "numeric", month: "long" })} a las ${time}`
 }
 
-/**
- * Mensaje en español para los 429 del chat (POST /api/v1/chat/message):
- * - detail.code "rate_limit_user": límite de mensajes por usuario (slowapi o cuota en BD).
- * - detail.code "quota_org_daily": tope diario de la organización.
- * - cuerpo {"error": "Rate limit exceeded..."} de slowapi (respaldo).
- * Cualquier otro error conserva su mensaje original (`fallback` si no es un Error).
- */
-export function getChatErrorMessage(err: unknown, fallback: string): string {
+/** Mensaje de límite/cuota (429) del chat, o null si el error no es de ese tipo. */
+function limitMessage(err: unknown): string | null {
   const body = parseBody(err)
   const detail = body?.detail && typeof body.detail === "object" ? (body.detail as ChatLimitDetail) : null
 
@@ -64,16 +60,48 @@ export function getChatErrorMessage(err: unknown, fallback: string): string {
     return "Estás enviando mensajes muy rápido; intenta de nuevo en unos segundos."
   }
 
-  return err instanceof Error ? err.message : fallback
+  return null
+}
+
+/**
+ * Mensaje en español para los errores del chat (POST /api/v1/chat/message):
+ * - detail.code "rate_limit_user": límite de mensajes por usuario (slowapi o cuota en BD).
+ * - detail.code "quota_org_daily": tope diario de la organización.
+ * - cuerpo {"error": "Rate limit exceeded..."} de slowapi (respaldo).
+ * Cualquier otro Error pasa por el traductor central (nunca JSON crudo);
+ * `fallback` solo se usa si lo recibido no es un Error.
+ */
+export function getChatErrorMessage(err: unknown, fallback: string): string {
+  const limit = limitMessage(err)
+  if (limit) return limit
+  return err instanceof Error ? humanizeErrorText(err, "chat") : fallback
 }
 
 /** true si el error es un 429 de límite/cuota del chat (el texto escrito por el usuario conviene restaurarlo). */
 export function isChatLimitError(err: unknown): boolean {
-  const body = parseBody(err)
-  const detail = body?.detail && typeof body.detail === "object" ? (body.detail as ChatLimitDetail) : null
-  return (
-    detail?.code === "rate_limit_user" ||
-    detail?.code === "quota_org_daily" ||
-    (typeof body?.error === "string" && body.error.startsWith("Rate limit exceeded"))
-  )
+  return limitMessage(err) !== null
+}
+
+export interface ChatErrorInfo {
+  title: string
+  description: string
+  /** Reintentar el mismo mensaje tiene sentido (red, servidor); en límites no. */
+  retryable: boolean
+  rateLimited: boolean
+}
+
+/** Versión estructurada para la interfaz del chat (título + qué hacer + si se puede reintentar). */
+export function describeChatError(err: unknown): ChatErrorInfo {
+  const limit = limitMessage(err)
+  if (limit) {
+    const daily = limit.includes("límite diario")
+    return {
+      title: daily ? "Llegamos al tope de hoy" : "Una pausa breve",
+      description: limit,
+      retryable: false,
+      rateLimited: true,
+    }
+  }
+  const h = humanizeError(err, "chat")
+  return { title: h.title, description: h.description, retryable: h.retryable, rateLimited: false }
 }

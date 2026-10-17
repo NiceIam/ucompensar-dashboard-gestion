@@ -30,7 +30,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { useFloatingChat } from "@/hooks/use-floating-chat"
+import { useChat } from "@/providers/chat-provider"
 
 interface ChatMessage {
   id: string
@@ -306,12 +306,8 @@ const TOOL_BUTTONS = [
 
 // ─── Main FloatingChat component ────────────────────────────────────────────
 
-interface FloatingChatProps {
-  isOpen: boolean
-  onToggle: () => void
-}
-
-export function FloatingChat({ isOpen, onToggle }: FloatingChatProps) {
+export function FloatingChat() {
+  const { isOpen, toggle: onToggle, chat } = useChat()
   const {
     messages,
     isLoading,
@@ -323,7 +319,7 @@ export function FloatingChat({ isOpen, onToggle }: FloatingChatProps) {
     sendFile,
     setSelectedFile,
     clearError,
-  } = useFloatingChat()
+  } = chat
 
   const [inputValue, setInputValue] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -593,38 +589,6 @@ export function FloatingChat({ isOpen, onToggle }: FloatingChatProps) {
         </div>
       </div>
 
-      {/* Toggle vertical — solo desktop, cuando el chat está cerrado */}
-      {!isOpen && (
-        <button
-          onClick={onToggle}
-          className="hidden lg:flex items-center gap-2 px-3 py-2 border-l bg-background hover:bg-accent transition-colors shrink-0 self-start mt-4"
-          aria-label="Abrir asistente IA"
-          title="Abrir Asistente IA"
-        >
-          <PanelRightOpen className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground [writing-mode:vertical-lr] rotate-180">
-            Asistente IA
-          </span>
-        </button>
-      )}
-
-      {/* FAB — solo móvil, cuando el chat está cerrado */}
-      {!isOpen && (
-        <button
-          ref={fabRef}
-          onClick={onToggle}
-          className={cn(
-            "fixed bottom-4 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full",
-            "bg-primary text-primary-foreground shadow-lg transition-colors",
-            "hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            "lg:hidden"
-          )}
-          aria-label="Abrir asistente IA"
-          title="Abrir Asistente IA"
-        >
-          <Sparkles className="h-6 w-6" />
-        </button>
-      )}
     </>
   )
 }
