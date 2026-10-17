@@ -22,7 +22,7 @@ const STEPS = [
 /** El recorrido en tres pasos, para estados vacíos y bienvenida. */
 export function Journey({ className }: { className?: string }) {
   return (
-    <ol className={cn("grid gap-3 sm:grid-cols-3", className)}>
+    <ol className={cn("auto-grid gap-3 [--auto-grid-min:14rem]", className)}>
       {STEPS.map((s, i) => (
         <li key={s.title} className="relative flex gap-3.5 rounded-2xl border bg-card/70 p-4">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-strong">

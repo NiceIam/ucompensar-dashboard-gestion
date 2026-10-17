@@ -211,6 +211,11 @@
 }
 
 @layer utilities {
+  /* Rejilla que se adapta al ancho DISPONIBLE (no al de la pantalla): sirve igual con el chat abierto. */
+  .auto-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--auto-grid-min, 17rem)), 1fr));
+  }
   .text-balance {
     text-wrap: balance;
   }

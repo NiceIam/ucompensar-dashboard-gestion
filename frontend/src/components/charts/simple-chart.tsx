@@ -37,6 +37,12 @@ export function formatValue(value: number, unit: ChartUnit, compact = false): st
   return compact ? formatCompact(value) : formatNumber(value)
 }
 
+/** Etiqueta del eje recortada según cuántas categorías hay (la completa sale en el tooltip y la tabla). */
+export function shortLabel(label: string, count: number): string {
+  const max = count <= 3 ? 16 : count <= 5 ? 12 : 9
+  return label.length > max ? `${label.slice(0, max - 1).trimEnd()}…` : label
+}
+
 /** Pie con máximo 6 porciones: el resto se agrupa en "Otros". */
 export function foldPie(points: ChartPoint[], max = 6): ChartPoint[] {
   const sorted = [...points].sort((a, b) => b.value - a.value)
@@ -197,7 +203,7 @@ export function SimpleChart({
                 </defs>
                 <CartesianGrid vertical={false} stroke="hsl(var(--chart-grid))" />
                 <XAxis dataKey="name" tick={axisTick} tickLine={false} axisLine={{ stroke: "hsl(var(--chart-grid))" }} minTickGap={16} />
-                <YAxis tick={axisTick} tickLine={false} axisLine={false} width={yWidth} tickFormatter={(v: number) => formatValue(v, unit, true)} />
+                <YAxis tick={axisTick} tickLine={false} axisLine={false} width={yWidth} interval={0} tickCount={5} tickFormatter={(v: number) => formatValue(v, unit, true)} />
                 <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ stroke: "hsl(var(--chart-axis))", strokeWidth: 1 }} />
                 <Area
                   type="monotone"
@@ -213,7 +219,7 @@ export function SimpleChart({
               <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid vertical={false} stroke="hsl(var(--chart-grid))" />
                 <XAxis dataKey="name" tick={axisTick} tickLine={false} axisLine={{ stroke: "hsl(var(--chart-grid))" }} minTickGap={16} />
-                <YAxis tick={axisTick} tickLine={false} axisLine={false} width={yWidth} tickFormatter={(v: number) => formatValue(v, unit, true)} />
+                <YAxis tick={axisTick} tickLine={false} axisLine={false} width={yWidth} interval={0} tickCount={5} tickFormatter={(v: number) => formatValue(v, unit, true)} />
                 <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ stroke: "hsl(var(--chart-axis))", strokeWidth: 1 }} />
                 <Line
                   type="monotone"
@@ -236,8 +242,8 @@ export function SimpleChart({
             ) : (
               <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid vertical={false} stroke="hsl(var(--chart-grid))" />
-                <XAxis dataKey="name" tick={axisTick} tickLine={false} axisLine={{ stroke: "hsl(var(--chart-grid))" }} interval="preserveStartEnd" minTickGap={8} />
-                <YAxis tick={axisTick} tickLine={false} axisLine={false} width={yWidth} tickFormatter={(v: number) => formatValue(v, unit, true)} />
+                <XAxis dataKey="name" tick={axisTick} tickLine={false} axisLine={{ stroke: "hsl(var(--chart-grid))" }} interval={data.length <= 8 ? 0 : "preserveStartEnd"} minTickGap={4} tickFormatter={(v: string) => shortLabel(String(v), data.length)} />
+                <YAxis tick={axisTick} tickLine={false} axisLine={false} width={yWidth} interval={0} tickCount={5} tickFormatter={(v: number) => formatValue(v, unit, true)} />
                 <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ fill: "hsl(var(--muted))" }} />
                 <Bar dataKey="value" fill={SERIES_COLORS[0]} radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={false} />
               </BarChart>

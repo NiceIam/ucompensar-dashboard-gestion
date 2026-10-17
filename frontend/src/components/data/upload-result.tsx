@@ -265,8 +265,8 @@ export function UploadResult({
 
       {/* Primer vistazo */}
       {insights && (insights.facts.length > 0 || insights.chart) && (
-        <section aria-labelledby="first-look" className="grid grid-cols-1 gap-5 rounded-2xl border bg-card p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-          <div className="space-y-4">
+        <section aria-labelledby="first-look" className="flex flex-wrap gap-x-8 gap-y-6 rounded-2xl border bg-card p-5 sm:p-6">
+          <div className="min-w-0 flex-[1_1_17rem] space-y-4">
             <div>
               <h4 id="first-look" className="font-display text-xl font-semibold">
                 Un primer vistazo
@@ -282,7 +282,7 @@ export function UploadResult({
             </div>
           </div>
           {insights.chart && (
-            <div className="min-w-0">
+            <div className="min-w-0 flex-[1.15_1_19rem]">
               <p className="mb-1 text-sm font-semibold">{insights.chart.title}</p>
               <SimpleChart
                 form={insights.chart.form}

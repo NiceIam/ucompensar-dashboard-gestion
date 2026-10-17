@@ -90,7 +90,7 @@ export default function HomePage() {
       ) : withRows.length === 0 ? (
         /* ── Sin datos: bienvenida que guía ── */
         <section className="surface overflow-hidden rounded-3xl">
-          <div className="grid gap-0 lg:grid-cols-[1.1fr_1fr]">
+          <div className="flex flex-wrap">
             <EmptyState
               illustration="compass"
               title="Empecemos por tus datos"
@@ -103,7 +103,7 @@ export default function HomePage() {
                   </Link>
                 </Button>
               }
-              className="lg:items-start lg:px-10 lg:text-left [&>div]:lg:text-left"
+              className="min-w-0 flex-[1.1_1_22rem] lg:px-10"
             >
               {ready.length > 0 && (
                 <p className="max-w-md text-sm text-muted-foreground">
@@ -116,9 +116,9 @@ export default function HomePage() {
                 </p>
               )}
             </EmptyState>
-            <div className="border-t bg-muted/40 p-6 lg:border-l lg:border-t-0 lg:p-10">
+            <div className="min-w-0 flex-[1_1_20rem] bg-muted/40 p-6 lg:p-10">
               <p className="mb-4 text-sm font-semibold">Así funciona</p>
-              <Journey className="sm:grid-cols-1" />
+              <Journey className="[--auto-grid-min:100%]" />
             </div>
           </div>
         </section>
@@ -127,8 +127,8 @@ export default function HomePage() {
         <>
           <AskBox onAsk={(q) => ask(q)} suggestions={suggestions} />
 
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-            <section aria-labelledby="home-data" className="space-y-5">
+          <div className="flex flex-wrap gap-8">
+            <section aria-labelledby="home-data" className="min-w-0 flex-[1.6_1_26rem] space-y-5">
               <SectionHeader
                 id="home-data"
                 title="Tus datos"
@@ -142,7 +142,7 @@ export default function HomePage() {
                   </Button>
                 }
               />
-              <ul className="grid gap-3 sm:grid-cols-2">
+              <ul className="auto-grid gap-3 [--auto-grid-min:15rem]">
                 {withRows.slice(0, 4).map((t) => (
                   <li key={t.id}>
                     <Link
@@ -166,7 +166,7 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-              <div className="grid gap-3 pt-2 sm:grid-cols-2">
+              <div className="auto-grid gap-3 pt-2 [--auto-grid-min:15rem]">
                 <Link
                   href="/data"
                   className="group flex min-h-16 items-center gap-3 rounded-2xl border border-dashed px-4 py-3 transition hover:border-primary/50 hover:bg-primary-soft/30"
@@ -195,7 +195,7 @@ export default function HomePage() {
               )}
             </section>
 
-            <aside className="space-y-8">
+            <aside className="min-w-0 flex-[1_1_18rem] space-y-8">
               <section aria-labelledby="home-summary" className="surface space-y-4 p-5 sm:p-6">
                 <h2 id="home-summary" className="font-display text-xl font-semibold">
                   En pocas palabras

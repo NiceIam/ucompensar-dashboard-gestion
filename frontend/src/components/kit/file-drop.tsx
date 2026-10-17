@@ -72,7 +72,7 @@ export function FileDrop({
       className={cn(
         "group relative flex cursor-pointer flex-col items-center justify-center border-2 border-dashed text-center outline-none transition-[background-color,border-color,box-shadow] duration-150",
         "focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-ring/20",
-        compact ? "gap-3 rounded-2xl px-5 py-5 sm:flex-row sm:justify-between sm:text-left" : "gap-5 rounded-3xl px-6 py-10 sm:py-14",
+        compact ? "gap-3 rounded-2xl px-5 py-5 sm:flex-row sm:flex-wrap sm:justify-between sm:text-left" : "gap-5 rounded-3xl px-6 py-10 sm:py-14",
         isDragActive
           ? "border-primary bg-primary-soft/70"
           : "border-input bg-card/60 hover:border-primary/50 hover:bg-primary-soft/30",
@@ -83,7 +83,7 @@ export function FileDrop({
       <input {...getInputProps({ accept: ACCEPT_ATTR })} />
       {compact ? (
         <>
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-[14rem] items-center gap-3 sm:flex-1">
             <span
               className={cn(
                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-transform duration-200",

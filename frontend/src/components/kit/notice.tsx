@@ -38,29 +38,30 @@ export function Notice({
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
-      className={cn("flex flex-col gap-3 rounded-xl border px-4 py-3.5 sm:flex-row sm:items-start", TONE[tone].box, className)}
+      className={cn(
+        "relative flex flex-wrap items-start gap-x-3 gap-y-3 rounded-xl border px-4 py-3.5",
+        onDismiss && "pr-12",
+        TONE[tone].box,
+        className
+      )}
     >
-      <div className="flex min-w-0 flex-1 gap-3">
+      <div className="flex min-w-[min(100%,16rem)] flex-1 gap-3">
         <Icon className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
         <div className="min-w-0 flex-1 space-y-1 text-sm leading-relaxed">
           {title && <p className="font-semibold">{title}</p>}
           {children && <div className="text-foreground/85 dark:text-foreground/80">{children}</div>}
         </div>
       </div>
-      {(action || onDismiss) && (
-        <div className="flex shrink-0 items-center gap-1 pl-8 sm:pl-0">
-          {action}
-          {onDismiss && (
-            <button
-              type="button"
-              onClick={onDismiss}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg opacity-70 transition hover:bg-foreground/5 hover:opacity-100 sm:h-8 sm:w-8"
-              aria-label="Cerrar aviso"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
-        </div>
+      {action && <div className="flex shrink-0 items-center gap-1 pl-8">{action}</div>}
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="absolute right-1.5 top-1.5 inline-flex h-10 w-10 items-center justify-center rounded-lg opacity-70 transition hover:bg-foreground/5 hover:opacity-100"
+          aria-label="Cerrar aviso"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
       )}
     </div>
   )

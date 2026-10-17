@@ -128,7 +128,7 @@ export default function DataPage() {
               <ErrorState error={humanizeError(error, "load")} onRetry={() => void refetch()} retrying={isFetching} />
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="auto-grid gap-4">
               {withRows.map((t) => (
                 <DataCard key={t.id} {...cardProps(t)} />
               ))}
@@ -161,7 +161,7 @@ export default function DataPage() {
               </Button>
             }
           />
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="auto-grid gap-4">
             {empties.map((t) => (
               <DataCard key={t.id} {...cardProps(t)} />
             ))}

@@ -52,7 +52,8 @@ function limitMessage(err: unknown): string | null {
   if (detail?.code === "quota_org_daily") {
     const when = formatWhen(detail.retry_at, detail.retry_after_seconds)
     return when
-      ? `La organización alcanzó el límite diario de mensajes del asistente; se libera aproximadamente ${when}.`
+      ? // "p. m." ya termina en punto: no se agrega otro ("p. m..").
+        `La organización alcanzó el límite diario de mensajes del asistente; se libera aproximadamente ${when}${when.endsWith(".") ? "" : "."}`
       : "La organización alcanzó el límite diario de mensajes del asistente; intenta de nuevo más tarde."
   }
 

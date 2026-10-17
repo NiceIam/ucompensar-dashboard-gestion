@@ -30,19 +30,19 @@ interface PageContext {
 const PAGE_CONTEXT_MAP: Record<string, PageContext> = {
   "/": {
     label: "Inicio",
-    placeholder: "Pregúntale algo a tus datos…",
+    placeholder: "Escribe tu pregunta…",
   },
   "/data": {
     label: "Mis datos",
-    placeholder: "Por ejemplo: ¿cuántas ventas hubo este mes?",
+    placeholder: "Pregunta sobre tus datos…",
   },
   "/dashboards": {
     label: "Tableros",
-    placeholder: "Pregunta lo que quieras ver en un gráfico…",
+    placeholder: "Pide un dato o un gráfico…",
   },
   "/settings": {
     label: "Configuración",
-    placeholder: "Pregúntale algo a tus datos…",
+    placeholder: "Escribe tu pregunta…",
   },
 }
 
@@ -59,7 +59,7 @@ function getPageContext(pathname: string): PageContext {
   }
   return {
     label: "Asistente",
-    placeholder: "Pregúntale algo a tus datos…",
+    placeholder: "Escribe tu pregunta…",
   }
 }
 

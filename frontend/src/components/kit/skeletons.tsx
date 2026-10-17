@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 /** Esqueletos con la forma de lo que viene, para que nada "salte" al cargar. */
 export function CardGridSkeleton({ count = 3, className }: { count?: number; className?: string }) {
   return (
-    <div className={cn("grid gap-4 sm:grid-cols-2 lg:grid-cols-3", className)} aria-busy="true" aria-label="Cargando">
+    <div className={cn("auto-grid gap-4", className)} aria-busy="true" aria-label="Cargando">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="surface space-y-4 p-5">
           <div className="flex items-center gap-3">
@@ -24,7 +24,7 @@ export function CardGridSkeleton({ count = 3, className }: { count?: number; cla
 
 export function MetricRowSkeleton({ count = 3 }: { count?: number }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-3" aria-busy="true" aria-label="Cargando">
+    <div className="auto-grid gap-4 [--auto-grid-min:12rem]" aria-busy="true" aria-label="Cargando">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="surface space-y-3 p-5">
           <Skeleton className="h-4 w-24" />

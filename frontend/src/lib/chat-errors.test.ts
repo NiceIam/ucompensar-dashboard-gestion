@@ -31,19 +31,21 @@ describe("getChatErrorMessage", () => {
     const quotaError = (retryAt: Date) =>
       apiError({ detail: { code: "quota_org_daily", retry_after_seconds: 1, retry_at: retryAt.toISOString() } })
     const hhmm = (d: Date) => d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })
+    // Cambio deliberado del rediseño: "p. m." ya trae punto final; antes el mensaje terminaba en "p. m..".
+    const end = (d: Date) => (hhmm(d).endsWith(".") ? hhmm(d) : `${hhmm(d)}.`)
 
     test("si se libera hoy muestra solo la hora aproximada (HH:MM)", () => {
       const at = new Date(2026, 4, 1, 15, 30)
       const msg = getChatErrorMessage(quotaError(at), FALLBACK)
 
       expect(msg).toBe(
-        `La organización alcanzó el límite diario de mensajes del asistente; se libera aproximadamente a las ${hhmm(at)}.`
+        `La organización alcanzó el límite diario de mensajes del asistente; se libera aproximadamente a las ${end(at)}`
       )
     })
 
     test("si se libera mañana lo dice", () => {
       const at = new Date(2026, 4, 2, 10, 30)
-      expect(getChatErrorMessage(quotaError(at), FALLBACK)).toContain(`se libera aproximadamente mañana a las ${hhmm(at)}.`)
+      expect(getChatErrorMessage(quotaError(at), FALLBACK)).toContain(`se libera aproximadamente mañana a las ${end(at)}`)
     })
 
     test("si es más lejos incluye la fecha", () => {
@@ -51,6 +53,12 @@ describe("getChatErrorMessage", () => {
       const msg = getChatErrorMessage(quotaError(at), FALLBACK)
       expect(msg).toMatch(/aproximadamente el 5 de mayo a las /)
     })
+  })
+
+  test("nunca termina con doble punto", () => {
+    const msg = getChatErrorMessage(apiError({ detail: { code: "quota_org_daily", retry_after_seconds: 3600 } }), FALLBACK)
+    expect(msg.endsWith("..")).toBe(false)
+    expect(msg.endsWith(".")).toBe(true)
   })
 
   test("tope diario sin retry_at usa retry_after_seconds, y sin ninguno degrada con gracia", () => {

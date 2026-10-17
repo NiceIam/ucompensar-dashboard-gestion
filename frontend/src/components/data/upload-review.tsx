@@ -273,7 +273,7 @@ export function UploadReview({
           <h4 id="cols-title" className="text-sm font-semibold">
             Lo que entendimos de cada columna
           </h4>
-          <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="auto-grid gap-2.5 [--auto-grid-min:15rem]">
             {analysis.columns.slice(0, 12).map((c) => (
               <ColumnCard key={c.clean_name} column={c} />
             ))}
