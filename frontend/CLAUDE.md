@@ -33,8 +33,9 @@ El backend debe estar corriendo en `http://localhost:8000` para que el frontend 
 
 ### Estructura de Carpetas Clave
 
-- `src/app/(auth)/` — Login y registro (layout con fondo naranja degradado)
-- `src/app/(dashboard)/` — App principal: resumen (`/`), datos (`/data`), tableros (`/dashboards`), configuración (`/settings`)
+- `src/app/(auth)/` — Login y registro (portada en dos paneles: marca y formulario)
+- `src/app/(dashboard)/` — App principal: inicio (`/`), datos y cargue (`/data`), tableros (`/dashboards`), configuración (`/settings`)
+- `src/lib/upload/` — Flujo de cargue: validación local, lectores CSV/JSON/XLSX sin dependencias, evaluación (¿revisar o guardar directo?), primer vistazo y máquina de estados
 - `src/hooks/` — Custom hooks que wrappean TanStack Query por dominio: `use-auth`, `use-files`, `use-dashboards`, `use-agents`, `use-etl`, `use-templates`, `use-floating-chat`
 - `src/lib/api.ts` — Cliente HTTP centralizado con `credentials:'include'` en todos los fetch; los tokens viven en cookies HttpOnly seteadas por el backend (`access_token` path=/, `refresh_token` path=/api/v1/auth/refresh). El frontend nunca toca tokens directamente.
 - `src/types/api.ts` — Tipos TypeScript para toda la API (User, Dashboard, WidgetConfig, ChatMessage, etc.)
@@ -66,9 +67,17 @@ Cada dominio tiene hooks en `src/hooks/` que siguen el mismo patrón:
 - Soporta envío de archivos via FormData a `/api/v1/chat/upload`
 - Contexto por página: cambia el placeholder según la ruta actual
 
-### Paleta de Colores (Ucompensar)
+- El estado del chat vive en `ChatProvider` (`src/providers/chat-provider.tsx`): una sola conversación para toda la app, `ask(pregunta)` abre el chat desde cualquier pantalla y Ctrl/Cmd+K lo abre o cierra.
+- Los errores del chat pasan por `src/lib/chat-errors.ts` (429 de límite/cuota con el texto restaurado al cuadro) y el resto por el traductor central `src/lib/errors.ts`.
 
-El color primario es **naranja `#F37021`** (HSL `24 90% 54%`), definido como variables CSS en `globals.css`. Los colores de gráficas usan 5 slots (`--chart-1` a `--chart-5`). Soporta dark mode via clase `.dark`.
+### Sistema de diseño (Brújula)
+
+- Identidad en `src/config/brand.ts` (nombre, frase, crédito). Cambiar el nombre ahí lo cambia en toda la UI.
+- Tokens HSL en `globals.css` con roles semánticos y tres variantes por estado (`success`/`warning`/`danger`/`info`/`highlight`: sólido, `-soft` fondo, `-strong` texto AA). Primario verde azulado profundo `#11604F`, acento azafrán `#E3A11B`, papel cálido `#F7F4EE`. Modo oscuro con la clase `.dark` (ThemeProvider de `next-themes`).
+- Gráficos: 8 colores categóricos en orden fijo (`--chart-1..8`), validados para daltonismo en claro y oscuro; usar `SimpleChart` (`src/components/charts/simple-chart.tsx`).
+- Tipografía: Fraunces (`font-display`, titulares y cifras grandes) + Plus Jakarta Sans (UI) vía `next/font/google`.
+- Componentes propios en `src/components/kit/` (encabezado, cifra, frase de dato, avisos, pasos, estados vacíos, zona de arrastre…). Textos de cara al usuario: español, tuteo, sin jerga técnica; todo error pasa por `humanizeError`.
+- Rejillas con `auto-grid` (se adaptan al ancho disponible, también con el chat abierto).
 
 ### Widget / Dashboard System
 
