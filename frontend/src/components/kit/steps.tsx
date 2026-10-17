@@ -43,7 +43,7 @@ export function Steps({
               key={s.id}
               className={cn(
                 "h-1.5 flex-1 rounded-full transition-colors duration-300",
-                i < current || allDone ? "bg-primary" : i === current ? (failed ? "bg-destructive" : "bg-highlight") : "bg-muted"
+                i < current || allDone ? "bg-primary" : i === current ? (failed ? "bg-destructive" : "bg-highlight/45") : "bg-muted"
               )}
             />
           ))}

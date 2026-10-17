@@ -54,6 +54,8 @@ const config: Config = {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          /** Hover de superficies con texto: más profundo en claro, más luminoso en oscuro (AA en ambos). */
+          hover: "hsl(var(--primary-hover))",
           soft: "hsl(var(--primary-soft))",
           strong: "hsl(var(--primary-strong))",
         },
@@ -161,6 +163,11 @@ const config: Config = {
           "0%, 100%": { transform: "rotate(-14deg)" },
           "50%": { transform: "rotate(14deg)" },
         },
+        // "Puntos que se encienden": cada punto de la retícula se prende y se apaga en ola.
+        "dot-light": {
+          "0%, 70%, 100%": { opacity: "0.18", transform: "scale(0.82)" },
+          "35%": { opacity: "1", transform: "scale(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -170,6 +177,7 @@ const config: Config = {
         sweep: "sweep 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite",
         "soft-pulse": "soft-pulse 1.2s ease-in-out infinite",
         "needle-sway": "needle-sway 2.4s ease-in-out infinite",
+        "dot-light": "dot-light 1.6s ease-in-out infinite",
       },
     },
   },

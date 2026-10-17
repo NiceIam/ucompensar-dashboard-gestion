@@ -39,7 +39,7 @@ function Thinking() {
       <div className="flex items-center gap-2.5 rounded-2xl rounded-tl-md border bg-card px-3.5 py-2.5 text-sm text-muted-foreground shadow-card">
         <span className="flex gap-1" aria-hidden="true">
           {[0, 150, 300].map((d) => (
-            <span key={d} className="h-1.5 w-1.5 animate-soft-pulse rounded-full bg-primary" style={{ animationDelay: `${d}ms` }} />
+            <span key={d} className="h-1.5 w-1.5 animate-soft-pulse rounded-full bg-highlight" style={{ animationDelay: `${d}ms` }} />
           ))}
         </span>
         {THINKING[index].text}

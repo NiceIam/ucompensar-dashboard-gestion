@@ -144,7 +144,7 @@ export function DataViewer({ table, onClose }: { table: OrgTable; onClose: () =>
                             )}
                             title={text}
                           >
-                            {text || <span className="text-muted-foreground/50">—</span>}
+                            {text || <span className="text-muted-foreground">—</span>}
                           </td>
                         )
                       })}

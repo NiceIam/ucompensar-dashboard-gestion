@@ -122,8 +122,8 @@ export default function DashboardDetailPage() {
             )}
             <p className="max-w-2xl text-[15px] text-muted-foreground">
               {meta?.description?.trim() || "Gráficos calculados con tus datos de este momento."}
-              {ago && !isFetching && <span className="text-muted-foreground/80"> · Actualizado {ago}.</span>}
-              {isFetching && !isLoading && <span className="text-muted-foreground/80"> · Actualizando…</span>}
+              {ago && !isFetching && <span className="text-muted-foreground"> · Actualizado {ago}.</span>}
+              {isFetching && !isLoading && <span className="text-muted-foreground"> · Actualizando…</span>}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -174,7 +174,8 @@ export default function DashboardDetailPage() {
                   label={kpi.label}
                   value={kpiValue(Number(kpi.value), kpi.icon, kpi.label)}
                   icon={kpiIcon(kpi.icon, kpi.label)}
-                  tone={i === 0 ? "primary" : i === 1 ? "highlight" : "info"}
+                  // El naranja solo en la primera cifra: guía la atención sin saturar.
+                  tone={i === 0 ? "primary" : "neutral"}
                 />
               ))}
             </section>

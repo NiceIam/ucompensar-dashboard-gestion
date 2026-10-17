@@ -4,10 +4,23 @@ import { cn } from "@/lib/utils"
  * Ilustraciones propias en SVG (sin imágenes externas). Usan los tokens de
  * color, así que se ven bien en claro y en oscuro. Son decorativas: siempre
  * van acompañadas de un título y un texto que dicen lo mismo.
+ * Paleta: neutros cálidos + el naranja de la universidad (`highlight`) en el
+ * único punto que debe llamar la atención, y los puntos del logo como chispa.
  */
 export type IllustrationName = "upload" | "chart" | "chat" | "empty" | "compass" | "error" | "sheets"
 
 const common = "fill-none stroke-[1.5] [stroke-linecap:round] [stroke-linejoin:round]"
+
+/** Tres puntos en diagonal: la "chispa" de marca (en lugar de estrellitas). */
+function Spark({ x, y }: { x: number; y: number }) {
+  return (
+    <g className="fill-highlight">
+      <circle cx={x} cy={y} r="3.2" />
+      <circle cx={x + 7.5} cy={y - 6} r="2.4" className="opacity-60" />
+      <circle cx={x + 13} cy={y - 12} r="1.7" className="opacity-35" />
+    </g>
+  )
+}
 
 function Upload() {
   return (
@@ -19,18 +32,18 @@ function Upload() {
           <line key={y} x1="40" y1={y} x2="82" y2={y} className="stroke-border" strokeWidth="1.5" />
         ))}
       </g>
-      <rect x="58" y="18" width="66" height="80" rx="10" className="fill-card stroke-primary/40" strokeWidth="1.5" />
-      <rect x="58" y="18" width="66" height="16" rx="10" className="fill-primary-soft" />
-      <rect x="58" y="28" width="66" height="6" className="fill-primary-soft" />
+      <rect x="58" y="18" width="66" height="80" rx="10" className="fill-card stroke-highlight/45" strokeWidth="1.5" />
+      <rect x="58" y="18" width="66" height="16" rx="10" className="fill-highlight-soft" />
+      <rect x="58" y="28" width="66" height="6" className="fill-highlight-soft" />
       {[46, 58, 70, 82].map((y, i) => (
         <g key={y}>
           <rect x="68" y={y - 3} width={i % 2 ? 18 : 26} height="6" rx="3" className="fill-muted" />
           <rect x="100" y={y - 3} width="14" height="6" rx="3" className={i === 1 ? "fill-highlight/70" : "fill-muted"} />
         </g>
       ))}
-      <circle cx="124" cy="92" r="17" className="fill-primary" />
-      <path d="M124 100 V84 M117 90 L124 83 L131 90" className={cn(common, "stroke-primary-foreground")} strokeWidth="2.5" />
-      <path d="M36 16 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z" className="fill-highlight" />
+      <circle cx="124" cy="92" r="17" className="fill-highlight" />
+      <path d="M124 100 V84 M117 90 L124 83 L131 90" className={cn(common, "stroke-white")} strokeWidth="2.5" />
+      <Spark x={30} y={26} />
     </>
   )
 }
@@ -50,13 +63,14 @@ function Chart() {
           width="10"
           height={h}
           rx="3"
-          className={i === 3 ? "fill-highlight" : "fill-primary/80"}
+          className={i === 3 ? "fill-highlight" : "fill-muted-foreground/25"}
         />
       ))}
-      <path d="M38 62 C 56 56, 66 40, 84 44 S 112 24, 124 22" className={cn(common, "stroke-primary-strong/50")} strokeDasharray="0" />
+      <path d="M38 62 C 56 56, 66 40, 84 44 S 112 24, 124 22" className={cn(common, "stroke-foreground/35")} strokeDasharray="0" />
       <circle cx="124" cy="22" r="3.5" className="fill-highlight stroke-card" strokeWidth="2" />
-      <circle cx="132" cy="96" r="13" className="fill-primary-soft stroke-primary/40" strokeWidth="1.5" />
-      <path d="M132 87 L135 96 L132 105 L129 96 Z" className="fill-primary" transform="rotate(35 132 96)" />
+      <circle cx="132" cy="96" r="13" className="fill-highlight-soft stroke-highlight/45" strokeWidth="1.5" />
+      <path d="M132 87 L135 96 L129 96 Z" className="fill-highlight" transform="rotate(35 132 96)" />
+      <path d="M132 105 L135 96 L129 96 Z" className="fill-foreground/70" transform="rotate(35 132 96)" />
     </>
   )
 }
@@ -68,11 +82,11 @@ function Chat() {
       <path d="M24 26 h70 a10 10 0 0 1 10 10 v26 a10 10 0 0 1 -10 10 h-46 l-14 12 v-12 h-10 a10 10 0 0 1 -10 -10 v-26 a10 10 0 0 1 10 -10 z" className="fill-card stroke-border" strokeWidth="1.5" />
       <rect x="34" y="38" width="48" height="6" rx="3" className="fill-muted" />
       <rect x="34" y="51" width="32" height="6" rx="3" className="fill-muted" />
-      <path d="M70 52 h62 a10 10 0 0 1 10 10 v24 a10 10 0 0 1 -10 10 h-8 v12 l-14 -12 h-40 a10 10 0 0 1 -10 -10 v-24 a10 10 0 0 1 10 -10 z" className="fill-primary" />
+      <path d="M70 52 h62 a10 10 0 0 1 10 10 v24 a10 10 0 0 1 -10 10 h-8 v12 l-14 -12 h-40 a10 10 0 0 1 -10 -10 v-24 a10 10 0 0 1 10 -10 z" className="fill-highlight" />
       {[14, 22, 18, 28].map((h, i) => (
-        <rect key={i} x={84 + i * 11} y={88 - h} width="7" height={h} rx="2" className={i === 3 ? "fill-highlight" : "fill-primary-foreground/85"} />
+        <rect key={i} x={84 + i * 11} y={88 - h} width="7" height={h} rx="2" className={i === 3 ? "fill-highlight-foreground" : "fill-white/90"} />
       ))}
-      <path d="M140 22 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2 z" className="fill-highlight" />
+      <Spark x={128} y={32} />
     </>
   )
 }
@@ -81,7 +95,7 @@ function Empty() {
   return (
     <>
       <ellipse cx="80" cy="108" rx="50" ry="6" className="fill-foreground/5" />
-      <path d="M34 50 L80 30 L126 50 L80 70 Z" className="fill-primary-soft stroke-primary/40" strokeWidth="1.5" />
+      <path d="M34 50 L80 30 L126 50 L80 70 Z" className="fill-highlight-soft stroke-highlight/45" strokeWidth="1.5" />
       <path d="M34 50 V88 L80 106 V70 Z" className="fill-card stroke-border" strokeWidth="1.5" />
       <path d="M126 50 V88 L80 106 V70 Z" className="fill-muted stroke-border" strokeWidth="1.5" />
       <path d="M58 22 C 60 14, 70 12, 74 18" className={cn(common, "stroke-highlight")} strokeDasharray="3 5" />
@@ -95,7 +109,7 @@ function Compass() {
     <>
       <ellipse cx="80" cy="110" rx="46" ry="5" className="fill-foreground/5" />
       <circle cx="80" cy="60" r="44" className="fill-card stroke-border" strokeWidth="1.5" />
-      <circle cx="80" cy="60" r="34" className="fill-none stroke-primary/25" strokeWidth="1.5" strokeDasharray="2 6" />
+      <circle cx="80" cy="60" r="34" className="fill-none stroke-highlight/40" strokeWidth="1.5" strokeDasharray="2 6" />
       {Array.from({ length: 12 }).map((_, i) => (
         <line
           key={i}
@@ -109,10 +123,10 @@ function Compass() {
         />
       ))}
       <g transform="rotate(35 80 60)">
-        <path d="M80 26 L88 60 L72 60 Z" className="fill-primary" />
-        <path d="M80 94 L88 60 L72 60 Z" className="fill-highlight" />
+        <path d="M80 26 L88 60 L72 60 Z" className="fill-highlight" />
+        <path d="M80 94 L88 60 L72 60 Z" className="fill-foreground/75" />
       </g>
-      <circle cx="80" cy="60" r="5" className="fill-card stroke-primary" strokeWidth="2" />
+      <circle cx="80" cy="60" r="5" className="fill-card stroke-highlight" strokeWidth="2" />
       <text x="80" y="14" textAnchor="middle" className="fill-muted-foreground font-sans text-[9px] font-bold">N</text>
     </>
   )
@@ -141,15 +155,15 @@ function Sheets() {
       <ellipse cx="80" cy="108" rx="56" ry="6" className="fill-foreground/5" />
       {[0, 1, 2].map((i) => (
         <g key={i} transform={`translate(${i * 26} ${i * -6})`}>
-          <rect x="24" y="34" width="60" height="70" rx="10" className={i === 2 ? "fill-card stroke-primary/40" : "fill-card stroke-border"} strokeWidth="1.5" />
-          <rect x="34" y="46" width={i === 2 ? 30 : 24} height="6" rx="3" className={i === 2 ? "fill-primary/80" : "fill-muted"} />
+          <rect x="24" y="34" width="60" height="70" rx="10" className={i === 2 ? "fill-card stroke-highlight/45" : "fill-card stroke-border"} strokeWidth="1.5" />
+          <rect x="34" y="46" width={i === 2 ? 30 : 24} height="6" rx="3" className={i === 2 ? "fill-highlight/80" : "fill-muted"} />
           <rect x="34" y="60" width="40" height="5" rx="2.5" className="fill-muted" />
           <rect x="34" y="71" width="34" height="5" rx="2.5" className="fill-muted" />
           <rect x="34" y="82" width="38" height="5" rx="2.5" className="fill-muted" />
         </g>
       ))}
       <circle cx="128" cy="30" r="10" className="fill-highlight" />
-      <path d="M123.5 30 l3 3 6 -6" className={cn(common, "stroke-highlight-foreground")} strokeWidth="2.25" />
+      <path d="M123.5 30 l3 3 6 -6" className={cn(common, "stroke-white")} strokeWidth="2.25" />
     </>
   )
 }

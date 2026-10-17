@@ -3,159 +3,170 @@
 @tailwind utilities;
 
 /*
- * Sistema de diseño de Brújula.
+ * Sistema de diseño de Brújula, con la identidad de la Fundación
+ * Universitaria Compensar: blanco y naranja (#ED6824, medido del logo).
+ *
  * Los colores viven como canales HSL (para poder usar opacidad: bg-primary/10).
+ * Reglas del naranja:
+ *  - `highlight` es el naranja PURO de la marca: decorativo, grande, de marca
+ *    (iconos, puntos, resaltados, primera serie de gráficos). Blanco sobre él
+ *    da 3,18:1, así que nunca lleva texto blanco pequeño encima.
+ *  - `primary` es el naranja INTERACTIVO (botones, enlaces, chips activos):
+ *    misma familia, más profundo, para que el texto blanco cumpla AA (4,85:1).
  * Cada estado tiene tres variantes: sólido (iconos, barras), suave (fondos)
  * y fuerte (texto sobre el fondo suave, contraste AA verificado >= 4.5:1).
  * Valores de referencia en hex en el comentario de cada línea.
  */
 @layer base {
   :root {
-    --background: 40 36% 95.1%; /* #F7F4EE papel cálido */
-    --foreground: 164 27.3% 10.8%; /* #14231F tinta verde */
-    --card: 40 100% 98.8%; /* #FFFDF9 */
-    --card-foreground: 164 27.3% 10.8%;
-    --popover: 40 100% 98.8%;
-    --popover-foreground: 164 27.3% 10.8%;
+    --background: 0 0% 100%; /* #FFFFFF blanco */
+    --foreground: 22.5 14.8% 10.6%; /* #1F1A17 tinta casi negra, cálida */
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 22.5 14.8% 10.6%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 22.5 14.8% 10.6%;
 
-    --primary: 167 69.9% 22.2%; /* #11604F verde azulado profundo */
-    --primary-foreground: 40 100% 98.8%;
-    --primary-soft: 150 26.1% 91%; /* #E2EEE8 */
-    --primary-strong: 167 72.3% 18.4%; /* #0D5142 */
+    --primary: 19.8 86.7% 41.2%; /* #C44A0E naranja interactivo (blanco encima 4,85:1) */
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 20.2 88.1% 36.3%; /* #AE420B (blanco encima 5,86:1) */
+    --primary-soft: 24.5 84.6% 94.9%; /* #FDF0E7 */
+    --primary-strong: 19.9 89.5% 33.7%; /* #A33C09 texto naranja sobre blanco o suave */
 
-    --secondary: 40 33.3% 89.4%; /* #EDE7DB */
-    --secondary-foreground: 164 27.3% 10.8%;
-    --muted: 40 31.9% 90.8%; /* #EFEAE0 */
-    --muted-foreground: 155 6.5% 36.1%; /* #56625D */
-    --accent: 40 34.6% 89.8%; /* #EEE8DC (hover) */
-    --accent-foreground: 164 27.3% 10.8%;
+    --secondary: 30 28.6% 94.5%; /* #F5F1ED gris cálido */
+    --secondary-foreground: 22.5 14.8% 10.6%;
+    --muted: 30 27.3% 95.7%; /* #F7F4F1 */
+    --muted-foreground: 26.2 8.2% 38.4%; /* #6A615A */
+    --accent: 30 28.6% 94.5%; /* #F5F1ED (hover) */
+    --accent-foreground: 22.5 14.8% 10.6%;
 
-    --highlight: 40 78.7% 49.8%; /* #E3A11B azafrán */
-    --highlight-foreground: 164 27.3% 10.8%;
-    --highlight-soft: 42 82.2% 91.2%; /* #FBF0D6 */
-    --highlight-strong: 39 100% 23.9%; /* #7A5000 */
+    --highlight: 20.3 84.8% 53.5%; /* #ED6824 naranja de marca (logo) */
+    --highlight-foreground: 22.5 14.8% 10.6%; /* tinta sobre el naranja: 5,42:1 */
+    --highlight-soft: 24 92.6% 94.7%; /* #FEEFE5 */
+    --highlight-strong: 20.2 88.1% 36.3%; /* #AE420B */
 
-    --destructive: 9 64.3% 43.9%; /* #B83E28 coral */
-    --destructive-foreground: 40 100% 98.8%;
-    --danger-soft: 12 76.5% 93.3%; /* #FBE6E1 */
-    --danger-strong: 9 69.9% 36.5%; /* #9E2F1C */
-    --success: 139 49.2% 36.3%; /* #2F8A4C */
-    --success-soft: 129 33.3% 91.8%; /* #E3F1E5 */
-    --success-strong: 138 54.7% 26.9%; /* #1F6A35 */
-    --warning: 39 83.9% 46.3%; /* #D99413 */
-    --warning-soft: 42 82.2% 91.2%; /* #FBF0D6 */
-    --warning-strong: 39 100% 23.9%; /* #7A5000 */
-    --info: 225 50.2% 47.3%; /* #3C5BB5 */
-    --info-soft: 221 57.6% 93.5%; /* #E5EBF8 */
-    --info-strong: 224 52.9% 36.7%; /* #2C478F */
+    --destructive: 352.2 64% 46.9%; /* #C42B3F carmesí (lejos del naranja) */
+    --destructive-foreground: 0 0% 100%;
+    --danger-soft: 352.9 81% 95.9%; /* #FDECEE */
+    --danger-strong: 351.4 69.5% 37.3%; /* #A11D30 */
+    --success: 136.3 50% 36.1%; /* #2E8A47 */
+    --success-soft: 138.5 39.4% 93.5%; /* #E8F5EC */
+    --success-strong: 138.6 56.9% 25.5%; /* #1C6633 */
+    --warning: 44 90.4% 44.7%; /* #D9A20B ámbar amarillo, distinto del naranja */
+    --warning-soft: 46.7 94.7% 92.5%; /* #FEF6DA */
+    --warning-strong: 44.3 100% 21.8%; /* #6F5200 */
+    --info: 218.6 62.1% 48.6%; /* #2F66C9 */
+    --info-soft: 217.9 82.6% 95.5%; /* #EAF1FD */
+    --info-strong: 218.6 64.9% 38%; /* #224FA0 */
 
-    --border: 39 23.9% 86.1%; /* #E4DED3 */
-    --input: 38 19.6% 78%; /* #D2CABC */
-    --ring: 167 69.9% 22.2%;
+    --border: 30 24% 90.2%; /* #ECE6E0 */
+    --input: 28.2 19.5% 82.9%; /* #DCD3CB */
+    --ring: 19.8 86.7% 41.2%; /* #C44A0E */
     --radius: 0.875rem;
 
-    /* Paleta categórica de gráficos: orden fijo, validado para daltonismo
-       (protan/deutan ΔE >= 8 entre vecinos) en claro y oscuro. */
-    --chart-1: 167 66.7% 32.9%; /* #1C8C74 verde azulado */
-    --chart-2: 39 88.6% 41.4%; /* #C7870C azafrán */
-    --chart-3: 228 53.4% 53.7%; /* #4A64C8 añil */
-    --chart-4: 10 70.8% 58.4%; /* #E0644A coral */
-    --chart-5: 286 33.3% 49.4%; /* #9454A8 ciruela */
-    --chart-6: 93 55.6% 38.8%; /* #5E9A2C musgo */
-    --chart-7: 331 59.6% 60.2%; /* #D65D97 rosa */
-    --chart-8: 30 62.4% 41.8%; /* #AD6A28 tierra */
-    --chart-grid: 40 25.4% 88.4%; /* #E9E4DA */
-    --chart-axis: 155 5.3% 44.3%; /* #6B7772 */
+    /* Paleta categórica de gráficos: naranja de marca primero y orden fijo,
+       validada con el validador de la skill dataviz (CVD adyacente ΔE >= 8,
+       visión normal ΔE >= 15, contraste >= 3:1) en claro y en oscuro. */
+    --chart-1: 20.3 84.8% 53.5%; /* #ED6824 naranja */
+    --chart-2: 223.3 77.5% 43.5%; /* #1949C5 azul */
+    --chart-3: 177.8 87.3% 30.8%; /* #0A938E verde azulado */
+    --chart-4: 320.8 80.1% 37.5%; /* #AC1377 ciruela */
+    --chart-5: 45.2 94.4% 35.3%; /* #AF8505 oro */
+    --chart-6: 197.8 95% 39%; /* #058AC2 celeste */
+    --chart-7: 113.8 96% 29.6%; /* #129403 verde */
+    --chart-8: 261.5 57.8% 53.5%; /* #7544CD violeta */
+    --chart-grid: 30 23.8% 91.8%; /* #EFEAE5 */
+    --chart-axis: 26.3 7.8% 40.4%; /* #6F665F */
 
-    --shadow: 164 26% 14.3%;
+    --shadow: 23.5 25.8% 17.5%; /* #382A21 sombra cálida */
 
-    /* Paneles de marca (asistente, portada de acceso): sólido en claro, profundo en oscuro. */
-    --brand-panel: 167 69.9% 22.2%; /* #11604F */
-    --brand-panel-foreground: 40 100% 98.8%;
+    /* Paneles de marca (asistente, portada de acceso): melocotón muy suave en claro. */
+    --brand-panel: 24.7 100% 96.7%; /* #FFF5EE */
+    --brand-panel-foreground: 22.5 14.8% 10.6%;
 
-    --sidebar-background: 42 31.7% 92%; /* #F1EDE4 */
-    --sidebar-foreground: 164 27.3% 10.8%;
-    --sidebar-primary: 167 69.9% 22.2%;
-    --sidebar-primary-foreground: 40 100% 98.8%;
-    --sidebar-accent: 42 28.6% 86.3%; /* #E6E0D2 */
-    --sidebar-accent-foreground: 164 27.3% 10.8%;
-    --sidebar-border: 39 23.9% 86.1%;
-    --sidebar-ring: 167 69.9% 22.2%;
+    --sidebar-background: 30 33.3% 97.6%; /* #FBF9F7 blanco roto */
+    --sidebar-foreground: 22.5 14.8% 10.6%;
+    --sidebar-primary: 19.8 86.7% 41.2%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 29.4% 93.3%; /* #F3EEE9 */
+    --sidebar-accent-foreground: 22.5 14.8% 10.6%;
+    --sidebar-border: 30 24% 90.2%;
+    --sidebar-ring: 19.8 86.7% 41.2%;
 
-    --shadow-card: 0 1px 2px hsl(var(--shadow) / 0.05), 0 6px 16px -6px hsl(var(--shadow) / 0.08);
-    --shadow-raised: 0 2px 4px hsl(var(--shadow) / 0.06), 0 16px 32px -12px hsl(var(--shadow) / 0.18);
-    --shadow-float: 0 4px 8px hsl(var(--shadow) / 0.06), 0 24px 48px -16px hsl(var(--shadow) / 0.28);
+    --shadow-card: 0 1px 2px hsl(var(--shadow) / 0.04), 0 4px 14px -6px hsl(var(--shadow) / 0.07);
+    --shadow-raised: 0 2px 4px hsl(var(--shadow) / 0.05), 0 14px 30px -12px hsl(var(--shadow) / 0.16);
+    --shadow-float: 0 4px 8px hsl(var(--shadow) / 0.06), 0 24px 48px -16px hsl(var(--shadow) / 0.24);
 
     --bottom-nav-height: 0px;
   }
 
   .dark {
-    --background: 167 24.3% 7.3%; /* #0E1715 */
-    --foreground: 40 30.6% 90.4%; /* #EEE9DF */
-    --card: 164 20.8% 10.4%; /* #15201D */
-    --card-foreground: 40 30.6% 90.4%;
-    --popover: 165 18.8% 12.5%; /* #1A2623 */
-    --popover-foreground: 40 30.6% 90.4%;
+    --background: 24 12.8% 7.6%; /* #161311 carbón cálido profundo */
+    --foreground: 30 29.4% 93.3%; /* #F3EEE9 */
+    --card: 25.7 13.2% 10.4%; /* #1E1A17 */
+    --card-foreground: 30 29.4% 93.3%;
+    --popover: 26.7 13.8% 12.7%; /* #25201C */
+    --popover-foreground: 30 29.4% 93.3%;
 
-    --primary: 162 47% 54.9%; /* #56C2A2 */
-    --primary-foreground: 166 68.4% 7.5%; /* #06201A */
-    --primary-soft: 164 40.5% 14.5%; /* #16342C */
-    --primary-strong: 161 49.7% 70.4%; /* #8ED9C1 */
+    --primary: 20.7 85.1% 55.3%; /* #EE6F2C (tinta encima 6,15:1) */
+    --primary-foreground: 24 40.5% 7.3%; /* #1A110B */
+    --primary-hover: 22.7 90.1% 60.4%; /* #F5843F (tinta encima 7,31:1) */
+    --primary-soft: 21.7 45% 15.7%; /* #3A2316 */
+    --primary-strong: 21.1 100% 76.1%; /* #FFB085 */
 
-    --secondary: 162 17.3% 14.7%;
-    --secondary-foreground: 40 30.6% 90.4%;
-    --muted: 164 16.4% 13.1%;
-    --muted-foreground: 147 5.5% 68%; /* #A9B2AD */
-    --accent: 163 17.1% 16.1%;
-    --accent-foreground: 40 30.6% 90.4%;
+    --secondary: 24 13.5% 14.5%; /* #2A2420 */
+    --secondary-foreground: 30 29.4% 93.3%;
+    --muted: 22.5 12.9% 12.2%; /* #231E1B */
+    --muted-foreground: 28.4 10.4% 64.1%; /* #ADA39A */
+    --accent: 24 13.2% 14.9%; /* #2B2521 */
+    --accent-foreground: 30 29.4% 93.3%;
 
-    --highlight: 39 77.5% 60%; /* #E8B04A */
-    --highlight-foreground: 164 27.3% 10.8%;
-    --highlight-soft: 40 56.8% 14.5%;
-    --highlight-strong: 39 82.4% 71%;
+    --highlight: 20.7 85.1% 55.3%; /* #EE6F2C */
+    --highlight-foreground: 24 40.5% 7.3%;
+    --highlight-soft: 21.7 45% 15.7%; /* #3A2316 */
+    --highlight-strong: 21.7 100% 75.1%; /* #FFAE80 */
 
-    --destructive: 10 75.3% 63.5%; /* #E8735C */
-    --destructive-foreground: 12 62.5% 6.3%;
-    --danger-soft: 10 43.5% 16.7%;
-    --danger-strong: 10 80.7% 77.6%;
-    --success: 137 38% 50%;
-    --success-soft: 150 35.1% 14.5%;
-    --success-strong: 138 48.3% 70.4%;
-    --warning: 39 76.7% 56.3%;
-    --warning-soft: 40 56.8% 14.5%;
-    --warning-strong: 39 82.4% 71%;
-    --info: 226 69.5% 70.4%;
-    --info-soft: 225 39.1% 18%;
-    --info-strong: 225 74.7% 82.9%;
+    --destructive: 352.8 81.6% 68%; /* #F06B7B */
+    --destructive-foreground: 351.4 51.2% 8%; /* #1F0A0D */
+    --danger-soft: 351.4 40.2% 17.1%; /* #3D1A1F */
+    --danger-strong: 353.1 100% 84.7%; /* #FFB1BA */
+    --success: 137.3 44.9% 51.6%; /* #4CBB6C */
+    --success-soft: 140 39.1% 13.5%; /* #15301E */
+    --success-strong: 136.2 52.9% 72.5%; /* #94DEA8 */
+    --warning: 44.6 78.2% 53.1%; /* #E5B52A */
+    --warning-soft: 44.6 60% 12.7%; /* #342A0D */
+    --warning-strong: 43.6 83.4% 71.6%; /* #F3D27A */
+    --info: 218.2 82.3% 71.2%; /* #79A5F2 */
+    --info-soft: 221.6 51.6% 18.6%; /* #172648 */
+    --info-strong: 218.8 82.9% 83.9%; /* #B4CCF8 */
 
-    --border: 157 14.3% 17.8%; /* #27342F */
-    --input: 160 12.6% 23.3%;
-    --ring: 162 47% 54.9%;
+    --border: 25 13.6% 17.3%; /* #322B26 */
+    --input: 26.2 13.6% 23.1%; /* #433A33 */
+    --ring: 20.7 85.1% 55.3%;
 
-    --chart-1: 165 55% 41%; /* #2FA285 */
-    --chart-2: 39 76.5% 41.8%; /* #BC8419 */
-    --chart-3: 227 59.8% 63.9%; /* #6C83DA */
-    --chart-4: 11 70.5% 58.8%; /* #E0664C */
-    --chart-5: 284 37.4% 58%; /* #A66CBC */
-    --chart-6: 91 47.3% 43.1%; /* #6CA23A */
-    --chart-7: 329 53% 60.8%; /* #D0669D */
-    --chart-8: 30 48.4% 47.8%; /* #B57A3F */
-    --chart-grid: 162 15.3% 16.7%;
-    --chart-axis: 150 5.2% 62.4%;
+    --chart-1: 21.2 81.4% 51.6%; /* #E8661F naranja */
+    --chart-2: 222.1 90% 60.6%; /* #4076F5 azul */
+    --chart-3: 177.9 100% 32.9%; /* #00A8A2 verde azulado */
+    --chart-4: 323 60.8% 47.1%; /* #C12F89 ciruela */
+    --chart-5: 45.4 94.7% 36.7%; /* #B68B05 oro */
+    --chart-6: 197.8 91.8% 43.1%; /* #0997D3 celeste */
+    --chart-7: 115.6 68% 39.2%; /* #2AA820 verde */
+    --chart-8: 259.9 81.3% 66.5%; /* #9264EF violeta */
+    --chart-grid: 24 12.5% 15.7%; /* #2D2723 */
+    --chart-axis: 26.7 8.7% 59.6%; /* #A1978F */
 
     --shadow: 0 0% 0%;
 
-    --brand-panel: 165 55.3% 16.7%; /* #134236, texto 9,3:1 */
-    --brand-panel-foreground: 40 30.6% 90.4%;
+    --brand-panel: 24 17.9% 11%; /* #211B17 */
+    --brand-panel-foreground: 30 29.4% 93.3%;
 
-    --sidebar-background: 164 24.4% 8.8%;
-    --sidebar-foreground: 40 30.6% 90.4%;
-    --sidebar-primary: 162 47% 54.9%;
-    --sidebar-primary-foreground: 166 68.4% 7.5%;
-    --sidebar-accent: 162 17.8% 14.3%;
-    --sidebar-accent-foreground: 40 30.6% 90.4%;
-    --sidebar-border: 163 17.1% 16.1%;
-    --sidebar-ring: 162 47% 54.9%;
+    --sidebar-background: 20 13% 9%; /* #1A1614 */
+    --sidebar-foreground: 30 29.4% 93.3%;
+    --sidebar-primary: 20.7 85.1% 55.3%;
+    --sidebar-primary-foreground: 24 40.5% 7.3%;
+    --sidebar-accent: 24 15.2% 12.9%; /* #26201C */
+    --sidebar-accent-foreground: 30 29.4% 93.3%;
+    --sidebar-border: 24 12.8% 15.3%; /* #2C2622 */
+    --sidebar-ring: 20.7 85.1% 55.3%;
 
     --shadow-card: 0 1px 2px hsl(var(--shadow) / 0.3), 0 0 0 1px hsl(0 0% 100% / 0.02);
     --shadow-raised: 0 2px 4px hsl(var(--shadow) / 0.35), 0 16px 32px -12px hsl(var(--shadow) / 0.6);
@@ -192,7 +203,7 @@
   }
 
   ::selection {
-    background: hsl(var(--highlight) / 0.35);
+    background: hsl(var(--highlight) / 0.28);
     color: hsl(var(--foreground));
   }
 }
@@ -204,11 +215,23 @@
     box-shadow: var(--shadow-card);
   }
 
-  /* Halo cálido de fondo para las áreas principales. */
+  /* Un susurro de calor arriba a la derecha: el fondo sigue leyéndose blanco. */
   .paper-glow {
-    background-image:
-      radial-gradient(1100px 520px at 100% -8%, hsl(var(--highlight) / 0.09), transparent 62%),
-      radial-gradient(900px 480px at -12% -4%, hsl(var(--primary) / 0.07), transparent 58%);
+    background-image: radial-gradient(1000px 420px at 100% -12%, hsl(var(--highlight) / 0.06), transparent 62%);
+  }
+
+  /*
+   * Retícula de puntos: el recurso gráfico del logo de la universidad usado
+   * como textura. Siempre decorativa y sutil; se ajusta con --dots-alpha,
+   * --dots-size (radio) y --dots-gap (separación).
+   */
+  .bg-dots {
+    background-image: radial-gradient(
+      circle at center,
+      hsl(var(--highlight) / var(--dots-alpha, 0.22)) var(--dots-size, 1.4px),
+      transparent calc(var(--dots-size, 1.4px) + 0.6px)
+    );
+    background-size: var(--dots-gap, 18px) var(--dots-gap, 18px);
   }
 
   /* Cifras en columnas alineadas (tablas, ejes). */

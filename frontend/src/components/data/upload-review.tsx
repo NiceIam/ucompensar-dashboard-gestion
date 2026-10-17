@@ -131,7 +131,7 @@ export function SampleTable({
                   const text = kind && typeof raw === "string" && raw !== "" ? friendlySample(raw, kind) : cellText(raw)
                   return (
                     <td key={ci} className="max-w-[220px] truncate whitespace-nowrap px-3 py-2.5 tabular" title={text}>
-                      {text || <span className="text-muted-foreground/60">—</span>}
+                      {text || <span className="text-muted-foreground">—</span>}
                     </td>
                   )
                 })}

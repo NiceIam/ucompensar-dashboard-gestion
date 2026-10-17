@@ -13,9 +13,10 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-[0_1px_0_hsl(0_0%_100%/0.12)_inset,0_1px_2px_hsl(var(--shadow)/0.2)] hover:bg-primary/90",
+          // El hover usa un tono propio (no opacidad): aclarar el naranja bajaría el contraste del texto blanco.
+          "bg-primary text-primary-foreground shadow-[0_1px_0_hsl(0_0%_100%/0.12)_inset,0_1px_2px_hsl(var(--shadow)/0.2)] hover:bg-primary-hover",
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+          "bg-destructive text-destructive-foreground hover:bg-danger-strong dark:hover:bg-destructive/90",
         outline:
           "border border-input bg-card text-foreground hover:border-foreground/25 hover:bg-accent",
         secondary:
