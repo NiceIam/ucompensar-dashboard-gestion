@@ -32,7 +32,7 @@ export function ThemeSwitcher({ className, showLabels = false }: { className?: s
             title={label}
             onClick={() => setTheme(value)}
             className={cn(
-              "inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-lg px-2.5 text-sm font-medium transition-colors sm:h-8 sm:min-w-8",
+              "inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2.5 text-sm font-medium transition-colors sm:h-8 sm:min-w-8",
               active ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground"
             )}
           >

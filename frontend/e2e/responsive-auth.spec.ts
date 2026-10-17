@@ -15,7 +15,7 @@ test.describe("auth pages — responsive smoke", () => {
     )
     expect(hasOverflow).toBe(false)
 
-    await expect(page.getByText("Bienvenido", { exact: true })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Qué bueno verte" })).toBeVisible()
     await expect(
       page.getByPlaceholder("empresa@ejemplo.com"),
     ).toBeVisible()
@@ -29,6 +29,6 @@ test.describe("auth pages — responsive smoke", () => {
     )
     expect(hasOverflow).toBe(false)
 
-    await expect(page.getByText("Crear cuenta", { exact: true })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Crea tu cuenta" })).toBeVisible()
   })
 })

@@ -40,7 +40,7 @@ export function Notice({
       role={tone === "danger" ? "alert" : "status"}
       className={cn(
         "relative flex flex-wrap items-start gap-x-3 gap-y-3 rounded-xl border px-4 py-3.5",
-        onDismiss && "pr-12",
+        onDismiss && "pr-14",
         TONE[tone].box,
         className
       )}
@@ -57,7 +57,7 @@ export function Notice({
         <button
           type="button"
           onClick={onDismiss}
-          className="absolute right-1.5 top-1.5 inline-flex h-10 w-10 items-center justify-center rounded-lg opacity-70 transition hover:bg-foreground/5 hover:opacity-100"
+          className="absolute right-1 top-1 inline-flex h-11 w-11 items-center justify-center rounded-lg opacity-70 transition hover:bg-foreground/5 hover:opacity-100"
           aria-label="Cerrar aviso"
         >
           <X className="h-4 w-4" aria-hidden="true" />

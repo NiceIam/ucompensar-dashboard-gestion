@@ -108,7 +108,7 @@ export default function DashboardDetailPage() {
       <div className="space-y-4">
         <Link
           href="/dashboards"
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg text-sm font-semibold text-muted-foreground transition hover:text-foreground"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg pr-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Tableros

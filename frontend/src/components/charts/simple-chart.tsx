@@ -125,7 +125,7 @@ export function SimpleChart({
         <button
           type="button"
           onClick={() => setAsTable((v) => !v)}
-          className="absolute -top-1 right-0 z-10 inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          className="absolute -top-2 right-0 z-10 inline-flex h-11 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-muted-foreground transition hover:bg-accent hover:text-foreground sm:-top-1 sm:h-9"
           aria-pressed={asTable}
         >
           {asTable ? <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" /> : <Table2 className="h-3.5 w-3.5" aria-hidden="true" />}

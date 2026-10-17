@@ -18,7 +18,9 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe("FloatingChat — responsive on real VPS", () => {
-  test("mobile: chat cerrado por defecto, FAB visible, overlay abre al tap", async ({
+  // Rediseño Brújula: en el celular el chat ocupa toda la pantalla (sin fondo
+  // oscuro) y se cierra con su botón X; el botón para abrirlo vive en la barra inferior.
+  test("mobile: chat cerrado por defecto, botón visible, abre a pantalla completa y cierra con X", async ({
     page,
     viewport,
   }) => {
@@ -33,12 +35,7 @@ test.describe("FloatingChat — responsive on real VPS", () => {
     await fab.click()
     await expect(panel).toHaveClass(/translate-x-0/)
 
-    const overlay = page
-      .locator('[aria-hidden="true"].fixed.inset-0.bg-black\\/40')
-      .first()
-    await expect(overlay).toBeVisible()
-
-    await overlay.click({ position: { x: 10, y: 10 }, force: true })
+    await page.getByRole("button", { name: /cerrar el asistente/i }).click()
     await expect(panel).toHaveClass(/translate-x-full/)
     await expect(fab).toBeVisible()
   })
@@ -72,17 +69,22 @@ test.describe("FloatingChat — responsive on real VPS", () => {
     expect(overflow).toBe(false)
   })
 
-  test("desktop: chat pegado al flow, abierto por defecto, sin FAB", async ({
+  // Rediseño Brújula (decisión deliberada): en escritorio el chat sigue acoplado al
+  // flujo de la página, pero arranca cerrado la primera vez (para no competir con el
+  // contenido) y recuerda la preferencia. Se abre con el botón de la barra lateral o Ctrl+K.
+  test("desktop: chat acoplado al flow, se abre desde la barra lateral, sin botón flotante", async ({
     page,
     viewport,
   }) => {
     test.skip(!viewport || viewport.width < 1024, "desktop-only")
 
+    const fab = page.getByRole("button", { name: /abrir asistente ia/i })
+    await expect(fab).toBeHidden()
+
+    await page.getByRole("button", { name: /pregúntale a tus datos/i }).first().click()
     const panel = page.locator('[role="complementary"][aria-label="Asistente IA"]')
     await expect(panel).toBeVisible()
-    await expect(panel).toHaveClass(/lg:w-\[380px\]/)
-
-    const fab = page.getByRole("button", { name: /abrir asistente ia/i })
-    await expect(fab).toHaveCount(0)
+    await expect(panel).toHaveClass(/lg:static/)
+    await expect(panel).toHaveClass(/lg:w-\[400px\]/)
   })
 })

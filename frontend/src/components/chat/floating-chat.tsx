@@ -62,7 +62,7 @@ function CopyButton({ text }: { text: string }) {
           toast.error("No pudimos copiar el texto")
         }
       }}
-      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
+      className="inline-flex h-11 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground sm:h-8"
       aria-label={copied ? "Respuesta copiada" : "Copiar respuesta"}
     >
       {copied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
@@ -141,8 +141,19 @@ export function FloatingChat() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
   }, [messages.length, isSending, errorInfo])
 
+  // Al abrir: foco al cuadro de texto. Al cerrar: el foco vuelve a donde estaba
+  // (por ejemplo, al botón de la barra inferior), para no perderse con teclado o lector.
+  const returnFocus = useRef<HTMLElement | null>(null)
   useEffect(() => {
-    if (isOpen) window.setTimeout(() => inputRef.current?.focus(), 250)
+    if (isOpen) {
+      const active = document.activeElement
+      returnFocus.current = active instanceof HTMLElement && !panelRef.current?.contains(active) ? active : null
+      window.setTimeout(() => inputRef.current?.focus(), 250)
+    } else if (returnFocus.current) {
+      const target = returnFocus.current
+      returnFocus.current = null
+      if (target.isConnected && target.offsetParent !== null) requestAnimationFrame(() => target.focus())
+    }
   }, [isOpen])
 
   // Altura automática del cuadro de texto (1 a 6 líneas)
@@ -336,7 +347,7 @@ export function FloatingChat() {
                 <button
                   type="button"
                   onClick={() => setSelectedFile(null)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground sm:h-8 sm:w-8"
                   aria-label="Quitar el archivo adjunto"
                 >
                   <X className="h-4 w-4" aria-hidden="true" />
@@ -409,7 +420,7 @@ export function FloatingChat() {
                 <ArrowUp aria-hidden="true" />
               </Button>
             </form>
-            <p className="mt-2 hidden text-center text-[11px] text-muted-foreground sm:block">
+            <p className="mt-2 hidden text-center text-xs text-muted-foreground sm:block">
               <kbd className="font-sans font-semibold">Enter</kbd> envía · <kbd className="font-sans font-semibold">Shift + Enter</kbd> nueva línea ·{" "}
               <kbd className="font-sans font-semibold">Ctrl K</kbd> abre o cierra
             </p>

@@ -10,7 +10,7 @@ export const metadata = { title: "Página no encontrada" }
 export default function NotFound() {
   return (
     <main className="paper-glow flex min-h-dvh flex-col items-center justify-center px-4 py-12 text-center">
-      <Link href="/" className="mb-10 flex items-center gap-2.5" aria-label={`${BRAND.name}: ir al inicio`}>
+      <Link href="/" className="mb-10 flex min-h-11 items-center gap-2.5" aria-label={`${BRAND.name}: ir al inicio`}>
         <BrandMark className="h-9 w-9" />
         <span className="font-display text-xl font-semibold">{BRAND.name}</span>
       </Link>
