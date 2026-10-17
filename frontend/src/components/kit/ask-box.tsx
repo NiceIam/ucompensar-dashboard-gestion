@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { ArrowUp, Sparkles } from "lucide-react"
+import { DotField } from "@/components/kit/dots"
 import { SuggestionChips } from "@/components/kit/suggestion-chips"
 import { cn } from "@/lib/utils"
 
@@ -29,26 +30,16 @@ export function AskBox({
     <section
       aria-labelledby="ask-title"
       className={cn(
-        "relative overflow-hidden rounded-3xl bg-brand px-5 py-7 text-brand-foreground shadow-raised ring-1 ring-inset ring-primary/20 sm:px-8 sm:py-9",
+        "relative overflow-hidden rounded-3xl bg-brand px-5 py-7 text-brand-foreground shadow-card ring-1 ring-inset ring-highlight/15 sm:px-8 sm:py-9",
         className
       )}
     >
-      {/* Rosa de los vientos decorativa */}
-      <svg
-        viewBox="0 0 200 200"
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-10 -top-12 h-64 w-64 text-brand-foreground/[0.07] sm:-right-6 sm:h-72 sm:w-72"
-      >
-        <circle cx="100" cy="100" r="92" fill="none" stroke="currentColor" strokeWidth="2" />
-        <circle cx="100" cy="100" r="64" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 7" />
-        <path d="M100 4 L114 100 L100 196 L86 100 Z" fill="currentColor" />
-        <path d="M4 100 L100 86 L196 100 L100 114 Z" fill="currentColor" />
-      </svg>
+      <DotField fade="top-right" className="[--dots-alpha:0.35] [--dots-gap:20px] [--dots-size:1.8px]" />
 
       <div className="relative space-y-5">
         <div className="space-y-1.5">
-          <p className="inline-flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-highlight">
-            <Sparkles className="h-4 w-4" aria-hidden="true" />
+          <p className="inline-flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-primary-strong">
+            <Sparkles className="h-4 w-4 text-highlight" aria-hidden="true" />
             Asistente
           </p>
           <h2 id="ask-title" className="font-display text-[28px] font-semibold leading-tight sm:text-[34px]">
@@ -64,7 +55,7 @@ export function AskBox({
             e.preventDefault()
             submit()
           }}
-          className="flex items-center gap-2 rounded-2xl bg-card p-1.5 pl-4 text-foreground shadow-float focus-within:ring-4 focus-within:ring-highlight/40"
+          className="flex items-center gap-2 rounded-2xl bg-card p-1.5 pl-4 text-foreground shadow-float ring-1 ring-border focus-within:ring-4 focus-within:ring-highlight/35"
         >
           <label htmlFor="home-ask" className="sr-only">
             Tu pregunta
@@ -80,7 +71,7 @@ export function AskBox({
           <button
             type="submit"
             disabled={!value.trim()}
-            className="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-highlight px-4 font-semibold text-highlight-foreground transition hover:bg-highlight/90 disabled:opacity-50"
+            className="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-primary px-4 font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50"
           >
             <span className="hidden sm:inline">Preguntar</span>
             <ArrowUp className="h-5 w-5" aria-hidden="true" />
@@ -91,7 +82,7 @@ export function AskBox({
         {suggestions.length > 0 && (
           <div className="space-y-2">
             <p className="text-sm font-medium text-brand-foreground/75">O prueba con una de estas:</p>
-            <SuggestionChips questions={suggestions} onPick={onAsk} className="[&_button]:border-transparent" />
+            <SuggestionChips questions={suggestions} onPick={onAsk} />
           </div>
         )}
       </div>

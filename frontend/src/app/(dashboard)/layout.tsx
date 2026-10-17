@@ -4,14 +4,14 @@ import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { AppShell } from "@/components/shell/app-shell"
 import { FloatingChat } from "@/components/chat/floating-chat"
-import { BrandMark } from "@/components/kit/logo"
+import { DotsLoader } from "@/components/kit/dots"
 import { ChatProvider } from "@/providers/chat-provider"
 import { useAuthContext } from "@/providers/auth-provider"
 
 function FullPageLoader() {
   return (
     <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-background" role="status" aria-live="polite">
-      <BrandMark className="h-14 w-14" animated />
+      <DotsLoader size="lg" />
       <p className="text-sm font-medium text-muted-foreground">Preparando tu espacio…</p>
     </div>
   )

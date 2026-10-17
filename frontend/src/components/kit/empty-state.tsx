@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { DotField } from "@/components/kit/dots"
 import { Illustration, type IllustrationName } from "@/components/kit/illustrations"
 import type { HumanError } from "@/lib/errors"
 import { cn } from "@/lib/utils"
@@ -34,7 +35,11 @@ export function EmptyState({
         className
       )}
     >
-      <Illustration name={illustration} className={compact ? "h-20" : "h-28 sm:h-32"} />
+      {/* La retícula de puntos de la marca, apenas insinuada detrás del dibujo */}
+      <div className="relative px-10 py-2">
+        <DotField fade="center" className="[--dots-alpha:0.32] [--dots-gap:16px]" />
+        <Illustration name={illustration} className={cn("relative", compact ? "h-20" : "h-28 sm:h-32")} />
+      </div>
       <div className="max-w-md space-y-1.5">
         <h3 className={cn("font-display font-semibold leading-tight text-balance", compact ? "text-lg" : "text-2xl")}>
           {title}

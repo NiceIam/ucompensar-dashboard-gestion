@@ -22,6 +22,7 @@ import { DataSentence, Figure } from "@/components/kit/data-sentence"
 import { Notice } from "@/components/kit/notice"
 import { StatusBadge } from "@/components/kit/status-badge"
 import { SuggestionChips } from "@/components/kit/suggestion-chips"
+import { DotField } from "@/components/kit/dots"
 import { ConfirmDialog } from "@/components/kit/confirm-dialog"
 import { SimpleChart } from "@/components/charts/simple-chart"
 import { useDeleteTable, useUpdateTable } from "@/hooks/use-data"
@@ -298,12 +299,15 @@ export function UploadResult({
 
       {/* Preguntas */}
       {questions.length > 0 && (
-        <section aria-labelledby="ask-now" className="rounded-2xl bg-brand p-5 text-brand-foreground ring-1 ring-inset ring-primary/20 sm:p-6">
-          <h4 id="ask-now" className="font-display text-xl font-semibold">
-            Pregúntale a tus datos
-          </h4>
-          <p className="mb-4 mt-1 text-sm text-brand-foreground/80">Toca una pregunta y el asistente la responde con tus cifras.</p>
-          <SuggestionChips questions={questions} onPick={onAsk} className="[&_button]:border-transparent" />
+        <section aria-labelledby="ask-now" className="relative overflow-hidden rounded-2xl bg-brand p-5 text-brand-foreground ring-1 ring-inset ring-highlight/15 sm:p-6">
+          <DotField fade="top-right" className="[--dots-alpha:0.32] [--dots-gap:20px] [--dots-size:1.8px]" />
+          <div className="relative">
+            <h4 id="ask-now" className="font-display text-xl font-semibold">
+              Pregúntale a tus datos
+            </h4>
+            <p className="mb-4 mt-1 text-sm text-brand-foreground/80">Toca una pregunta y el asistente la responde con tus cifras.</p>
+            <SuggestionChips questions={questions} onPick={onAsk} />
+          </div>
         </section>
       )}
 

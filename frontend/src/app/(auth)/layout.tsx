@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { MessageCircleQuestion, Sparkles, Upload } from "lucide-react"
-import { BrandMark } from "@/components/kit/logo"
+import { BrandMark, UniversityLogo } from "@/components/kit/logo"
+import { DotCluster, DotField } from "@/components/kit/dots"
 import { BRAND } from "@/config/brand"
 
 const BENEFITS = [
@@ -9,33 +10,44 @@ const BENEFITS = [
   { icon: MessageCircleQuestion, title: "Pregúntale en tus palabras", text: "Y te responde con tus cifras y gráficos." },
 ]
 
+/** La frase de marca con su punto final en el naranja de la universidad. */
+function Tagline() {
+  const text = BRAND.tagline
+  const dotted = text.endsWith(".")
+  return (
+    <>
+      {dotted ? text.slice(0, -1) : text}
+      {dotted && <span className="text-primary">.</span>}
+    </>
+  )
+}
+
 /** Portada de acceso: panel de marca a la izquierda (escritorio) y formulario a la derecha. */
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh bg-background">
-      <aside className="relative hidden w-[46%] max-w-[640px] flex-col justify-between overflow-hidden bg-brand p-10 text-brand-foreground lg:flex xl:p-14">
-        {/* Rosa de los vientos decorativa */}
-        <svg viewBox="0 0 400 400" aria-hidden="true" className="pointer-events-none absolute -bottom-32 -right-40 h-[560px] w-[560px] text-brand-foreground/[0.07]">
-          <circle cx="200" cy="200" r="190" fill="none" stroke="currentColor" strokeWidth="2" />
-          <circle cx="200" cy="200" r="140" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 10" />
-          <circle cx="200" cy="200" r="90" fill="none" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M200 0 L224 200 L200 400 L176 200 Z" fill="currentColor" />
-          <path d="M0 200 L200 176 L400 200 L200 224 Z" fill="currentColor" />
-          <path d="M60 60 L214 186 L340 340 L186 214 Z" fill="currentColor" opacity="0.6" />
-        </svg>
-        <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-highlight/20 blur-3xl" aria-hidden="true" />
+      <aside className="relative hidden w-[46%] max-w-[640px] flex-col overflow-hidden border-r bg-brand p-10 text-brand-foreground lg:flex xl:p-14">
+        <DotField fade="top-right" className="[--dots-alpha:0.3] [--dots-gap:22px] [--dots-size:2px]" />
+        <DotCluster className="absolute -bottom-14 -right-14 h-56 w-56 xl:h-64 xl:w-64" />
 
-        <div className="relative flex items-center gap-3">
-          <BrandMark className="h-11 w-11" />
-          <span className="font-display text-2xl font-semibold">{BRAND.name}</span>
+        {/* Producto e institución, lado a lado */}
+        <div className="relative flex flex-wrap items-center gap-x-5 gap-y-3">
+          <span className="flex items-center gap-3">
+            <BrandMark className="h-11 w-11" />
+            <span className="font-display text-2xl font-semibold">{BRAND.name}</span>
+          </span>
+          <span className="hidden h-9 w-px bg-brand-foreground/15 xl:block" aria-hidden="true" />
+          <UniversityLogo height={30} />
         </div>
 
-        <div className="relative space-y-8">
-          <h1 className="font-display text-5xl font-semibold leading-[1.05] text-balance xl:text-6xl">{BRAND.tagline}</h1>
+        <div className="relative flex flex-1 flex-col justify-center space-y-9 py-12">
+          <h1 className="font-display text-5xl font-semibold leading-[1.05] text-balance xl:text-6xl">
+            <Tagline />
+          </h1>
           <ul className="space-y-5">
             {BENEFITS.map((b) => (
               <li key={b.title} className="flex items-start gap-4">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-foreground/10 text-highlight">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-card text-primary shadow-card">
                   <b.icon className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <div>
@@ -46,8 +58,6 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             ))}
           </ul>
         </div>
-
-        <p className="relative min-h-4 text-xs text-brand-foreground/70">{BRAND.credit}</p>
       </aside>
 
       <main className="paper-glow flex flex-1 flex-col items-center justify-center px-4 py-10 sm:px-8">
@@ -56,7 +66,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           <span className="font-display text-2xl font-semibold">{BRAND.name}</span>
         </div>
         <div className="w-full max-w-[26rem] animate-rise-in">{children}</div>
-        {BRAND.credit && <p className="mt-10 text-xs text-muted-foreground lg:hidden">{BRAND.credit}</p>}
+        <div className="mt-12 flex flex-col items-center gap-2 lg:hidden">
+          <p className="text-xs text-muted-foreground">Un proyecto de</p>
+          <UniversityLogo height={26} />
+        </div>
       </main>
     </div>
   )

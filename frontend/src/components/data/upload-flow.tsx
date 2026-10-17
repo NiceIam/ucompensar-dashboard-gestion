@@ -4,7 +4,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react"
 import { FileJson, FileSpreadsheet, FileText, FileWarning, RotateCcw, Upload, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FileDrop } from "@/components/kit/file-drop"
-import { BrandMark } from "@/components/kit/logo"
+import { DotsLoader } from "@/components/kit/dots"
 import { Notice } from "@/components/kit/notice"
 import { ProgressBar } from "@/components/kit/progress-bar"
 import { Steps } from "@/components/kit/steps"
@@ -186,7 +186,7 @@ export function UploadFlow({
 
           {busy && state.file && (
             <div className="flex flex-col items-center gap-5 py-6 text-center sm:py-10">
-              <BrandMark className="h-14 w-14" animated />
+              <DotsLoader size="lg" />
               <div className="space-y-1">
                 <p className="font-display text-2xl font-semibold" aria-hidden="true">
                   {state.phase === "saving" ? SAVING_HINTS[savingHint] : message}

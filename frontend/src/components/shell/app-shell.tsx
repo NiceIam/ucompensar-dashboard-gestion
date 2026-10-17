@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { useEffect, useState, type ReactNode } from "react"
 import { ChevronRight, MessageCircle, Moon, Sparkles, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
-import { BrandMark, Wordmark } from "@/components/kit/logo"
+import { BrandMark, UniversityLogo, Wordmark } from "@/components/kit/logo"
 import { UserMenu } from "@/components/shell/user-menu"
 import { NAV_ITEMS, breadcrumbsFor, isActive } from "@/components/shell/nav"
 import { useChat } from "@/providers/chat-provider"
@@ -45,9 +45,9 @@ function Sidebar() {
           type="button"
           onClick={open}
           aria-pressed={isOpen}
-          className="group flex h-12 w-full items-center gap-3 rounded-xl bg-primary px-3.5 text-left text-sm font-semibold text-primary-foreground shadow-raised transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="group flex h-12 w-full items-center gap-3 rounded-xl bg-primary px-3.5 text-left text-sm font-semibold text-primary-foreground shadow-raised transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          <Sparkles className="h-[18px] w-[18px] text-highlight" aria-hidden="true" />
+          <Sparkles className="h-[18px] w-[18px]" aria-hidden="true" />
           <span className="flex-1">Pregúntale a tus datos</span>
         </button>
       </div>
@@ -75,9 +75,11 @@ function Sidebar() {
         })}
       </nav>
 
-      {BRAND.credit && (
-        <p className="px-6 pb-5 pt-3 text-xs leading-snug text-muted-foreground">{BRAND.credit}</p>
-      )}
+      {/* Institución que respalda el proyecto: su logo oficial, discreto */}
+      <div className="border-t border-sidebar-border px-5 pb-5 pt-4">
+        <p className="mb-2 text-xs text-muted-foreground">Un proyecto de</p>
+        <UniversityLogo height={26} />
+      </div>
     </aside>
   )
 }

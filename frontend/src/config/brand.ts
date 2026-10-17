@@ -12,10 +12,15 @@ export const BRAND = {
   description:
     "Sube tus archivos, entiende tus números y pregúntale a tus datos en lenguaje natural.",
   /**
-   * Crédito institucional del proyecto. Se muestra discreto en el pie de la
-   * barra lateral y del login; déjalo en `null` para ocultarlo.
+   * Institución que respalda el proyecto. Su logo oficial se muestra en el
+   * login, en el pie de la barra lateral y en Configuración › Acerca de.
    */
-  credit: "Proyecto PI0320251 · Ucompensar" as string | null,
+  institution: "Fundación Universitaria Compensar",
+  /**
+   * Código del proyecto de investigación. Solo aparece, pequeño, en
+   * Configuración › Acerca de; déjalo en `null` para ocultarlo.
+   */
+  projectCode: "PI0320251" as string | null,
 } as const
 
 /** Título de pestaña: "Página · Brújula". */

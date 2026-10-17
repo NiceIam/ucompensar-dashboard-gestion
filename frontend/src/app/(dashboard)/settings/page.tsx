@@ -2,11 +2,12 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { toast } from "sonner"
-import { Building2, LogOut, Palette, UserRound, type LucideIcon } from "lucide-react"
+import { Building2, Info, LogOut, Palette, UserRound, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Field } from "@/components/kit/field"
+import { UniversityLogo } from "@/components/kit/logo"
 import { PageHeader } from "@/components/kit/page-header"
 import { StatusBadge } from "@/components/kit/status-badge"
 import { ThemeSwitcher } from "@/components/kit/theme-toggle"
@@ -16,6 +17,7 @@ import { useProfile, useUpdateProfile } from "@/hooks/use-profile"
 import { useAuthContext } from "@/providers/auth-provider"
 import { humanizeError } from "@/lib/errors"
 import { formatDate } from "@/lib/format"
+import { BRAND } from "@/config/brand"
 
 const SECTOR_LABELS: Record<string, string> = {
   comercio: "Comercio",
@@ -146,6 +148,18 @@ export default function SettingsPage() {
 
       <SettingsCard icon={Palette} title="Apariencia" description="Elige claro, oscuro o lo que use tu dispositivo.">
         <ThemeSwitcher showLabels className="flex-wrap" />
+      </SettingsCard>
+
+      <SettingsCard icon={Info} title={`Acerca de ${BRAND.name}`} description={BRAND.description}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <p className="text-[15px]">
+              {BRAND.name} es un proyecto de la {BRAND.institution}.
+            </p>
+            {BRAND.projectCode && <p className="text-xs text-muted-foreground">Proyecto de investigación {BRAND.projectCode}</p>}
+          </div>
+          <UniversityLogo height={30} />
+        </div>
       </SettingsCard>
 
       <SettingsCard icon={LogOut} title="Sesión" description="Cierra tu sesión en este dispositivo.">
