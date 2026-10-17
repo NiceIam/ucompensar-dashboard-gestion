@@ -5,12 +5,15 @@
 
 const LOCALE = "es-CO"
 
+/** Espacio que no se parte entre cifra y unidad ("12,4 M", "37 %", "$ 9.500"). */
+export const NBSP = "\u00a0"
+
 const numberFmt = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 2 })
 const integerFmt = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 })
 
 /** Espacios del motor Intl (no separables) a espacios normales: más fácil de leer y de probar. */
 function plainSpaces(text: string): string {
-  return text.replace(/[  ]/g, " ")
+  return text.replace(/[\u00a0\u202f]/g, " ")
 }
 
 /** 1234567.891 -> "1.234.567,89" */
@@ -35,8 +38,8 @@ export function formatCompact(value: number): string {
   const abs = Math.abs(value)
   const sign = value < 0 ? "-" : ""
   const one = (n: number) => formatNumber(n, n < 10 ? 1 : n < 100 ? 1 : 0)
-  if (abs >= 1_000_000) return `${sign}${one(abs / 1_000_000)} M`
-  if (abs >= 10_000) return `${sign}${one(abs / 1_000)} mil`
+  if (abs >= 1_000_000) return `${sign}${one(abs / 1_000_000)}${NBSP}M`
+  if (abs >= 10_000) return `${sign}${one(abs / 1_000)}${NBSP}mil`
   return `${sign}${formatNumber(abs, abs < 100 ? 2 : 0)}`
 }
 
@@ -45,8 +48,8 @@ export function formatMoney(value: number, options: { compact?: boolean } = {}):
   if (!Number.isFinite(value)) return "—"
   const sign = value < 0 ? "-" : ""
   const abs = Math.abs(value)
-  if (options.compact) return `${sign}$ ${formatCompact(abs)}`
-  return `${sign}$ ${formatNumber(abs, abs >= 1000 ? 0 : 2)}`
+  if (options.compact) return `${sign}$${NBSP}${formatCompact(abs)}`
+  return `${sign}$${NBSP}${formatNumber(abs, abs >= 1000 ? 0 : 2)}`
 }
 
 /** Proporción (0..1) como porcentaje: 0.183 -> "18 %", 0.0042 -> "0,4 %". */
@@ -54,7 +57,7 @@ export function formatShare(ratio: number): string {
   if (!Number.isFinite(ratio)) return "—"
   const pct = ratio * 100
   const digits = Math.abs(pct) < 10 && pct !== Math.round(pct) ? 1 : 0
-  return `${formatNumber(pct, digits)} %`
+  return `${formatNumber(pct, digits)}${NBSP}%`
 }
 
 /** Cambio relativo con signo: 0.18 -> "+18 %", -0.05 -> "-5 %". */

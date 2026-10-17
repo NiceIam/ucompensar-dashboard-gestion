@@ -1,4 +1,7 @@
 import { describe, expect, test } from "vitest"
+
+/** Los formateadores usan espacio duro entre cifra y unidad; aquí se comparan como espacios normales. */
+const plain = (s: string | undefined) => (s ?? "").replace(/\u00a0/g, " ")
 import {
   formatChange,
   formatCompact,
@@ -28,36 +31,36 @@ describe("formatNumber (es-CO)", () => {
 
 describe("formatCompact", () => {
   test("cifras cortas para titulares", () => {
-    expect(formatCompact(850)).toBe("850")
-    expect(formatCompact(9_999)).toBe("9.999")
-    expect(formatCompact(12_400)).toBe("12,4 mil")
-    expect(formatCompact(250_000)).toBe("250 mil")
-    expect(formatCompact(12_400_000)).toBe("12,4 M")
-    expect(formatCompact(3_200_000_000)).toBe("3.200 M")
-    expect(formatCompact(-1_500_000)).toBe("-1,5 M")
+    expect(plain(formatCompact(850))).toBe("850")
+    expect(plain(formatCompact(9_999))).toBe("9.999")
+    expect(plain(formatCompact(12_400))).toBe("12,4 mil")
+    expect(plain(formatCompact(250_000))).toBe("250 mil")
+    expect(plain(formatCompact(12_400_000))).toBe("12,4 M")
+    expect(plain(formatCompact(3_200_000_000))).toBe("3.200 M")
+    expect(plain(formatCompact(-1_500_000))).toBe("-1,5 M")
   })
 })
 
 describe("formatMoney", () => {
   test("pesos completos y compactos", () => {
-    expect(formatMoney(12_400_000)).toBe("$ 12.400.000")
-    expect(formatMoney(12_400_000, { compact: true })).toBe("$ 12,4 M")
-    expect(formatMoney(-2500)).toBe("-$ 2.500")
-    expect(formatMoney(19.5)).toBe("$ 19,5")
+    expect(plain(formatMoney(12_400_000))).toBe("$ 12.400.000")
+    expect(plain(formatMoney(12_400_000, { compact: true }))).toBe("$ 12,4 M")
+    expect(plain(formatMoney(-2500))).toBe("-$ 2.500")
+    expect(plain(formatMoney(19.5))).toBe("$ 19,5")
   })
 })
 
 describe("porcentajes", () => {
   test("formatShare usa coma decimal y espacio antes de %", () => {
-    expect(formatShare(0.183)).toBe("18 %")
-    expect(formatShare(0.0042)).toBe("0,4 %")
-    expect(formatShare(1)).toBe("100 %")
+    expect(plain(formatShare(0.183))).toBe("18 %")
+    expect(plain(formatShare(0.0042))).toBe("0,4 %")
+    expect(plain(formatShare(1))).toBe("100 %")
   })
 
   test("formatChange agrega el signo", () => {
-    expect(formatChange(0.18)).toBe("+18 %")
-    expect(formatChange(-0.05)).toBe("-5 %")
-    expect(formatChange(0)).toBe("0 %")
+    expect(plain(formatChange(0.18))).toBe("+18 %")
+    expect(plain(formatChange(-0.05))).toBe("-5 %")
+    expect(plain(formatChange(0))).toBe("0 %")
   })
 })
 

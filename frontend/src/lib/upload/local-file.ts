@@ -3,6 +3,7 @@
  * antes de subir, y cada problema trae una instrucción concreta.
  */
 import { formatFileSize } from "@/lib/format"
+import { blobToArrayBuffer } from "@/lib/upload/read-local"
 
 export type LocalFileKind = "xlsx" | "csv" | "json"
 
@@ -93,7 +94,7 @@ export function withExplicitType(file: File, kind: LocalFileKind): File {
 /** Los .xlsx son ZIP: deben empezar por "PK\x03\x04". */
 export async function looksLikeZip(file: Blob): Promise<boolean> {
   try {
-    const head = new Uint8Array(await file.slice(0, 4).arrayBuffer())
+    const head = new Uint8Array(await blobToArrayBuffer(file.slice(0, 4)))
     return head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04
   } catch {
     return true // si no podemos revisarlo, que decida el servidor

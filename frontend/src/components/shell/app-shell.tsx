@@ -176,6 +176,7 @@ function BottomNav() {
   return (
     <nav
       aria-label="Principal"
+      data-shell="bottom-nav"
       className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 px-2 pb-safe backdrop-blur-md lg:hidden"
     >
       <div className="mx-auto flex max-w-xl items-center gap-1 pt-1">
@@ -203,7 +204,7 @@ function BottomNav() {
 export function AppShell({ children, chat }: { children: ReactNode; chat: ReactNode }) {
   const pathname = usePathname()
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
+    <div data-shell="root" className="flex h-dvh overflow-hidden bg-background">
       <a
         href="#contenido"
         className="sr-only z-50 rounded-xl bg-primary px-4 py-2 font-semibold text-primary-foreground focus:not-sr-only focus:absolute focus:left-4 focus:top-4"
@@ -211,9 +212,9 @@ export function AppShell({ children, chat }: { children: ReactNode; chat: ReactN
         Saltar al contenido
       </a>
       <Sidebar />
-      <div className="flex min-w-0 flex-1 overflow-hidden">
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <main id="contenido" tabIndex={-1} className="paper-glow relative flex-1 overflow-y-auto outline-none">
+      <div data-shell="body" className="flex min-w-0 flex-1 overflow-hidden">
+        <div data-shell="column" className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <main id="contenido" data-shell="main" tabIndex={-1} className="paper-glow relative flex-1 overflow-y-auto outline-none">
             <TopBar />
             <div
               key={pathname}

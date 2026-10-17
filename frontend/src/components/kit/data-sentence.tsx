@@ -26,17 +26,20 @@ export function DataSentence({
           <Icon className="h-4 w-4" aria-hidden="true" />
         </span>
       )}
-      <p className="text-[16px] leading-relaxed text-foreground/90 text-pretty">{children}</p>
+      <p className="min-w-0 text-[16px] leading-relaxed text-foreground/90 text-pretty">{children}</p>
     </div>
   )
 }
 
 /** Cifra destacada dentro de una frase: serif, peso alto y subrayado cálido. */
 export function Figure({ children, className }: { children: ReactNode; className?: string }) {
+  // Cifras cortas no se parten; frases largas (un rango de fechas) sí pueden bajar de línea.
+  const short = typeof children !== "string" || children.length <= 18
   return (
     <strong
       className={cn(
-        "whitespace-nowrap font-display text-[1.12em] font-semibold text-foreground [background-image:linear-gradient(transparent_62%,hsl(var(--highlight)/0.35)_62%)]",
+        short && "whitespace-nowrap",
+        "font-display text-[1.12em] font-semibold [box-decoration-break:clone] text-foreground [background-image:linear-gradient(transparent_62%,hsl(var(--highlight)/0.35)_62%)]",
         className
       )}
     >
