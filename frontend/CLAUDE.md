@@ -72,9 +72,16 @@ Cada dominio tiene hooks en `src/hooks/` que siguen el mismo patrón:
 
 ### Sistema de diseño (Brújula)
 
-- Identidad en `src/config/brand.ts` (nombre, frase, crédito). Cambiar el nombre ahí lo cambia en toda la UI.
-- Tokens HSL en `globals.css` con roles semánticos y tres variantes por estado (`success`/`warning`/`danger`/`info`/`highlight`: sólido, `-soft` fondo, `-strong` texto AA). Primario verde azulado profundo `#11604F`, acento azafrán `#E3A11B`, papel cálido `#F7F4EE`. Modo oscuro con la clase `.dark` (ThemeProvider de `next-themes`).
-- Gráficos: 8 colores categóricos en orden fijo (`--chart-1..8`), validados para daltonismo en claro y oscuro; usar `SimpleChart` (`src/components/charts/simple-chart.tsx`).
+- Identidad en `src/config/brand.ts` (nombre, frase, institución, código del proyecto). Cambiar el nombre ahí lo cambia en toda la UI.
+- Colores de la Fundación Universitaria Compensar: **blanco y naranja**. Tokens HSL en `globals.css` con roles semánticos y tres variantes por estado (`success`/`warning`/`danger`/`info`/`highlight`: sólido, `-soft` fondo, `-strong` texto AA).
+  - `highlight` = naranja PURO del logo `#ED6824`: solo decorativo/grande (iconos, puntos, resaltados, 1.ª serie de gráficos). Blanco encima da 3,18:1: nunca texto blanco pequeño sobre él.
+  - `primary` = naranja INTERACTIVO `#C44A0E` (botones, enlaces, chips activos; blanco encima 4,85:1). Hover con `bg-primary-hover` (`#AE420B`), nunca `bg-primary/90` (aclarar baja el contraste).
+  - Fondo blanco `#FFFFFF`, superficies secundarias gris cálido (`#F7F4F1`, barra lateral `#FBF9F7`), tinta `#1F1A17`. Paneles de marca (`bg-brand`) melocotón muy suave `#FFF5EE`.
+  - Estados lejos del naranja: éxito verde, advertencia ámbar amarillo `#D9A20B` (con icono), error carmesí `#C42B3F`, info azul. El naranja nunca va solo: siempre con icono y texto.
+  - Modo oscuro (clase `.dark`, `next-themes`): carbón cálido `#161311`, texto `#F3EEE9`, primario `#EE6F2C` con texto tinta (6,15:1).
+- Motivo firma: la retícula de puntos del logo (`src/components/kit/dots.tsx`): `DotField` (textura de fondo, clase `.bg-dots`), `DotCluster` (racimo decorativo), `DotRule` (separador) y `DotsLoader` ("puntos que se encienden", para cargas). El isotipo es la brújula (`BrandMark`) en baldosa naranja.
+- Logo oficial de la universidad con `UniversityLogo` (`kit/logo.tsx`, archivo `public/logo-ucompensar.png`): login, pie de la barra lateral y Configuración › Acerca de. No se recolorea ni se recorta; en oscuro va sobre una placa blanca.
+- Gráficos: 8 colores categóricos en orden fijo (`--chart-1..8`: naranja, azul, verde azulado, ciruela, oro, celeste, verde, violeta), validados con el validador de la skill `dataviz` en claro y oscuro (CVD adyacente ΔE ≥ 8, visión normal ≥ 15, contraste ≥ 3:1); usar `SimpleChart` (`src/components/charts/simple-chart.tsx`).
 - Tipografía: Fraunces (`font-display`, titulares y cifras grandes) + Plus Jakarta Sans (UI) vía `next/font/google`.
 - Componentes propios en `src/components/kit/` (encabezado, cifra, frase de dato, avisos, pasos, estados vacíos, zona de arrastre…). Textos de cara al usuario: español, tuteo, sin jerga técnica; todo error pasa por `humanizeError`.
 - Rejillas con `auto-grid` (se adaptan al ancho disponible, también con el chat abierto).
