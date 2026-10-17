@@ -70,15 +70,20 @@ class FakeOrgDB:
         display_name: Optional[str] = None,
         legacy_records: int = 0,
         column_types: Optional[dict[str, str]] = None,
+        column_ranges: Optional[dict[str, list]] = None,
     ) -> uuid.UUID:
         table_id = uuid.uuid4()
         types = column_types or {}
+        ranges = column_ranges or {}
         self.tables[table_id] = {
             "id": table_id,
             "table_name": table_name,
             "display_name": display_name or table_name.title(),
             "columns_definition": json.dumps(
-                [{"name": c, "type": types.get(c, "text")} for c in columns]
+                [
+                    {"name": c, "type": types.get(c, "text"), **({"range": ranges[c]} if c in ranges else {})}
+                    for c in columns
+                ]
             ),
             "row_count": len(rows or []),
         }
@@ -284,6 +289,14 @@ class FakeConn:
             r["columns_definition"] = args[0]
             r["display_name"] = args[1] if args[1] is not None else r["display_name"]
             return []
+
+        if q == "update org_data_tables set columns_definition = $1::jsonb where id = $2":
+            if args[1] in t:
+                t[args[1]]["columns_definition"] = args[0]
+            return []
+
+        if q == "select set_config('statement_timeout', $1, true)":
+            return []   # el tope de tiempo del rango de fechas (el SQL del motor se prueba en Postgres real)
 
         if q == "update org_data_tables set row_count = $1 where id = $2":
             if args[1] in t:

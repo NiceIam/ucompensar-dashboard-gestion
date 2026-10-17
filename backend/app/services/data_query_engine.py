@@ -31,7 +31,7 @@ el catalogo de la org (org_data_tables) y se compila a UNA consulta parametrizad
   SELECT lower('ÑANDÚ') = 'ñandú'  -- debe dar true (probado con el proveedor builtin C.UTF-8 de PG 18).
 - Se ejecuta en una transaccion de SOLO LECTURA con statement_timeout (defensa en profundidad).
 
-`run_plans` es la unica funcion que toca la BD; los tests con la BD emulada la reemplazan por un oraculo
+`run_plans` / `run_plan_on` / `date_ranges` son las unicas funciones que tocan la BD; los tests con la BD emulada la reemplazan por un oraculo
 en pandas (tests/query_oracle.py) y los de Postgres real la ejecutan tal cual.
 """
 
@@ -49,6 +49,12 @@ _TYPE_KIND = {
     "date": KIND_DATE, "datetime": KIND_DATE, "timestamp": KIND_DATE,
     "boolean": KIND_BOOL, "bool": KIND_BOOL,
 }
+
+# Rango (min, max) de columnas de fecha guardado al cargar datos: solo en las primeras columnas (el catalogo del
+# chat no muestra mas) y con su propio tope de tiempo (corre dentro de la transaccion de carga, no de una consulta).
+RANGE_MAX_COLUMNS = 25
+RANGE_STATEMENT_TIMEOUT_MS = 20000
+_ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}", re.A)
 
 DEFAULT_LIMIT = 20
 MAX_FILTERS = 10
@@ -139,6 +145,8 @@ class QueryError(ValueError):
 class Column:
     name: str
     kind: str
+    # Solo columnas de fecha: (min, max) ISO calculado al cargar datos (columns_definition[].range); None si no hay.
+    range: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -161,10 +169,28 @@ def fold_name(name: str) -> str:
     return re.sub(r"[\s_]+", "_", name.strip()).casefold()
 
 
+def is_date_type(type_name) -> bool:
+    """Si un 'type' de columns_definition se lee como fecha (mismo mapeo del catalogo)."""
+    return _TYPE_KIND.get(str(type_name or "").lower()) == KIND_DATE
+
+
+def _stored_range(c: dict, kind: str) -> tuple[str, str] | None:
+    """Rango guardado de una columna de fecha, solo si tiene forma estricta [AAAA-MM-DD, AAAA-MM-DD]: el valor
+    viaja al prompt, asi que un dato raro en la BD (texto libre) nunca llega a el."""
+    raw = c.get("range")
+    if kind != KIND_DATE or not isinstance(raw, (list, tuple)) or len(raw) != 2:
+        return None
+    lo, hi = raw
+    if not all(isinstance(v, str) and _ISO_DAY.fullmatch(v) for v in (lo, hi)) or lo > hi:
+        return None
+    return lo, hi
+
+
 def build_catalog(records) -> dict[str, Table]:
     """Filas de org_data_tables -> {table_name: Table}, ordenado por nombre (prompt estable).
 
-    Tolera columns_definition como texto JSON o lista, y entradas mal formadas (se omiten).
+    Tolera columns_definition como texto JSON o lista, y entradas mal formadas (se omiten). Las tablas cargadas
+    antes de existir `range` no lo traen: quedan sin rango, igual que antes.
     """
     catalog: dict[str, Table] = {}
     for r in records:
@@ -181,7 +207,7 @@ def build_catalog(records) -> dict[str, Table]:
                 continue
             seen.add(name)
             kind = _TYPE_KIND.get(str(c.get("type") or "").lower(), KIND_TEXT)
-            columns.append(Column(name, kind))
+            columns.append(Column(name, kind, _stored_range(c, kind)))
         catalog[r["table_name"]] = Table(
             id=r["id"], name=r["table_name"], display=r["display_name"] or r["table_name"],
             rows=r["row_count"] or 0, columns=tuple(columns),
@@ -905,30 +931,59 @@ async def run_plans(pool, plans: list[Plan]) -> list[PlanResult]:
         async with conn.transaction(readonly=True):
             await conn.execute("SELECT set_config('statement_timeout', $1, true)", str(STATEMENT_TIMEOUT_MS))
             for plan in plans:
-                sql, params = compile_plan(plan)
-                records = await conn.fetch(sql, *params)
-                n = len(plan.labels)
-                rows = [tuple(r[f"o{j}"] for j in range(n)) for r in records]
-                total = int(records[0]["total__"]) if records else 0
-                idx = {c: i for i, c in enumerate(plan.columns())}
-                bad, bad_dates = {}, {}
-                if records:
-                    for a in plan.aggs:
-                        if a.mode == KIND_NUM:
-                            bad[a.col.name] = int(records[0][f"bad__{idx[a.col]}"] or 0)
-                check = compile_date_check(plan)
-                counts = await conn.fetchrow(check[0], *check[1]) if check else (records[0] if records else None)
-                two_digit = {}
-                if counts is not None:
-                    bad_dates = {c.name: int(counts[f"bdate__{idx[c]}"] or 0) for c in plan.date_columns()}
-                    two_digit = {c.name: int(counts[f"yy2__{idx[c]}"] or 0) for c in plan.date_columns()}
-                text_numeric = {}
-                if records:
-                    for c in plan.text_compared_columns():
-                        i = idx[c]
-                        text_numeric[c.name] = (int(records[0][f"tnn__{i}"] or 0), int(records[0][f"tnk__{i}"] or 0))
-                    rows = _numeric_text_minmax(plan, rows, records, text_numeric, bad)
-                out.append(PlanResult(rows, total, bad, bad_dates, text_numeric, two_digit, plan.current_year))
+                out.append(await run_plan_on(conn, plan))
+    return out
+
+
+async def run_plan_on(conn, plan: Plan) -> PlanResult:
+    """Ejecuta UN plan sobre una conexion ya abierta (la transaccion y el timeout los pone quien llama)."""
+    sql, params = compile_plan(plan)
+    records = await conn.fetch(sql, *params)
+    n = len(plan.labels)
+    rows = [tuple(r[f"o{j}"] for j in range(n)) for r in records]
+    total = int(records[0]["total__"]) if records else 0
+    idx = {c: i for i, c in enumerate(plan.columns())}
+    bad, bad_dates = {}, {}
+    if records:
+        for a in plan.aggs:
+            if a.mode == KIND_NUM:
+                bad[a.col.name] = int(records[0][f"bad__{idx[a.col]}"] or 0)
+    check = compile_date_check(plan)
+    counts = await conn.fetchrow(check[0], *check[1]) if check else (records[0] if records else None)
+    two_digit = {}
+    if counts is not None:
+        bad_dates = {c.name: int(counts[f"bdate__{idx[c]}"] or 0) for c in plan.date_columns()}
+        two_digit = {c.name: int(counts[f"yy2__{idx[c]}"] or 0) for c in plan.date_columns()}
+    text_numeric = {}
+    if records:
+        for c in plan.text_compared_columns():
+            i = idx[c]
+            text_numeric[c.name] = (int(records[0][f"tnn__{i}"] or 0), int(records[0][f"tnk__{i}"] or 0))
+        rows = _numeric_text_minmax(plan, rows, records, text_numeric, bad)
+    return PlanResult(rows, total, bad, bad_dates, text_numeric, two_digit, plan.current_year)
+
+
+async def date_ranges(conn, table_id, names: list[str]) -> dict[str, tuple[date, date]]:
+    """(min, max) de cada columna de fecha pedida, leida con EXACTAMENTE las reglas de fecha del motor (formatos,
+    ventana de años de 2 digitos), asi lo que el catalogo muestra nunca contradice lo que los filtros devuelven.
+
+    Es una sola pasada por la tabla. Corre en la conexion/transaccion de quien llama (al cargar datos). Las columnas
+    sin ninguna fecha legible no aparecen en el resultado."""
+    cols = [Column(n, KIND_DATE) for n in names]
+    if not cols:
+        return {}
+    aggs = []
+    for c in cols:
+        aggs += [Agg(f"min({c.name})", "min", c, KIND_DATE), Agg(f"max({c.name})", "max", c, KIND_DATE)]
+    plan = Plan(table_id, (), tuple(aggs), (), (), 1)
+    await conn.execute("SELECT set_config('statement_timeout', $1, true)", str(RANGE_STATEMENT_TIMEOUT_MS))
+    result = await run_plan_on(conn, plan)
+    row = result.rows[0] if result.rows else ()
+    out = {}
+    for j, c in enumerate(cols):
+        lo, hi = (row[2 * j], row[2 * j + 1]) if row else (None, None)
+        if isinstance(lo, date) and isinstance(hi, date):
+            out[c.name] = (lo, hi)
     return out
 
 

@@ -18,6 +18,7 @@ import pandas as pd
 from fastapi import HTTPException, status
 
 from app.database import get_org_pool
+from app.services import data_query_engine as engine
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,102 @@ def _json_safe_value(val):
         # inf/-inf generarian 'Infinity', que jsonb rechaza: se tratan como nulos
         return float(val) if math.isfinite(val) else None
     return str(val)
+
+
+# ---------------------------------------------------------------------------
+# Rango de fechas por columna (para el catalogo del chat)
+# ---------------------------------------------------------------------------
+
+async def _refresh_date_ranges(conn, table_uuid, cols: list, names: Optional[set] = None) -> tuple[list, bool]:
+    """Recalcula el rango (min, max) de las columnas de fecha de una tabla y lo anota en columns_definition
+    (clave extra `range`: ["AAAA-MM-DD", "AAAA-MM-DD"]; las tablas sin ella siguen funcionando igual).
+
+    Se calcula UNA vez, al cargar datos, con el motor de consultas del chat (mismo parseo de fechas que los
+    filtros) sobre TODA la tabla: equivale a min de minimos / max de maximos y ademas corrige tablas viejas sin
+    rango o con uno desactualizado. `names` limita las columnas (None = todas las de fecha entre las primeras
+    engine.RANGE_MAX_COLUMNS). Sin fechas legibles la columna queda sin `range`. Corre en un savepoint y NUNCA
+    lanza: si falla, la carga sigue sin rango. Devuelve (columns_definition nuevo, si cambio algo)."""
+    wanted: list[str] = []
+    for c in cols[: engine.RANGE_MAX_COLUMNS]:
+        name = c.get("name") if isinstance(c, dict) else None
+        if isinstance(name, str) and engine.is_date_type(c.get("type")) and name not in wanted:
+            if names is None or name in names:
+                wanted.append(name)
+    if not wanted:
+        return cols, False
+    try:
+        async with conn.transaction():
+            ranges = await engine.date_ranges(conn, table_uuid, wanted)
+    except Exception as exc:
+        # Sin el mensaje: un error de la BD puede citar valores de celdas.
+        logger.warning("No se pudo calcular el rango de fechas de la tabla %s: %s", table_uuid, type(exc).__name__)
+        return cols, False
+    new_cols, changed, done = [], False, set()
+    for c in cols:
+        name = c.get("name") if isinstance(c, dict) else None
+        if name in wanted and name not in done:
+            done.add(name)
+            c = dict(c)
+            found = ranges.get(name)
+            rng = [found[0].isoformat(), found[1].isoformat()] if found else None
+            if c.get("range") != rng:
+                changed = True
+                if rng:
+                    c["range"] = rng
+                else:
+                    c.pop("range", None)
+        new_cols.append(c)
+    return new_cols, changed
+
+
+def _parse_columns_definition(raw) -> list:
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    return raw if isinstance(raw, list) else []
+
+
+async def backfill_date_ranges(
+    org_id: str, *, dry_run: bool = True, refresh: bool = False, pool=None
+) -> list[dict]:
+    """Mantenimiento: calcula y guarda el rango de fechas de las tablas de UNA org cargadas antes de que existiera.
+
+    Por defecto solo mira columnas de fecha SIN rango; refresh=True recalcula todas (p. ej. tras borrar filas o al
+    cambiar el año, que mueve la ventana de años de 2 digitos). dry_run=True (por defecto) no escribe nada.
+    Correrlo sin cargas de archivos en curso. Devuelve, por tabla con algo que calcular:
+    {"table", "rows", "ranges": {columna: [min, max]}, "changed", "applied"}. Ver scripts/backfill_date_ranges.py."""
+    pool = pool or await get_org_pool(org_id)
+    report = []
+    async with pool.acquire() as conn:
+        tables = await conn.fetch(
+            "SELECT id, table_name, display_name, row_count, columns_definition FROM org_data_tables"
+        )
+        for t in sorted(tables, key=lambda r: r["table_name"]):
+            cols = _parse_columns_definition(t["columns_definition"])
+            names = {
+                c["name"] for c in cols[: engine.RANGE_MAX_COLUMNS]
+                if isinstance(c, dict) and isinstance(c.get("name"), str) and engine.is_date_type(c.get("type"))
+                and (refresh or "range" not in c)
+            }
+            if not names or not (t["row_count"] or 0):
+                continue
+            async with conn.transaction():
+                new_cols, changed = await _refresh_date_ranges(conn, t["id"], cols, names)
+                if changed and not dry_run:
+                    await conn.execute(
+                        "UPDATE org_data_tables SET columns_definition = $1::jsonb WHERE id = $2",
+                        json.dumps(new_cols), t["id"],
+                    )
+            report.append({
+                "table": t["table_name"],
+                "rows": t["row_count"],
+                "ranges": {c["name"]: c["range"] for c in new_cols if c.get("name") in names and c.get("range")},
+                "changed": changed,
+                "applied": bool(changed and not dry_run),
+            })
+    return report
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +489,11 @@ async def modify_table(
                     existing_names.add(col["name"])
                     columns_added += 1
 
+        # Una columna de fecha recien declarada puede tener ya valores en las filas existentes: se anota su rango.
+        added_dates = {c["name"] for c in (add_columns or []) if engine.is_date_type(c.get("type"))}
+        if columns_added and added_dates:
+            current_cols, _ = await _refresh_date_ranges(conn, table_uuid, current_cols, added_dates)
+
         updates = {"columns_definition": json.dumps(current_cols)}
         if new_display_name:
             updates["display_name"] = new_display_name
@@ -552,6 +654,16 @@ async def load_csv_to_table(
                 "UPDATE org_data_tables SET row_count = $1 WHERE id = $2",
                 total, table_uuid,
             )
+
+            # Rango de fechas por columna (se calcula aqui, una vez; el chat solo lo lee). Misma transaccion:
+            # filas y rango quedan o no quedan juntos.
+            cols_def = _parse_columns_definition(table_row["columns_definition"])
+            new_cols, changed = await _refresh_date_ranges(conn, table_uuid, cols_def)
+            if changed:
+                await conn.execute(
+                    "UPDATE org_data_tables SET columns_definition = $1::jsonb WHERE id = $2",
+                    json.dumps(new_cols), table_uuid,
+                )
 
     logger.info(f"Cargados {inserted} registros en {table_name} (org: {org_id})")
     return {

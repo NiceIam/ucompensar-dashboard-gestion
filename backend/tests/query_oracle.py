@@ -344,3 +344,12 @@ def fake_run_plans(log: list | None = None):
         return [run_plan(pool.db.rows_of(p.table_id), p) for p in plans]
 
     return run_plans
+
+
+def fake_run_plan_on():
+    """Reemplazo de data_query_engine.run_plan_on (lo usa el rango de fechas al cargar datos) para FakeConn."""
+
+    async def run_plan_on(conn, plan):
+        return run_plan(conn.db.rows_of(plan.table_id), plan)
+
+    return run_plan_on
