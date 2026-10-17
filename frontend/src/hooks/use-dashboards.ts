@@ -88,6 +88,8 @@ export function useDashboardExecute(id: string) {
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     isError: query.isError,
+    error: query.error,
+    updatedAt: query.dataUpdatedAt,
     refetch: () => query.refetch(),
   }
 }

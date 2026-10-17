@@ -9,6 +9,7 @@ import { BrandMark, Wordmark } from "@/components/kit/logo"
 import { UserMenu } from "@/components/shell/user-menu"
 import { NAV_ITEMS, breadcrumbsFor, isActive } from "@/components/shell/nav"
 import { useChat } from "@/providers/chat-provider"
+import { useDashboardMeta } from "@/hooks/use-dashboards"
 import { BRAND } from "@/config/brand"
 import { cn } from "@/lib/utils"
 
@@ -102,7 +103,11 @@ function ThemeQuickToggle() {
 /** Barra superior: migas en escritorio, marca en el celular, acceso al chat y menú de cuenta. */
 function TopBar() {
   const pathname = usePathname()
-  const crumbs = breadcrumbsFor(pathname)
+  const dashboardId = pathname.match(/^\/dashboards\/([^/]+)/)?.[1] ?? ""
+  const { data: dashboardMeta } = useDashboardMeta(dashboardId)
+  const crumbs = breadcrumbsFor(pathname).map((c, i, all) =>
+    i === all.length - 1 && dashboardId && dashboardMeta?.name ? { ...c, label: dashboardMeta.name } : c
+  )
   const { open, isOpen } = useChat()
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6 lg:h-[72px] lg:px-8">
