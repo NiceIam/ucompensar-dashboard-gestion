@@ -184,17 +184,26 @@
     text-rendering: optimizeLegibility;
   }
 
+  /*
+   * Texto: espaciado normal (o apenas abierto, según la familia: --tracking-body
+   * lo define el emparejamiento en src/config/font-pairs) e interlineado cómodo.
+   * Cifras SIEMPRE de caja alta (lining), nunca de estilo antiguo.
+   */
   body {
     @apply bg-background font-sans text-foreground antialiased;
-    font-feature-settings: "ss01", "cv11";
+    font-feature-settings: var(--font-features, normal);
+    font-variant-numeric: lining-nums;
+    letter-spacing: var(--tracking-body, 0em);
+    line-height: 1.55;
   }
 
-  /* Titulares en el serif de display, con su eje "suave" para un tono cálido
-     (el tamaño óptico lo ajusta la fuente sola: font-optical-sizing auto). */
+  /*
+   * Letra de titulares y cifras. El espaciado se cierra SOLO en tamaños grandes
+   * y en proporción al tamaño: 0 hasta 20 px, ≈ -0.011em a 36 px, ≈ -0.017em a 60 px.
+   */
   .font-display {
-    font-variation-settings: "SOFT" 60;
-    font-optical-sizing: auto;
-    letter-spacing: -0.012em;
+    font-variant-numeric: lining-nums;
+    letter-spacing: min(0em, calc((20px - 1em) * 0.025));
   }
 
   :focus-visible {
@@ -234,9 +243,9 @@
     background-size: var(--dots-gap, 18px) var(--dots-gap, 18px);
   }
 
-  /* Cifras en columnas alineadas (tablas, ejes). */
+  /* Cifras en columnas alineadas y de caja alta (tablas, ejes, cifras grandes). */
   .tabular {
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums lining-nums;
   }
 }
 

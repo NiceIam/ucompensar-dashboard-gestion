@@ -38,12 +38,19 @@ const config: Config = {
         ],
         display: [
           "var(--font-display)",
-          "ui-serif",
-          "Georgia",
-          "Cambria",
-          "Times New Roman",
-          "serif",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "Arial",
+          "sans-serif",
         ],
+      },
+      // Interlineado más cómodo en tamaños pequeños (1.5 en vez de 1.33–1.43).
+      fontSize: {
+        xs: ["0.75rem", { lineHeight: "1.125rem" }],
+        sm: ["0.875rem", { lineHeight: "1.3125rem" }],
       },
       colors: {
         border: "hsl(var(--border))",
