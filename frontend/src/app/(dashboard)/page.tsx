@@ -58,7 +58,7 @@ export default function HomePage() {
   return (
     <div className="space-y-10">
       <header className="space-y-2">
-        <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-primary-strong/80 first-letter:uppercase dark:text-primary-strong">
+        <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-primary first-letter:uppercase">
           {todayLabel()}
         </p>
         <h1 className="font-display text-[32px] font-semibold leading-[1.1] sm:text-[40px]">
