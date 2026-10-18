@@ -246,8 +246,9 @@ export function FloatingChat() {
         className={cn(
           "flex flex-col overflow-hidden bg-background",
           // Celular y tableta: por encima del contenido
-          "fixed inset-0 z-50 transition-transform duration-300 ease-out md:inset-y-0 md:left-auto md:right-0 md:w-[440px] md:border-l md:shadow-float",
-          isOpen ? "translate-x-0" : "translate-x-full",
+          "fixed inset-0 z-50 transition-transform duration-300 ease-out md:inset-y-0 md:left-auto md:right-0 md:w-[440px] md:border-l",
+          // La sombra solo con el panel abierto: cerrado, se asomaba como una franja gris en el borde.
+          isOpen ? "translate-x-0 md:shadow-float" : "translate-x-full",
           // Escritorio: acoplado
           "lg:static lg:z-auto lg:shrink-0 lg:translate-x-0 lg:border-l lg:shadow-none lg:transition-[width] lg:duration-300",
           isOpen ? "lg:w-[400px] xl:w-[440px]" : "lg:w-0 lg:border-l-0"
