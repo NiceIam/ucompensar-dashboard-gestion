@@ -25,6 +25,6 @@ export const fontPair: FontPair = {
   className: `${display.variable} ${sans.variable}`,
   style: tuning({
     "--tracking-body": "0em",
-    "--font-features": '"cv11", "calt"',
+    "--font-features": '"calt"',
   }),
 }

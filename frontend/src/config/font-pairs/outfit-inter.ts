@@ -26,8 +26,9 @@ export const fontPair: FontPair = {
   name: "Outfit + Inter",
   className: `${display.variable} ${sans.variable}`,
   style: tuning({
-    // Inter ya viene con espaciado abierto: no se aprieta. cv11 = «a» de un solo piso, como en «compensar».
+    // Inter ya viene con espaciado abierto: no se aprieta. (La versión de Google Fonts no
+    // trae las variantes cv01–cv11, así que no se piden: se verificó comparando glifos.)
     "--tracking-body": "0em",
-    "--font-features": '"cv11", "calt"',
+    "--font-features": '"calt"',
   }),
 }
