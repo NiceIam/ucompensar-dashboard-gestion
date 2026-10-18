@@ -82,7 +82,13 @@ Cada dominio tiene hooks en `src/hooks/` que siguen el mismo patrón:
 - Motivo firma: la retícula de puntos del logo (`src/components/kit/dots.tsx`): `DotField` (textura de fondo, clase `.bg-dots`), `DotCluster` (racimo decorativo), `DotRule` (separador) y `DotsLoader` ("puntos que se encienden", para cargas). El isotipo es la brújula (`BrandMark`) en baldosa naranja.
 - Logo oficial de la universidad con `UniversityLogo` (`kit/logo.tsx`, archivo `public/logo-ucompensar.png`): login, pie de la barra lateral y Configuración › Acerca de. No se recolorea ni se recorta; en oscuro va sobre una placa blanca.
 - Gráficos: 8 colores categóricos en orden fijo (`--chart-1..8`: naranja, azul, verde azulado, ciruela, oro, celeste, verde, violeta), validados con el validador de la skill `dataviz` en claro y oscuro (CVD adyacente ΔE ≥ 8, visión normal ≥ 15, contraste ≥ 3:1); usar `SimpleChart` (`src/components/charts/simple-chart.tsx`).
-- Tipografía: Fraunces (`font-display`, titulares y cifras grandes) + Plus Jakarta Sans (UI) vía `next/font/google`.
+- Tipografía: **Outfit** (`font-display`: titulares y cifras grandes; geométrica y redonda como la letra del logo) + **Inter** (`font-sans`: toda la interfaz; con `cv11`, «a» de un piso) vía `next/font/google` (variables, subconjunto `latin`, `display: swap`, respaldo a fuentes del sistema).
+  - Cambiar de par es UNA línea en `src/config/fonts.ts`:
+    - A (predeterminado): `export { fontPair } from "./font-pairs/outfit-inter"`
+    - B: `export { fontPair } from "./font-pairs/sora-dm-sans"` (ojo: DM Sans no trae cifras tabulares; las tablas no alinean)
+    - C: `export { fontPair } from "./font-pairs/urbanist-inter"` (ojo: Urbanist no trae cifras tabulares; los KPI no alinean)
+  - Cada par define en `src/config/font-pairs/*.ts` su espaciado de texto (`--tracking-body`) y rasgos OpenType (`--font-features`).
+  - Reglas: cifras siempre lining (nunca de estilo antiguo); `tabular` (tabular-nums) en tablas, ejes y KPIs; texto con espaciado normal e interlineado 1,55; el espaciado negativo de `.font-display` solo aparece en tamaños grandes (> 20 px) y crece con el tamaño. No usar `tracking-tight` en textos pequeños.
 - Componentes propios en `src/components/kit/` (encabezado, cifra, frase de dato, avisos, pasos, estados vacíos, zona de arrastre…). Textos de cara al usuario: español, tuteo, sin jerga técnica; todo error pasa por `humanizeError`.
 - Rejillas con `auto-grid` (se adaptan al ancho disponible, también con el chat abierto).
 
