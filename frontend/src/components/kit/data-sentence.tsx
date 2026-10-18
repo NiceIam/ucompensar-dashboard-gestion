@@ -31,7 +31,7 @@ export function DataSentence({
   )
 }
 
-/** Cifra destacada dentro de una frase: serif, peso alto y subrayado cálido. */
+/** Cifra destacada dentro de una frase: letra de cifras, peso alto y resaltado naranja suave. */
 export function Figure({ children, className }: { children: ReactNode; className?: string }) {
   // Cifras cortas no se parten; frases largas (un rango de fechas) sí pueden bajar de línea.
   const short = typeof children !== "string" || children.length <= 18

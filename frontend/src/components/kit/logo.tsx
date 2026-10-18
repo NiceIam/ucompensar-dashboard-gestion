@@ -70,7 +70,7 @@ export function Wordmark({
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <BrandMark className={markClassName} />
       <span className="flex flex-col leading-none">
-        <span className="font-display text-[22px] font-semibold tracking-tight">{BRAND.name}</span>
+        <span className="font-display text-[22px] font-semibold">{BRAND.name}</span>
         {showTagline && (
           <span className="mt-1 text-xs font-medium text-muted-foreground">{BRAND.tagline}</span>
         )}

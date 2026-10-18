@@ -2,8 +2,8 @@ import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 /**
- * Encabezado de página: una línea pequeña de contexto, el título en el serif
- * de display, una frase que explica la página y las acciones a la derecha
+ * Encabezado de página: una línea pequeña de contexto, el título en la letra
+ * de titulares, una frase que explica la página y las acciones a la derecha
  * (que bajan a su propia línea en pantallas angostas).
  */
 export function PageHeader({

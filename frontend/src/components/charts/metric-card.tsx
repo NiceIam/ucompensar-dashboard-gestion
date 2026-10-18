@@ -11,7 +11,7 @@ interface MetricCardProps {
   className?: string
 }
 
-/** Cifra sola dentro de un widget: etiqueta, número grande en el serif y cambio opcional. */
+/** Cifra sola dentro de un widget: etiqueta, número grande en la letra de cifras y cambio opcional. */
 export function MetricCard({ label, value, change, unit, className }: MetricCardProps) {
   const formattedValue = typeof value === "number" ? formatNumber(value) : value
   const trend = change === undefined ? null : change > 0 ? "up" : change < 0 ? "down" : "neutral"
@@ -20,7 +20,7 @@ export function MetricCard({ label, value, change, unit, className }: MetricCard
     <div className={cn("space-y-1.5", className)}>
       <p className="text-sm font-medium text-muted-foreground">{label}</p>
       <div className="flex items-end gap-2">
-        <span className="font-display text-[40px] font-semibold leading-none tracking-tight">{formattedValue}</span>
+        <span className="font-display text-[40px] font-semibold leading-none tabular">{formattedValue}</span>
         {unit && <span className="mb-1 text-sm text-muted-foreground">{unit}</span>}
       </div>
       {change !== undefined && (

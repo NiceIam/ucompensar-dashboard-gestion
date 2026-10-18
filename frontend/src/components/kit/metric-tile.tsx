@@ -5,7 +5,7 @@ import { TONE, type Tone } from "@/components/kit/tone"
 import { cn } from "@/lib/utils"
 
 /**
- * Tarjeta de cifra: etiqueta, número grande en el serif y una línea que
+ * Tarjeta de cifra: etiqueta, número grande en la letra de cifras y una línea que
  * explica la cifra en lenguaje llano. El color solo aparece si hay algo que decir.
  */
 export function MetricTile({
@@ -42,7 +42,7 @@ export function MetricTile({
         </div>
       ) : (
         <div className="space-y-1">
-          <p className="font-display text-[34px] font-semibold leading-none tracking-tight">{value}</p>
+          <p className="font-display text-[34px] font-semibold leading-none tabular">{value}</p>
           {context && <p className="text-[13px] leading-snug text-muted-foreground">{context}</p>}
         </div>
       )}
