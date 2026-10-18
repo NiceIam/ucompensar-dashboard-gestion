@@ -16,7 +16,7 @@ const KIND_STYLE: Record<ColumnKind, string> = {
   money: "bg-success-soft text-success-strong",
   number: "bg-primary-soft text-primary-strong",
   text: "bg-secondary text-foreground/80",
-  boolean: "bg-highlight-soft text-highlight-strong",
+  boolean: "bg-secondary text-foreground/80",
   id: "bg-muted text-muted-foreground",
 }
 
@@ -39,7 +39,8 @@ export function ColumnPill({ column }: { column: ColumnLike }) {
       className="inline-flex max-w-full items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-xs font-medium"
       title={`${columnLabel(column)} · ${KIND_INFO[kind].label}`}
     >
-      <Icon className={cn("h-3.5 w-3.5 shrink-0", kind === "id" ? "text-muted-foreground" : "text-primary")} aria-hidden="true" />
+      {/* Icono en gris: con decenas de píldoras, el naranja dejaría de guiar la atención */}
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span className="truncate">{columnLabel(column)}</span>
     </span>
   )
