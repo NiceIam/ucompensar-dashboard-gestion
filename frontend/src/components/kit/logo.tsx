@@ -89,7 +89,7 @@ const UNIVERSITY_LOGO_RATIO = 1548 / 227
  */
 export function UniversityLogo({ height = 28, className }: { height?: number; className?: string }) {
   return (
-    <span className={cn("inline-flex shrink-0 rounded-lg dark:bg-white dark:px-2.5 dark:py-1.5", className)}>
+    <span className={cn("inline-flex w-fit shrink-0 rounded-lg dark:bg-white dark:px-2.5 dark:py-1.5", className)}>
       <Image
         src="/logo-ucompensar.png"
         alt={BRAND.institution}

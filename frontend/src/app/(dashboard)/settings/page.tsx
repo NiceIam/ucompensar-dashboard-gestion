@@ -52,7 +52,8 @@ function SettingsCard({
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-strong">
           <Icon className="h-5 w-5" aria-hidden="true" />
         </span>
-        <div className="min-w-0 flex-1">
+        {/* min-w: si no cabe junto a la insignia, la insignia baja de línea (no el título en columna) */}
+        <div className="min-w-[11rem] flex-1">
           <h2 className="font-display text-xl font-semibold leading-tight">{title}</h2>
           {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
         </div>
