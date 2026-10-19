@@ -34,7 +34,7 @@ El backend debe estar corriendo en `http://localhost:8000` para que el frontend 
 ### Estructura de Carpetas Clave
 
 - `src/app/(auth)/` — Login y registro (portada en dos paneles: marca y formulario)
-- `src/app/(dashboard)/` — App principal: inicio (`/`), datos y cargue (`/data`), tableros (`/dashboards`), configuración (`/settings`)
+- `src/app/(dashboard)/` — App principal: inicio (`/`), resumen de la semana (`/resumen`), datos y cargue (`/data`), tableros (`/dashboards`), configuración (`/settings`)
 - `src/lib/upload/` — Flujo de cargue: validación local, lectores CSV/JSON/XLSX sin dependencias, evaluación (¿revisar o guardar directo?), primer vistazo y máquina de estados
 - `src/hooks/` — Custom hooks que wrappean TanStack Query por dominio: `use-auth`, `use-files`, `use-dashboards`, `use-agents`, `use-etl`, `use-templates`, `use-floating-chat`
 - `src/lib/api.ts` — Cliente HTTP centralizado con `credentials:'include'` en todos los fetch; los tokens viven en cookies HttpOnly seteadas por el backend (`access_token` path=/, `refresh_token` path=/api/v1/auth/refresh). El frontend nunca toca tokens directamente.
@@ -94,6 +94,15 @@ Cada dominio tiene hooks en `src/hooks/` que siguen el mismo patrón:
 - Tablas con scroll horizontal: el contenedor con `overflow-x-auto` debe ser `relative`. Si no, los textos `sr-only` (posición absoluta) de la tabla escapan del recorte y ensanchan toda la página.
 - KPIs del tablero: la unidad la decide `src/lib/kpi.ts`. El signo $ solo aparece con una pista monetaria DEL DATO (`unit` explícita, icono de dinero o columna de origen de dinero), nunca por la etiqueta ("Total Ventas" con icono `Database` es un conteo de filas).
 - Columnas de índice (`Index`, `#`, `N°`, `Unnamed: 0`, `*_id`) son `id`: nunca se usan como medida en preguntas sugeridas ni en el primer vistazo.
+
+### Esta semana en tu negocio (hallazgos de plata)
+
+- `GET /api/v1/insights` (sin IA, cálculos exactos del servidor). Tipos en `src/types/insights.ts`, lógica pura en `src/lib/insights.ts` (formato por `unit`, orden por severidad, periodo, texto y enlace de WhatsApp) y hook `useInsights()` (`src/hooks/use-insights.ts`; clave `["insights"]`, se invalida junto con los datos en `use-data.ts`).
+- `percent` llega en escala 0-100. El dinero se muestra "$47,6 M" desde un millón y "$360.000" por debajo (sin espacio tras el $, igual que las frases del servidor).
+- `InsightCard` (`kit/insight-card.tsx`): severidad = tono + icono + palabra (Importante / Ojo / Dato), nunca solo color. Siempre trae «Ver cómo lo calculé» (pasos, hojas y filas usadas; los avisos `how.notes` se ven en la tarjeta, sin abrir nada). Responde al ANCHO DE LA TARJETA con container queries (`[@container(min-width:26rem)]:`), no al de la pantalla, porque con el chat abierto la tarjeta es angosta aunque la pantalla no lo sea.
+- Inicio: `InsightsSection` (top 3, maneja cargando / error / solo faltantes / vacío sin tumbar el resto) y `AskBox compact`. `/resumen`: todos los hallazgos, «Lo que te falta para ver más», compartir (WhatsApp, copiar, imprimir) y vista previa del mensaje.
+- Navegación: «Resumen de la semana» está en el menú lateral y en la barra inferior del celular; Configuración sale de esa barra (queda en el menú de la cuenta) vía `NavItem.mobile = false`.
+- Impresión (`@media print` en `globals.css` + clases `print:`): sin barra lateral, barra superior ni chat; el cálculo de cada hallazgo sale abierto (`data-print-open`); las tarjetas no se parten entre páginas; siempre en tema claro (`usePrintInLight` en `app-shell.tsx`).
 
 ### Widget / Dashboard System
 

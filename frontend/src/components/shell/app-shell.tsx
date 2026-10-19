@@ -214,13 +214,18 @@ function BottomNav() {
 function usePrintInLight() {
   useEffect(() => {
     const root = document.documentElement
+    let printing = false
     let wasDark = false
     const before = () => {
+      if (printing) return // algunos navegadores avisan dos veces: se recuerda el tema solo la primera
+      printing = true
       wasDark = root.classList.contains("dark")
       root.classList.remove("dark")
     }
     const after = () => {
+      printing = false
       if (wasDark) root.classList.add("dark")
+      wasDark = false
     }
     window.addEventListener("beforeprint", before)
     window.addEventListener("afterprint", after)
