@@ -408,6 +408,11 @@ async def send_message(
         for chart in result["charts"]:
             ai_response += f"\n```chart\n{json.dumps(chart, ensure_ascii=False)}\n```"
 
+    # Tableros creados en este mensaje: el bloque (con el id) lo arma SOLO el servidor; cualquier bloque
+    # equivalente escrito por el modelo ya se descarto en process_with_gemini.
+    for board in result.get("dashboards") or []:
+        ai_response += f"\n```dashboard\n{json.dumps(board, ensure_ascii=False)}\n```"
+
     # Guardar respuesta del asistente
     assistant_msg_id = str(uuid.uuid4())
     completed_at = datetime.now(timezone.utc)

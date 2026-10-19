@@ -5,6 +5,8 @@ process_with_gemini conversa con Gemini y le da herramientas de SOLO LECTURA que
 1. describe_table: perfil de una tabla (tipos, valores frecuentes, rangos)
 2. query_table: consulta declarativa (filtros, agrupacion, agregados) calculada en SQL por data_query_engine
 3. create_chart: grafico calculado en el servidor; sus datos van al usuario y NO pasan por el modelo
+4. create_dashboard (SOLO en turnos donde el usuario pide un tablero): crea un tablero nuevo guardando cada
+   grafico como ESPECIFICACION que el motor recalcula al abrirlo; el modelo nunca edita ni borra tableros
 
 El prompt NO lleva datos: instrucciones estaticas + catalogo compacto de la org (con el rango de fechas de cada
 columna de fecha, calculado al cargar datos) + la fecha de hoy; las cifras salen siempre de las herramientas.
@@ -23,10 +25,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from functools import lru_cache
-from typing import Literal, Optional
+from typing import Literal, Optional, Required, TypedDict
 
 from app.config import get_settings
 from app.database import get_org_pool, get_main_pool
+from app.services import chart_specs
+from app.services import dashboard_builder_service as builder
 from app.services import data_query_engine as engine
 
 logger = logging.getLogger(__name__)
@@ -471,10 +475,11 @@ _CATALOG_MAX_EXTRA_NAMES = 60
 # Rangos de fecha por tabla en el catalogo: los de las primeras columnas de fecha (cada uno cuesta ~25 caracteres).
 _CATALOG_MAX_RANGES = 4
 _CHART_BLOCK = re.compile(r"```chart\s*\n.*?\n```", re.DOTALL)
+_DASHBOARD_BLOCK = re.compile(r"```dashboard\s*\n(.*?)\n```", re.DOTALL)
 # Para el texto del MODELO, mas amplio: ``` + "chart" (cualquier mayuscula, con espacios) hasta el cierre o,
 # si quedo abierto, hasta el final. Un bloque abierto se "comeria" el grafico real que chat_service agrega
 # despues (el frontend tomaria el primer ``` de ese grafico como cierre y dibujaria el bloque inventado).
-_MODEL_CHART_BLOCK = re.compile(r"(?is)```\s*chart(?:.*?```|.*\Z)")
+_MODEL_CHART_BLOCK = re.compile(r"(?is)```\s*(?:chart|dashboard)(?:.*?```|.*\Z)")
 
 # Va PRIMERO y no cambia entre organizaciones ni mensajes: prefijo estable (cacheable de forma implicita
 # por Gemini cuando la peticion supera su minimo de tokens).
@@ -567,16 +572,64 @@ def _strip_model_charts(text: str) -> tuple[str, bool]:
         text, found = cleaned, True
 
 
-def _system_prompt(org_name: str, catalog: dict, today: date) -> str:
+# Solo se agrega en turnos donde se declara create_dashboard (va despues de "Hoy": el prefijo estable no cambia).
+_DASHBOARD_INSTRUCTIONS = (
+    "\nTableros: create_dashboard crea un tablero NUEVO y guardado (nunca edita ni borra) con 3 a 6 gráficos o cifras. "
+    "Úsalo solo si piden un tablero o ver/seguir algo de forma continua; una pregunta puntual se responde con las "
+    "herramientas de consulta. Si falta tabla o medida clara, pregunta. No escribas enlaces ni bloques ```dashboard."
+)
+
+_DASHBOARD_INTENT = re.compile(
+    r"\b(?:tablero|tableros|dashboard|dashboards|panel|paneles|cuadro de mando|monitorear|monitoreo|seguimiento|"
+    r"(?:quiero|quisiera|necesito|deseo|queremos|me gustaria)\s+(?:ver|seguir|tener|llevar)|"
+    r"como\s+(?:van|vienen|andan|me va|nos va)|"
+    r"guarda(?:r|me|lo|la)?\s+(?:esta |este |la |el |una |un )?(?:grafic\w*|reporte|informe))\b"
+)
+
+
+def _fold(text: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode().lower()
+
+
+def _wants_dashboard(user_message: str, chat_history: list[dict] | None = None) -> bool:
+    """Gating por INTENCION del usuario: la herramienta que escribe solo se declara si este mensaje pide un
+    tablero (o ver/seguir algo de forma continua). Texto de una celda o de un mensaje viejo no la habilita.
+    Unica excepcion: el usuario responde a una pregunta aclaratoria del asistente sobre un pedido de tablero."""
+    if _DASHBOARD_INTENT.search(_fold(user_message)):
+        return True
+    history = [m for m in (chat_history or []) if isinstance(m, dict)]
+    if len(history) >= 2 and history[-1].get("role") != "user" and history[-2].get("role") == "user":
+        last = _CHART_BLOCK.sub("", str(history[-1].get("content") or "")).strip()
+        return last.endswith("?") and bool(_DASHBOARD_INTENT.search(_fold(history[-2].get("content") or "")))
+    return False
+
+
+def _system_prompt(org_name: str, catalog: dict, today: date, dashboard_tool: bool = False) -> str:
     # La fecha va despues de lo estatico y del catalogo: el prefijo estable (cacheable) no cambia cada dia.
-    return f"{_STATIC_INSTRUCTIONS}\n\n{_catalog_prompt(org_name, catalog)}\nHoy: {today.isoformat()}."
+    prompt = f"{_STATIC_INSTRUCTIONS}\n\n{_catalog_prompt(org_name, catalog)}\nHoy: {today.isoformat()}."
+    return prompt + _DASHBOARD_INSTRUCTIONS if dashboard_tool else prompt
+
+
+def _history_text(content) -> str:
+    """Texto de un mensaje para el historial: los bloques con datos no se reenvian (cuestan tokens y no son
+    instrucciones). Un tablero creado queda como `[tablero creado: titulo]`: el modelo sabe que existe, sin ids."""
+    def dashboard(match) -> str:
+        try:
+            name = chart_specs.sanitize_title(json.loads(match.group(1)).get("name"), 60, "")
+        except (ValueError, AttributeError, TypeError):
+            name = ""
+        return f"[tablero creado: {name}]" if name else "[tablero creado]"
+
+    text = _DASHBOARD_BLOCK.sub(dashboard, str(content or ""))
+    return _CHART_BLOCK.sub("[gráfico]", text).strip()
 
 
 def _history_contents(chat_history, genai_types) -> list:
     """Ultimos N mensajes, solo texto y truncados. Los bloques ```chart (JSON con datos) no se reenvian."""
     contents = []
     for msg in (chat_history or [])[-_HISTORY_MESSAGES:]:
-        text = _CHART_BLOCK.sub("[gráfico]", str(msg.get("content") or "")).strip()
+        text = _history_text(msg.get("content"))
         if not text:
             continue
         if len(text) > _HISTORY_MESSAGE_CHARS:
@@ -592,16 +645,9 @@ def _history_contents(chat_history, genai_types) -> list:
 
 _MAX_CALLS_PER_ROUND = 6
 _MAX_CHARTS = 3
-_CHART_COLORS = {"bar": "#3b82f6", "line": "#10b981", "pie": "#8b5cf6"}
-_CHART_MAX_POINTS = {"bar": 20, "line": 60, "pie": 10}
-# Una torta muestra partes de un total: solo con agregados que se suman, y si hay mas categorias que
-# porciones, las sobrantes van a "Otros" (recortarlas haria que las porciones visibles sumaran 100%).
-_PIE_AGGS = ("count", "sum")
-_AGG_TITLES = {
-    "count": "Cantidad", "count_distinct": "Distintos de {c}", "sum": "Suma de {c}",
-    "avg": "Promedio de {c}", "min": "Mínimo de {c}", "max": "Máximo de {c}",
-}
-_BUCKET_TITLES = {"day": "día", "week": "semana", "month": "mes", "year": "año"}
+# El calculo de graficos vive en chart_specs (lo comparten el chat, los tableros y las sugerencias).
+_CHART_COLORS = chart_specs.CHART_COLORS
+_chart = chart_specs.build_chart
 
 
 @dataclass(frozen=True)
@@ -611,80 +657,30 @@ class _Limits:
     describe_columns: int = engine.DESCRIBE_MAX_COLUMNS
 
 
-def _chart_number(value) -> int | float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    if not math.isfinite(number):
-        return None
-    if isinstance(value, Decimal) and value == value.to_integral_value() and abs(number) < 1e15:
-        return int(value)
-    return int(number) if number == int(number) and abs(number) < 1e15 else round(number, 2)
+class WidgetSpec(TypedDict, total=False):
+    # Un grafico o cifra del tablero. SIN docstring: el SDK lo copiaria a la declaracion (cada caracter cuesta
+    # tokens en cada llamada del mensaje).
+    table: Required[str]
+    chart_type: Required[Literal["bar", "line", "pie", "kpi"]]
+    x: str
+    y: str
+    filters: list[list[str]]
+    top: int
 
 
-def _chart_title(key, agg) -> str:
-    what = _AGG_TITLES[agg.fn].format(c=agg.col.name if agg.col else "")
-    by = f"{_BUCKET_TITLES[key.bucket]} de {key.col.name}" if key.bucket else key.col.name
-    return f"{what} por {by}"
+@dataclass
+class _DashboardState:
+    """Tableros creados en UN mensaje. `reserved` se marca ANTES del primer await: varias llamadas en paralelo
+    no pueden crear mas de uno por mensaje."""
+    limits: builder.Limits
+    reserved: bool = False
+    created: list = None
+
+    def __post_init__(self) -> None:
+        self.created = []
 
 
-async def _chart(pool, table, kind: str, x: str, y: str, filters, title) -> tuple[dict, dict]:
-    """Datos del grafico con el mismo motor de query_table. Devuelve (grafico para el frontend, respuesta al modelo)."""
-    points = _CHART_MAX_POINTS[kind]
-    spec = {"filters": filters, "group_by": [x], "aggregates": [y or "count"], "limit": points, "max_rows": points}
-    plan = engine.build_plan(table, **spec)
-    key, agg = plan.keys[0], plan.aggs[0]
-    if agg.mode in (engine.KIND_TEXT, engine.KIND_DATE):
-        raise engine.QueryError("y debe ser numérico: count o sum|avg|min|max de una columna numérica")
-    if kind == "line" and not key.bucket:
-        plan = engine.build_plan(table, **spec, order_by=[key.label])     # una linea va en orden de x
-    plans = [plan]
-    if kind == "pie":
-        if agg.fn not in _PIE_AGGS:
-            raise engine.QueryError("pie solo con count o sum (partes de un total); usa bar")
-        plans.append(engine.build_plan(table, filters=filters, aggregates=[y or "count"], max_rows=1))
-        if agg.fn == "sum":
-            # El menor valor de TODOS los grupos: un negativo escondido en "Otros" tambien invalida la torta.
-            plans.append(engine.build_plan(table, filters=filters, group_by=[x], aggregates=[y],
-                                           order_by=[agg.label], limit=1, max_rows=1))
-    results = await engine.run_plans(pool, plans)
-    if kind == "pie" and agg.fn == "sum" and results[2].rows and (results[2].rows[0][1] or 0) < 0:
-        raise engine.QueryError("pie no admite valores negativos; usa bar")
-    result = results[0]
-    rows = result.rows
-    others = None
-    if kind == "pie" and result.total > len(rows):
-        rows = rows[: points - 1]
-        grand = results[1].rows[0][0] if results[1].rows else None
-        shown = sum((v for _, v in rows if v is not None), 0)
-        others = (grand or 0) - shown
-    data = []
-    for label, value in rows:
-        number = _chart_number(value)
-        if number is not None:
-            data.append({"name": engine.cell(label, 30) if label is not None else "(sin dato)", "value": number})
-    if others is not None and _chart_number(others):
-        data.append({"name": f"Otros ({result.total - len(rows)})", "value": _chart_number(others)})
-    if not data:
-        raise engine.QueryError("sin datos para graficar con esos filtros")
-    if kind == "pie" and any(point["value"] < 0 for point in data):
-        raise engine.QueryError("pie no admite valores negativos; usa bar")
-    chart = {
-        "type": kind,
-        "title": engine.cell(title if isinstance(title, str) and title.strip() else _chart_title(key, agg), 80),
-        "data": data,
-        "x": "name",
-        "y": "value",
-        "color": _CHART_COLORS[kind],
-    }
-    out = {"ok": True, "puntos": len(data)}
-    if result.total > len(result.rows) or others is not None:
-        out["de"] = result.total
-    return chart, out
-
-
-def _build_tools(pool, catalog: dict, charts: list, limits: _Limits) -> dict:
+def _build_tools(pool, catalog: dict, charts: list, limits: _Limits, dashboards: "_DashboardState | None" = None) -> dict:
     """Herramientas de UNA peticion. pool y catalogo son los de la org autenticada (closure): el modelo
     no puede elegir otra org, y la declaracion que genera el SDK no tiene ningun parametro de org."""
 
@@ -740,25 +736,47 @@ def _build_tools(pool, catalog: dict, charts: list, limits: _Limits) -> dict:
         slot.update(chart)
         return out
 
-    return {fn.__name__: fn for fn in (describe_table, query_table, create_chart)}
+    async def create_dashboard(title: str, widgets: list[WidgetSpec]) -> dict:
+        """Crea un tablero NUEVO (máx. 6 gráficos); el servidor calcula los datos, no pasan por ti. widgets: table, chart_type bar|line|pie|kpi, x (col o month(col); no en kpi), y (count o sum|avg|min|max(col); pie: count|sum), filters como query_table, top (N categorías)."""
+        if dashboards.reserved:
+            raise engine.QueryError("máximo 1 tablero por mensaje")
+        dashboards.reserved = True       # antes del primer await: llamadas en paralelo no pasan del tope
+        try:
+            created, omitted = await builder.build_dashboard(
+                pool, catalog, title, widgets, source="assistant", limits=dashboards.limits,
+            )
+        except BaseException:
+            dashboards.reserved = False  # nada se guardo: el modelo puede corregir y reintentar
+            raise
+        dashboards.created.append(created)
+        out = {"ok": True, "tablero": created["name"], "graficos": created["widgets"]}
+        if created["existing"]:
+            out["ya_existia"] = True
+        if omitted:
+            out["omitidos"] = omitted[:3]
+        return out
+
+    tools = (describe_table, query_table, create_chart) + ((create_dashboard,) if dashboards is not None else ())
+    return {fn.__name__: fn for fn in tools}
 
 
-@lru_cache(maxsize=1)
-def _cached_declarations() -> tuple:
+@lru_cache(maxsize=2)
+def _cached_declarations(with_dashboard: bool = False) -> tuple:
     """FunctionDeclarations generadas por el SDK desde las funciones Python (firma + docstring).
 
-    Se generan una vez: no dependen de la org (el closure no cambia la firma)."""
+    Se generan una vez por variante: no dependen de la org (el closure no cambia la firma)."""
     from google.genai import types as genai_types
 
-    tools = _build_tools(None, {}, [], _Limits(1, 1))
+    state = _DashboardState(builder.Limits()) if with_dashboard else None
+    tools = _build_tools(None, {}, [], _Limits(1, 1), state)
     return tuple(
         genai_types.FunctionDeclaration.from_callable_with_api_option(callable=fn, api_option="GEMINI_API")
         for fn in tools.values()
     )
 
 
-def _tool_declarations() -> list:
-    return [d.model_copy(deep=True) for d in _cached_declarations()]
+def _tool_declarations(with_dashboard: bool = False) -> list:
+    return [d.model_copy(deep=True) for d in _cached_declarations(with_dashboard)]
 
 
 _QUERY_CANCELED = "57014"   # SQLSTATE query_canceled (statement_timeout)
@@ -807,6 +825,7 @@ class _Usage:
         self.rounds = 0
         self.tools: list[str] = []
         self.tool_errors = 0
+        self.dashboard_tool = False       # se declaro create_dashboard en este mensaje
         self.prompt = self.output = self.thoughts = self.cached = self.total = 0
 
     def add(self, response) -> None:
@@ -835,6 +854,7 @@ class _Usage:
             "cached_tokens": self.cached,
             "total_tokens": self.total,
             "latency_ms": int((time.monotonic() - started) * 1000),
+            "dashboard_tool": self.dashboard_tool,
         }
 
 
@@ -870,9 +890,9 @@ async def _run_round(calls, tools: dict, deadline: float, usage: _Usage, genai_t
     async def run(i, call):
         if i >= _MAX_CALLS_PER_ROUND:
             return {"error": f"máximo {_MAX_CALLS_PER_ROUND} llamadas por ronda; repite las demás después"}
-        # create_chart no gasta presupuesto: su respuesta al modelo es solo {ok, puntos} (los datos van al
-        # usuario), asi que bloquearlo no ahorraria tokens y quitaria el grafico pedido.
-        if budget.left <= 0 and call.name != "create_chart":
+        # create_chart / create_dashboard no gastan presupuesto: su respuesta al modelo es solo {ok, ...} (los
+        # datos van al usuario), asi que bloquearlos no ahorraria tokens y quitaria lo pedido.
+        if budget.left <= 0 and call.name not in ("create_chart", "create_dashboard"):
             return {"error": _BUDGET_EXHAUSTED}
         return await _execute_call(call, tools)
 
@@ -954,7 +974,7 @@ def _result_markdown(text: str) -> str:
 def _direct_answer(calls, parts) -> str | None:
     """Texto determinista con lo que dieron las llamadas pendientes (ya ejecutadas), o None si no hay nada util
     (todas fallaron, o solo fueron describe_table: eso no responde la pregunta)."""
-    blocks, failed, charts = [], 0, 0
+    blocks, failed, charts, boards = [], 0, 0, []
     for call, part in zip(calls, parts):
         response = part.function_response.response or {}
         if "error" in response:
@@ -963,9 +983,12 @@ def _direct_answer(calls, parts) -> str | None:
             blocks.append(f"{_query_summary(dict(call.args or {}))}\n\n{_result_markdown(response['result'])}")
         elif call.name == "create_chart" and response.get("ok"):
             charts += 1
-    if not blocks and not charts:
+        elif call.name == "create_dashboard" and response.get("ok"):
+            boards.append(chart_specs.sanitize_title(response.get("tablero"), 60))
+    if not blocks and not charts and not boards:
         return None
     out = [_DIRECT_HEADER] + blocks
+    out += [f"Se creó el tablero «{name}» con tus datos." for name in boards]
     if charts:
         out.append(
             "Se generó 1 gráfico con los datos pedidos." if charts == 1
@@ -1034,10 +1057,10 @@ def _log_usage(outcome: str, usage: _Usage, started: float) -> None:
     data = usage.as_dict(started)
     logger.info(
         "Chat IA: resultado=%s llamadas=%d rondas=%d herramientas=%s errores_herramienta=%d "
-        "tokens prompt=%d salida=%d razonamiento=%d cache=%d total=%d latencia_ms=%d",
+        "tokens prompt=%d salida=%d razonamiento=%d cache=%d total=%d latencia_ms=%d tablero_herramienta=%s",
         outcome, data["model_calls"], data["tool_rounds"], ",".join(data["tools"]) or "-",
         data["tool_errors"], data["prompt_tokens"], data["output_tokens"], data["thoughts_tokens"],
-        data["cached_tokens"], data["total_tokens"], data["latency_ms"],
+        data["cached_tokens"], data["total_tokens"], data["latency_ms"], "si" if data["dashboard_tool"] else "no",
     )
 
 
@@ -1055,7 +1078,9 @@ async def process_with_gemini(
     Retorna: {
         "text": str (respuesta del agente),
         "charts": list[dict] (gráficos Recharts calculados en el servidor con create_chart),
-        "actions": list[str] (acciones realizadas; siempre vacia: las herramientas son de solo lectura),
+        "dashboards": list[dict] ({id, name, widgets, existing} de los tableros creados con create_dashboard;
+            tambien en el camino de fallo: si el tablero se creo y luego Gemini fallo, el usuario lo ve),
+        "actions": list[str] (acciones realizadas; siempre vacia: lo creado va en `dashboards`),
         "usage": dict (tokens, rondas, herramientas y latencia de este mensaje; no se persiste),
         "fallback_reason": str (solo si Gemini fallo),
         "final_round_direct": True (solo si, agotadas las rondas, el modelo siguio pidiendo herramientas: el
@@ -1089,7 +1114,19 @@ async def process_with_gemini(
     usage = _Usage()
     charts: list[dict] = []
     outcome = "ok"
+    dashboards: _DashboardState | None = None
     try:
+        # La herramienta que ESCRIBE solo se declara si el usuario pidio un tablero (gating por intencion) y
+        # aun hay cupo; cualquier falla al comprobarlo la deja sin declarar (nunca tumba el mensaje).
+        if (
+            getattr(settings, "CHAT_DASHBOARD_TOOL_ENABLED", False)
+            and any(t.rows > 0 for t in catalog.values())
+            and _wants_dashboard(user_message, chat_history)
+        ):
+            dash_limits = builder.limits_from_settings(settings)
+            if await builder.has_room(pool, dash_limits):
+                dashboards = _DashboardState(dash_limits)
+                usage.dashboard_tool = True
         from google import genai
         from google.genai import types as genai_types
 
@@ -1107,10 +1144,10 @@ async def process_with_gemini(
             chars=min(_int_setting(settings, "CHAT_TOOL_MAX_CHARS", 3000, 20000), total_chars),
             describe_columns=_int_setting(settings, "CHAT_DESCRIBE_MAX_COLUMNS", engine.DESCRIBE_MAX_COLUMNS, 40),
         )
-        tools = _build_tools(pool, catalog, charts, limits)
+        tools = _build_tools(pool, catalog, charts, limits, dashboards)
         config = genai_types.GenerateContentConfig(
-            system_instruction=_system_prompt(org_name, catalog, _today_co()),
-            tools=[genai_types.Tool(function_declarations=_tool_declarations())],
+            system_instruction=_system_prompt(org_name, catalog, _today_co(), dashboards is not None),
+            tools=[genai_types.Tool(function_declarations=_tool_declarations(dashboards is not None))],
             # Bucle manual: el SDK no ejecuta nada por su cuenta (ademas solo recibe declaraciones).
             automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
             max_output_tokens=_int_setting(settings, "GEMINI_CHAT_MAX_OUTPUT_TOKENS", 2048, 8192),
@@ -1151,11 +1188,12 @@ async def process_with_gemini(
         if had_chart:
             logger.warning("El modelo escribio un bloque chart en el texto; se descarta")
         text = text.strip()
-        if not text and not charts:
+        made = list(dashboards.created) if dashboards else []
+        if not text and not charts and not made:
             raise _GeminiUnusableResponse(_empty_response_kind(response))
 
         charts = [c for c in charts if c]   # un cupo reservado que no llego a llenarse no se envia
-        result = {"text": text, "charts": charts, "actions": [], "usage": usage.as_dict(started)}
+        result = {"text": text, "charts": charts, "dashboards": made, "actions": [], "usage": usage.as_dict(started)}
         if direct:
             outcome = "final_direct"
             result["final_round_direct"] = True
@@ -1181,6 +1219,8 @@ async def process_with_gemini(
         return {
             "text": fallback_text,
             "charts": [],
+            # Un tablero ya guardado no se pierde porque la llamada final a Gemini fallara.
+            "dashboards": list(dashboards.created) if dashboards else [],
             "actions": [],
             "fallback_reason": kind,
             "usage": usage.as_dict(started),
