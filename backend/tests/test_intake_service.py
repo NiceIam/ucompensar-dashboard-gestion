@@ -259,6 +259,13 @@ class TestEmparejamientoSeguro:
         r = await intake.analyze_uploads(ORG_A, [csv_up("inventario.csv", INVENTARIO_CSV)])
         assert sheets_of(r)[0]["destination"]["action"] == "create"
 
+    async def test_mismas_columnas_pero_el_nombre_del_archivo_dice_otra_clase_no_se_suman(self, dbs):
+        cols = "Fecha,Producto,Cantidad,Total\n2026-05-02,Gasas,3,4500\n"
+        await analyze_and_commit(ORG_A, lambda: [csv_up("ventas.csv", cols)])
+        proposal = await intake.analyze_uploads(ORG_A, [csv_up("compras.csv", cols.replace("Gasas", "Tela"))])
+        s = sheets_of(proposal)[0]
+        assert s["kind"] == "compras" and s["destination"]["action"] == "create"
+
     async def test_datos_sin_tipo_solo_se_suman_con_exactamente_las_mismas_columnas(self, dbs):
         base = "Nombre,Cargo,Salario\nAna,Cajera,1500000\n"
         await analyze_and_commit(ORG_A, lambda: [csv_up("empleados.csv", base)])
@@ -420,8 +427,9 @@ class TestCommit:
     async def test_commit_nunca_llama_al_modelo(self, dbs, _env):
         _env.GOOGLE_API_KEY = "AIzaSyFAKEKEYFAKEKEYFAKEKEYFAKEKEY12345"
         plan = [{"file_name": "hoja.csv", "sheet_name": None, "action": "create", "display_name": "Mi hoja"}]
-        with patch("google.genai.Client", side_effect=AssertionError("commit no debe usar el modelo")):
+        with patch("google.genai.Client") as ctor:
             done = await intake.commit_uploads(ORG_A, [csv_up("hoja.csv", TestAgenteConModelo.GENERICA)], plan)
+        ctor.assert_not_called()          # un side_effect lo taparia el respaldo determinista: se verifica que ni se construya
         assert done["results"][0]["status"] == "created" and done["results"][0]["display_name"] == "Mi hoja"
 
     async def test_falla_de_una_hoja_no_tumba_a_las_demas_y_no_deja_tabla_huerfana(self, dbs):
@@ -527,8 +535,9 @@ class TestCorregirRoles:
         tid = await self._hoja_generica(dbs)
         await intake.update_table_roles(ORG_A, tid, {"c1": "fecha", "c2": "producto", "c3": "cantidad", "c4": "total"}, "ventas")
         _env.GOOGLE_API_KEY = "AIzaSyFAKEKEYFAKEKEYFAKEKEYFAKEKEY12345"
-        with patch("google.genai.Client", side_effect=AssertionError("no debe llamar al modelo")):
+        with patch("google.genai.Client") as ctor:
             r = await intake.analyze_uploads(ORG_A, [csv_up("hoja_nueva.csv", TestAgenteConModelo.GENERICA)])
+        ctor.assert_not_called()
         s = sheets_of(r)[0]
         assert s["kind"] == "ventas" and s["mapping_source"] == "user" and s["needs_review"] is False
         assert [c["role"] for c in s["columns"]] == ["fecha", "producto", "cantidad", "total"]
@@ -539,8 +548,9 @@ class TestCorregirRoles:
         await intake.update_table_roles(ORG_A, tid, {"c4": "total"}, "ventas")
         ai.clear_memory_cache()
         _env.GOOGLE_API_KEY = "AIzaSyFAKEKEYFAKEKEYFAKEKEYFAKEKEY12345"
-        with patch("google.genai.Client", side_effect=AssertionError("no debe llamar al modelo")):
+        with patch("google.genai.Client") as ctor:
             s = sheets_of(await intake.analyze_uploads(ORG_A, [csv_up("n.csv", TestAgenteConModelo.GENERICA)]))[0]
+        ctor.assert_not_called()
         assert [c["role"] for c in s["columns"]][3] == "total"
 
     async def test_rol_repetido_se_rechaza_con_mensaje_humano(self, dbs):

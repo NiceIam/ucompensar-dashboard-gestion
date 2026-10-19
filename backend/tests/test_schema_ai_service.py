@@ -48,6 +48,12 @@ def profiles(data: dict):
         return intake.prepare_sheet(pd.DataFrame(data)).profiles
 
 
+def su_profile(sample):
+    from app.services import schema_understanding as su
+
+    return su.ColumnProfile(index=0, original="H" * 300, clean="h", sample=sample)
+
+
 GENERICA = {"C1": ["2026-05-02", "2026-05-03"], "C2": ["Gasas", "Jeringas"], "C3": [3, 2], "C4": [1500, 800]}
 CLARA = {"Fecha": ["2026-05-02", "2026-05-03"], "Producto": ["Gasas", "Jeringas"], "Cantidad": [3, 2],
          "Precio Unitario": [1500, 800], "Total": [4500, 1600]}
@@ -141,6 +147,12 @@ class TestUnaLlamadaPorHojaAmbigua:
         for col in sent["columnas"]:
             assert set(col) <= {"i", "h", "m"} and len(col["m"]) <= 5 and all(len(v) <= 40 for v in col["m"])
         assert len(fake.generate.await_args.kwargs["contents"]) < 2500        # nunca el archivo completo
+
+    def test_el_payload_acota_celdas_y_muestras_aunque_el_perfil_traiga_mas(self):
+        p = su_profile(["x" * 300 + str(i) for i in range(30)])
+        sent = json.loads(ai.build_payload("h" * 300, [p]))
+        assert len(sent["hoja"]) <= 60 and len(sent["columnas"][0]["m"]) == 5
+        assert all(len(v) <= 40 for v in sent["columnas"][0]["m"]) and len(sent["columnas"][0]["h"]) <= 60
 
     async def test_no_mas_de_cuarenta_columnas(self):
         wide = {f"c{i}": [i] for i in range(70)}
