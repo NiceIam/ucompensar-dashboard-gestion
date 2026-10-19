@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from app.auth import CurrentUserDep
@@ -26,6 +26,17 @@ from app.services.dashboard_service import (
 )
 
 router = APIRouter(prefix="/api/v1/dashboards", tags=["Dashboards"])
+
+# Quien borra tableros. Crear (por chat o sugerencias) lo puede hacer cualquier miembro; borrar, solo
+# owner/admin (los tableros son de toda la organizacion y no tienen dueno propio).
+_DELETE_ROLES = ("owner", "admin")
+
+
+def _require_delete_role(current_user) -> None:
+    if current_user.role not in _DELETE_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Solo el propietario o un administrador puede eliminar tableros."
+        )
 
 
 @router.post(
@@ -101,6 +112,7 @@ async def patch(
     summary="Soft delete del dashboard",
 )
 async def delete(dashboard_id: str, current_user: CurrentUserDep) -> MessageResponse:
+    _require_delete_role(current_user)
     await soft_delete_dashboard(dashboard_id, current_user.org_id)
     return MessageResponse(message="Dashboard eliminado correctamente.")
 
