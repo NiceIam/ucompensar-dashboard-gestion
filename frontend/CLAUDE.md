@@ -91,6 +91,9 @@ Cada dominio tiene hooks en `src/hooks/` que siguen el mismo patrón:
   - Reglas: cifras siempre lining (nunca de estilo antiguo); `tabular` (tabular-nums) en tablas, ejes y KPIs; texto con espaciado normal e interlineado 1,55; el espaciado negativo de `.font-display` solo aparece en tamaños grandes (> 20 px) y crece con el tamaño. No usar `tracking-tight` en textos pequeños.
 - Componentes propios en `src/components/kit/` (encabezado, cifra, frase de dato, avisos, pasos, estados vacíos, zona de arrastre…). Textos de cara al usuario: español, tuteo, sin jerga técnica; todo error pasa por `humanizeError`.
 - Rejillas con `auto-grid` (se adaptan al ancho disponible, también con el chat abierto).
+- Tablas con scroll horizontal: el contenedor con `overflow-x-auto` debe ser `relative`. Si no, los textos `sr-only` (posición absoluta) de la tabla escapan del recorte y ensanchan toda la página.
+- KPIs del tablero: la unidad la decide `src/lib/kpi.ts`. El signo $ solo aparece con una pista monetaria DEL DATO (`unit` explícita, icono de dinero o columna de origen de dinero), nunca por la etiqueta ("Total Ventas" con icono `Database` es un conteo de filas).
+- Columnas de índice (`Index`, `#`, `N°`, `Unnamed: 0`, `*_id`) son `id`: nunca se usan como medida en preguntas sugeridas ni en el primer vistazo.
 
 ### Widget / Dashboard System
 
