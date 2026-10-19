@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # Tableros por organizacion en 24 h (cuenta TAMBIEN los borrados: borrar y repetir no evade el tope) y en total.
     CHAT_DASHBOARD_DAILY_LIMIT: int = 10
     CHAT_DASHBOARD_MAX_TOTAL: int = 50
+    # Turnos con create_dashboard: razonamiento bajo (si GEMINI_THINKING_LEVEL no esta definido) y tope de tokens de
+    # salida mas ajustado (4 graficos son ~200 tokens de argumentos; el razonamiento descuenta de este tope).
+    DASHBOARD_THINKING_LEVEL: str = "low"
+    DASHBOARD_CHAT_MAX_OUTPUT_TOKENS: int = 1024
     # Presupuesto de tiempo (s) para validar los graficos de un tablero al crearlo y para calcularlos al abrirlo.
     DASHBOARD_CREATE_TIMEOUT_SECONDS: float = 10.0
     DASHBOARD_RENDER_TIMEOUT_SECONDS: float = 12.0

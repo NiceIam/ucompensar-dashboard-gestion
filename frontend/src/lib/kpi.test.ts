@@ -37,4 +37,10 @@ describe("unidad de los KPI del tablero", () => {
     expect(kpiUnit({ label: "Promedio", value: 3.75 })).toBe("number")
     expect(formatKpiValue({ label: "Promedio", value: Number.NaN })).toBe("—")
   })
+
+  test("una cifra que no se pudo calcular (null) se muestra como raya y no rompe la unidad", () => {
+    expect(formatKpiValue({ label: "Suma de total", value: null, unit: "money" })).toBe("—")
+    expect(kpiUnit({ label: "Suma de total", value: null, unit: "money" })).toBe("money")
+    expect(kpiUnit({ label: "Suma", value: null })).toBe("number")
+  })
 })

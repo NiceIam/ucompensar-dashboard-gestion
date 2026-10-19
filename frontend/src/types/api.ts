@@ -106,6 +106,8 @@ export interface WidgetConfig {
   height: 1 | 2
   position: number
   data?: Record<string, unknown>[]
+  /** Unidad de la medida (la manda el servidor): manda sobre cualquier adivinanza por el nombre de la columna. */
+  unit?: "money" | "count" | "number"
   created_at: string
 }
 
@@ -119,6 +121,13 @@ export interface Dashboard {
   widgets: WidgetConfig[]
   created_at: string
   updated_at: string
+  /** Solo en la lista (para la tarjeta). */
+  widget_count?: number | null
+  /** Quién lo creó: a pedido en el chat ("assistant"), sugerido con IA ("ai") o por regla ("rules"). */
+  source?: "assistant" | "ai" | "rules" | null
+  /** Vista previa guardada al crearlo: solo números, no son los datos de hoy. */
+  preview?: { type: "bar" | "line" | "pie"; points: number[] } | null
+  highlights?: string[] | null
 }
 
 export interface DashboardConfig {

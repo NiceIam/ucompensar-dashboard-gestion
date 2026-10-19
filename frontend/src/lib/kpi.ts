@@ -13,7 +13,8 @@ export type KpiUnit = "money" | "count" | "number"
 
 export interface KpiLike {
   label: string
-  value: number
+  /** null: la cifra no se pudo calcular (se muestra "—"). */
+  value: number | null
   icon?: string
   unit?: string
   column?: string
@@ -36,6 +37,7 @@ export function kpiUnit(kpi: KpiLike): KpiUnit {
 
 /** Valor del KPI listo para mostrar ("$ 48,3 M", "1.284", "40"). */
 export function formatKpiValue(kpi: KpiLike): string {
+  if (kpi.value === null || kpi.value === undefined) return "—"
   const v = Number(kpi.value)
   if (!Number.isFinite(v)) return "—"
   if (kpiUnit(kpi) === "money") return Math.abs(v) >= 1_000_000 ? formatMoney(v, { compact: true }) : formatMoney(v)

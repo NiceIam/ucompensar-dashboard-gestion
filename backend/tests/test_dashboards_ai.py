@@ -95,6 +95,40 @@ class TestDeclaracion:
         assert decls["create_dashboard"] <= 850
 
 
+class TestOptimizacionDeTokens:
+    async def test_turno_de_tablero_usa_razonamiento_bajo_y_tope_de_salida_ajustado(self, env, gemini):
+        seed(env)
+        await ask()
+        config = gemini.create.call_args.kwargs["config"]
+        assert config.thinking_config.thinking_level.name == "LOW"
+        assert config.max_output_tokens == 512
+
+    async def test_turno_normal_no_cambia(self, env, gemini):
+        seed(env)
+        await ask("cuanto vendi en total")
+        config = gemini.create.call_args.kwargs["config"]
+        assert config.thinking_config is None and config.max_output_tokens == 1024
+
+    async def test_si_el_admin_definio_el_razonamiento_se_respeta(self, env, gemini, settings_stub):
+        seed(env)
+        settings_stub.GEMINI_THINKING_LEVEL = "medium"
+        await ask()
+        assert gemini.create.call_args.kwargs["config"].thinking_config.thinking_level.name == "MEDIUM"
+
+    async def test_el_prompt_de_un_turno_de_tablero_es_corto_sin_datos_y_el_historial_no_trae_ids(self, env, gemini):
+        seed(env)
+        gemini.send.side_effect = [tablero(), text_response("Listo")]
+        await ask()
+        prompt = gemini.create.call_args.kwargs["config"].system_instruction
+        for private in ("Cemento", "Carlos Pinzon", "385000"):
+            assert private not in prompt
+        decl = sum(len(json.dumps(d.model_dump(exclude_none=True, mode="json"), ensure_ascii=False))
+                   for t in gemini.create.call_args.kwargs["config"].tools for d in t.function_declarations)
+        # entrada estimada de la 1.a llamada (caracteres/4): instrucciones + catalogo + herramientas, muy por
+        # debajo de las ~4.000 tokens de la meta (la real se mide con el script de validacion con Gemini)
+        assert (len(prompt) + decl) / 4 < 1600
+
+
 class TestGating:
     @pytest.mark.parametrize("message", [
         "creame un tablero de ventas por mes y por producto", "Quiero un DASHBOARD de clientes",

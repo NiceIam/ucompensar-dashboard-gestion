@@ -3,14 +3,11 @@
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useEffect, useState } from "react"
-import { toast } from "sonner"
 import {
   ArrowLeft,
   CircleDollarSign,
-  Code2,
   Database,
   Hash,
-  MoreHorizontal,
   RefreshCw,
   ShoppingCart,
   Sparkles,
@@ -20,17 +17,12 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { ChartRenderer } from "@/components/charts/chart-renderer"
 import { EmptyState, ErrorState } from "@/components/kit/empty-state"
 import { MetricTile } from "@/components/kit/metric-tile"
+import { Notice } from "@/components/kit/notice"
 import { ChartSkeleton, MetricRowSkeleton } from "@/components/kit/skeletons"
-import { useDashboardExecute, useDashboardMeta, useDownloadDashboardScript } from "@/hooks/use-dashboards"
+import { useDashboardExecute, useDashboardMeta, type ChartConfig } from "@/hooks/use-dashboards"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useChat } from "@/providers/chat-provider"
 import { humanizeError } from "@/lib/errors"
@@ -64,6 +56,38 @@ function useSecondsAgo(timestamp: number | undefined) {
   return `hace ${m} ${m === 1 ? "minuto" : "minutos"}`
 }
 
+/** Los gráficos del servidor ({ type, title, data, x, y, color, unit }) se adaptan al contrato WidgetConfig. */
+function toWidget(dashboardId: string, chart: ChartConfig, i: number): WidgetConfig {
+  return {
+    id: chart.id ?? `${dashboardId}-chart-${i}`,
+    dashboard_id: dashboardId,
+    title: chart.title,
+    chart_type: chart.type,
+    data_key: chart.y || "value",
+    x_key: chart.x || "name",
+    y_keys: [chart.y || "value"],
+    color: chart.color,
+    unit: chart.unit,
+    width: 2,
+    height: 1,
+    position: i,
+    data: chart.data,
+    created_at: new Date().toISOString(),
+  }
+}
+
+/** Un gráfico que no se pudo calcular: el resto del tablero sigue funcionando. */
+function ChartError({ title, message }: { title: string; message: string }) {
+  return (
+    <article className="surface flex h-full flex-col gap-3 p-5">
+      <h3 className="font-display text-lg font-semibold leading-snug">{title}</h3>
+      <Notice tone="warning" title="No pudimos calcular este gráfico">
+        {message}. Los demás gráficos de este tablero no se afectan.
+      </Notice>
+    </article>
+  )
+}
+
 export default function DashboardDetailPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
@@ -71,36 +95,12 @@ export default function DashboardDetailPage() {
 
   const { data: meta, isLoading: metaLoading } = useDashboardMeta(id)
   const { data, isLoading, isFetching, isError, error, updatedAt, refetch } = useDashboardExecute(id)
-  const downloadMutation = useDownloadDashboardScript()
   const ago = useSecondsAgo(updatedAt || undefined)
   usePageTitle(meta?.name ?? "Tablero")
 
-  // Los gráficos del script vienen como { type, title, data, x, y, color }: se adaptan al
-  // contrato WidgetConfig que entiende ChartRenderer (sin cambiar la API).
-  const widgets: WidgetConfig[] = (data?.charts ?? []).map((chart, i) => ({
-    id: `${id}-chart-${i}`,
-    dashboard_id: id,
-    title: chart.title,
-    chart_type: chart.type,
-    data_key: chart.y || "value",
-    x_key: chart.x || "name",
-    y_keys: [chart.y || "value"],
-    color: chart.color,
-    width: 2,
-    height: 1,
-    position: i,
-    data: chart.data,
-    created_at: new Date().toISOString(),
-  }))
-
-  async function download() {
-    try {
-      await downloadMutation.mutateAsync({ id })
-    } catch (err) {
-      const h = humanizeError(err, "download")
-      toast.error(h.title, { description: h.description })
-    }
-  }
+  const charts = data?.charts ?? []
+  const kpis = data?.kpis ?? []
+  const nothing = charts.length === 0 && kpis.length === 0
 
   return (
     <div className="space-y-8">
@@ -125,7 +125,7 @@ export default function DashboardDetailPage() {
               {isFetching && !isLoading && <span className="text-muted-foreground"> · Actualizando…</span>}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>
               <RefreshCw className={isFetching ? "animate-spin" : ""} aria-hidden="true" />
               Actualizar
@@ -134,19 +134,6 @@ export default function DashboardDetailPage() {
               <Sparkles aria-hidden="true" />
               Pregúntale
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Más opciones del tablero">
-                  <MoreHorizontal aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuItem onClick={() => void download()} className="cursor-pointer">
-                  <Code2 className="h-4 w-4" aria-hidden="true" />
-                  Descargar su código (avanzado)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </header>
       </div>
@@ -165,40 +152,56 @@ export default function DashboardDetailPage() {
         </div>
       ) : (
         <div className={isFetching ? "opacity-70 transition-opacity" : "transition-opacity"}>
-          {data?.kpis && data.kpis.length > 0 && (
+          {kpis.length > 0 && (
             <section aria-label="Cifras principales" className="auto-grid mb-6 gap-4 [--auto-grid-min:13rem]">
-              {data.kpis.map((kpi, i) => (
-                <MetricTile
-                  key={`${kpi.label}-${i}`}
-                  label={kpi.label}
-                  value={formatKpiValue(kpi)}
-                  icon={kpiIcon(kpi, kpiUnit(kpi))}
-                  // El naranja solo en la primera cifra: guía la atención sin saturar.
-                  tone={i === 0 ? "primary" : "neutral"}
-                />
-              ))}
+              {kpis.map((kpi, i) => {
+                const unit = kpiUnit(kpi)
+                return (
+                  <MetricTile
+                    key={`${kpi.id ?? kpi.label}-${i}`}
+                    label={kpi.label}
+                    value={formatKpiValue(kpi)}
+                    context={kpi.error ? `No pudimos calcular esta cifra: ${kpi.error}` : undefined}
+                    icon={kpiIcon(kpi, unit)}
+                    // El naranja solo en la primera cifra: guía la atención sin saturar.
+                    tone={kpi.error ? "warning" : i === 0 ? "primary" : "neutral"}
+                  />
+                )
+              })}
             </section>
           )}
 
-          {widgets.length === 0 ? (
+          {nothing ? (
             <div className="surface">
               <EmptyState
                 illustration="chart"
                 title="Este tablero todavía no tiene gráficos"
-                description="Puede pasar cuando aún no hay datos con fechas o cifras. Sube un archivo y vuelve a abrirlo."
+                description="Puede pasar cuando aún no hay datos con fechas o cifras. Sube un archivo y vuelve a abrirlo, o pídele al asistente que arme uno."
                 actions={
-                  <Button asChild>
-                    <Link href="/data">Ir a Mis datos</Link>
-                  </Button>
+                  <>
+                    <Button asChild>
+                      <Link href="/data">Ir a Mis datos</Link>
+                    </Button>
+                    <Button variant="soft" onClick={() => ask("Quiero un tablero con mis ventas por mes y por producto", { send: false })}>
+                      <Sparkles aria-hidden="true" />
+                      Pídele un tablero al asistente
+                    </Button>
+                  </>
                 }
               />
             </div>
           ) : (
-            <section aria-label="Gráficos" className="auto-grid gap-5 [--auto-grid-min:22rem]">
-              {widgets.map((widget) => (
-                <ChartRenderer key={widget.id} widget={widget} />
-              ))}
-            </section>
+            charts.length > 0 && (
+              <section aria-label="Gráficos" className="auto-grid gap-5 [--auto-grid-min:22rem]">
+                {charts.map((chart, i) =>
+                  chart.error ? (
+                    <ChartError key={`${chart.id ?? chart.title}-${i}`} title={chart.title} message={chart.error} />
+                  ) : (
+                    <ChartRenderer key={`${chart.id ?? chart.title}-${i}`} widget={toWidget(id, chart, i)} />
+                  )
+                )}
+              </section>
+            )
           )}
         </div>
       )}

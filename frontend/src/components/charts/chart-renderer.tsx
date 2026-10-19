@@ -88,8 +88,9 @@ function MultiSeries({ widget, unit }: { widget: WidgetConfig; unit: ChartUnit }
 export function ChartRenderer({ widget, className }: ChartRendererProps) {
   const { title, chart_type, data = [], x_key, y_keys } = widget
   const yKey = y_keys[0] ?? "value"
-  // Solo se muestra "$" si la columna medida tiene nombre de dinero (no se adivina por el título).
-  const unit: ChartUnit = isMoneyLike(yKey) ? "money" : "number"
+  // La unidad la decide el servidor (`widget.unit`, por la columna medida). Sin ella, solo se muestra "$" si la
+  // columna medida tiene nombre de dinero (no se adivina por el título).
+  const unit: ChartUnit = widget.unit ? (widget.unit === "money" ? "money" : "number") : isMoneyLike(yKey) ? "money" : "number"
 
   const body = () => {
     if (!data.length) return <EmptyChart />

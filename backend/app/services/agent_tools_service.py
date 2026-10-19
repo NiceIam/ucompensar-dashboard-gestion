@@ -1053,6 +1053,31 @@ def _thinking_config(settings, genai_types):
     return genai_types.ThinkingConfig(thinking_level=level)
 
 
+def _turn_settings(settings, dashboard_tool: bool):
+    """Ajustes de UN mensaje. En turnos con create_dashboard (que son los mas caros: catalogo + declaracion de la
+    herramienta + varios graficos de salida) el razonamiento es bajo y el tope de salida mas ajustado, salvo que
+    el administrador ya haya definido GEMINI_THINKING_LEVEL."""
+    if not dashboard_tool:
+        return settings
+    level = str(getattr(settings, "GEMINI_THINKING_LEVEL", "") or "").strip()
+    chat_cap = _int_setting(settings, "GEMINI_CHAT_MAX_OUTPUT_TOKENS", 2048, 8192)
+    cap = _int_setting(settings, "DASHBOARD_CHAT_MAX_OUTPUT_TOKENS", 1024, 8192)
+    update = {"GEMINI_CHAT_MAX_OUTPUT_TOKENS": min(chat_cap, cap)}
+    if not level:
+        update["GEMINI_THINKING_LEVEL"] = str(getattr(settings, "DASHBOARD_THINKING_LEVEL", "") or "")
+    return _SettingsView(settings, update)
+
+
+class _SettingsView:
+    """Lectura de Settings con algunos valores reemplazados para un mensaje (sin tocar el singleton)."""
+
+    def __init__(self, base, update: dict) -> None:
+        self._base, self._update = base, update
+
+    def __getattr__(self, name: str):
+        return self._update[name] if name in self._update else getattr(self._base, name)
+
+
 def _log_usage(outcome: str, usage: _Usage, started: float) -> None:
     data = usage.as_dict(started)
     logger.info(
@@ -1130,6 +1155,7 @@ async def process_with_gemini(
         from google import genai
         from google.genai import types as genai_types
 
+        settings = _turn_settings(settings, dashboards is not None)
         timeout_s = _gemini_timeout_seconds(settings)
         # HttpOptions.timeout va en MILISEGUNDOS (verificado en google-genai 2.24).
         client = genai.Client(
