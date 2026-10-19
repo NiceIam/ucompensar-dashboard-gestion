@@ -1,6 +1,6 @@
 "use client"
 
-import { Download, Eye, FileDown, MessageCircleQuestion, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { Download, Eye, FileDown, MessageCircleQuestion, MoreHorizontal, Pencil, SlidersHorizontal, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import { TableIcon } from "@/components/data/table-icon"
 import { StatusBadge } from "@/components/kit/status-badge"
 import type { OrgTable } from "@/hooks/use-templates"
 import { pluralize } from "@/lib/format"
+import { KIND_NAME, storedKind } from "@/lib/intake/plan"
 import { cn } from "@/lib/utils"
 
 const MAX_PILLS = 4
@@ -25,6 +26,7 @@ export function DataCard({
   onView,
   onAsk,
   onRename,
+  onFixRoles,
   onDelete,
   onDownloadTemplate,
   onExport,
@@ -34,12 +36,14 @@ export function DataCard({
   onView: () => void
   onAsk: () => void
   onRename: () => void
+  onFixRoles?: () => void
   onDelete: () => void
   onDownloadTemplate: () => void
   onExport: () => void
 }) {
   const cols = table.columns_definition ?? []
   const empty = table.row_count === 0
+  const kind = storedKind(cols)
   return (
     <article
       className={cn(
@@ -55,6 +59,13 @@ export function DataCard({
           <p className="mt-0.5 text-sm text-muted-foreground">
             {empty ? "Sin filas todavía" : pluralize(table.row_count, "fila", "filas")} · {pluralize(cols.length, "columna", "columnas")}
           </p>
+          {kind && (
+            <p className="mt-1.5">
+              <StatusBadge tone="primary" title="Así entendí esta hoja">
+                {KIND_NAME[kind]}
+              </StatusBadge>
+            </p>
+          )}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -67,6 +78,12 @@ export function DataCard({
               <Pencil className="h-4 w-4" aria-hidden="true" />
               Cambiar nombre o columnas
             </DropdownMenuItem>
+            {onFixRoles && !empty && (
+              <DropdownMenuItem onClick={onFixRoles} className="cursor-pointer">
+                <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                Revisar lo que entendí
+              </DropdownMenuItem>
+            )}
             {!empty && (
               <DropdownMenuItem onClick={onExport} className="cursor-pointer">
                 <FileDown className="h-4 w-4" aria-hidden="true" />

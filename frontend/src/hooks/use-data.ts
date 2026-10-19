@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
-import type { FileAnalysis, SmartUploadResult } from "@/lib/upload/types"
 
 /** Claves de caché compartidas por las pantallas de datos. */
 export const DATA_KEYS = {
@@ -33,20 +32,6 @@ export function useTableRows(tableId: string | null, page: number, limit = 20) {
     enabled: Boolean(tableId),
     placeholderData: (prev) => prev,
   })
-}
-
-/** POST /api/v1/schema/analyze — lee el archivo y sugiere cómo guardarlo (no guarda nada). */
-export function analyzeFile(file: File): Promise<FileAnalysis> {
-  const form = new FormData()
-  form.append("file", file)
-  return api.upload<FileAnalysis>("/api/v1/schema/analyze", form)
-}
-
-/** POST /api/v1/schema/smart-upload — guarda el archivo (todas sus hojas). */
-export function smartUpload(file: File): Promise<SmartUploadResult> {
-  const form = new FormData()
-  form.append("file", file)
-  return api.upload<SmartUploadResult>("/api/v1/schema/smart-upload", form)
 }
 
 export function useInvalidateData() {

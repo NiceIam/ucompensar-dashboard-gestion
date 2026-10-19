@@ -217,8 +217,8 @@ def date_span(series: pd.Series) -> Optional[tuple[date, date]]:
 def sheet_summary(kind: str, rows: int, columns: int, span: Optional[tuple[date, date]]) -> dict:
     n = f"{fmt_int(rows)} {'fila' if rows == 1 else 'filas'}"
     if kind == "otro":
-        text = f"Guardaré tus datos tal cual: {n} y {fmt_int(columns)} {'columna' if columns == 1 else 'columnas'}."
-        return {"kind_phrase": FOUND_PHRASE[kind], "stats": n, "summary": text}
+        stats = f"{n} y {fmt_int(columns)} {'columna' if columns == 1 else 'columnas'}"
+        return {"kind_phrase": FOUND_PHRASE[kind], "stats": stats, "summary": f"Guardaré tus datos tal cual: {stats}."}
     stats = n + (f", {period_phrase(*span)}" if span else "")
     return {"kind_phrase": FOUND_PHRASE[kind], "stats": stats, "summary": f"Encontré {FOUND_PHRASE[kind]}: {stats}."}
 
