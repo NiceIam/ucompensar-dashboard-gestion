@@ -46,7 +46,8 @@ function BarPreview({ points }: { points: number[] }) {
           width={Math.max(3, width)}
           height={Math.max(4, h * 68)}
           rx={3}
-          className={i === 0 ? "fill-primary" : "fill-primary/35"}
+          className="fill-primary"
+          fillOpacity={i === 0 ? 1 : 0.35}
         />
       ))}
     </g>
@@ -61,7 +62,7 @@ function LinePreview({ points }: { points: number[] }) {
   const area = `${path} L${coords[coords.length - 1][0].toFixed(1)} 76 L${coords[0][0].toFixed(1)} 76 Z`
   return (
     <g>
-      <path d={area} className="fill-primary/12" />
+      <path d={area} className="fill-primary" fillOpacity={0.14} />
       <path d={path} fill="none" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="stroke-primary" />
       {coords.length === 1 && <circle cx={coords[0][0]} cy={coords[0][1]} r={3.5} className="fill-primary" />}
     </g>
@@ -74,7 +75,7 @@ function PiePreview({ points }: { points: number[] }) {
   const radius = 28
   const circumference = 2 * Math.PI * radius
   let offset = 0
-  const shades = ["stroke-primary", "stroke-primary/70", "stroke-primary/50", "stroke-primary/35", "stroke-primary/25"]
+  const opacities = [1, 0.7, 0.5, 0.35, 0.25]
   return (
     <g transform="translate(100 40) rotate(-90)">
       {positive.slice(0, 5).map((p, i) => {
@@ -87,7 +88,8 @@ function PiePreview({ points }: { points: number[] }) {
             strokeWidth={14}
             strokeDasharray={`${Math.max(0, length - 1.5)} ${circumference}`}
             strokeDashoffset={-offset}
-            className={shades[i]}
+            className="stroke-primary"
+            strokeOpacity={opacities[i]}
           />
         )
         offset += length
