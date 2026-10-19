@@ -139,7 +139,7 @@ export function RolesDialog({
                       onChange={(v) => changeRole(c.name, v)}
                       options={[
                         ...roleOptions.filter((r) => r.role !== OTHER_ROLE).map((r) => ({ value: r.role, label: r.label })),
-                        { value: OTHER_ROLE, label: "Dato adicional (lo guardo tal cual)" },
+                        { value: OTHER_ROLE, label: "Dato adicional" },
                       ]}
                     />
                   </li>

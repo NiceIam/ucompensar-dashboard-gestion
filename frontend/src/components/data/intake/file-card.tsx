@@ -25,7 +25,9 @@ export function FileCard({
   entry,
   summary,
   onRemove,
+  className,
 }: {
+  className?: string
   entry: FileEntry
   /** Lo que se entendió del archivo, en una frase ("tus ventas · 731 filas"). */
   summary?: string
@@ -36,14 +38,15 @@ export function FileCard({
   return (
     <li
       className={cn(
-        "flex min-w-0 items-start gap-3 rounded-xl border bg-card px-3.5 py-3",
-        entry.status === "problem" && "border-danger/40 bg-danger-soft/40"
+        "flex min-w-0 flex-wrap items-start gap-x-3 gap-y-2 rounded-xl border bg-card px-3.5 py-3",
+        entry.status === "problem" && "border-danger/40 bg-danger-soft/40 lg:col-span-2",
+        className
       )}
     >
       <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-strong">
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[10rem] flex-1">
         <p className="truncate text-sm font-semibold" title={entry.file.name}>
           {entry.file.name}
         </p>
@@ -58,7 +61,7 @@ export function FileCard({
           </p>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="ml-[3.25rem] flex shrink-0 items-center gap-1 sm:ml-0">
         <StatusBadge tone={st.tone} icon={st.icon} spinning={st.spinning}>
           {st.label}
         </StatusBadge>

@@ -72,7 +72,7 @@ function ColumnRow({
   const explain = isOther ? column.explain || "un dato extra que guardo tal cual" : meta?.explain ?? column.explain
   const options = [
     ...roles.filter((r) => r.role !== OTHER_ROLE).map((r) => ({ value: r.role, label: r.label })),
-    { value: OTHER_ROLE, label: "Dato adicional (lo guardo tal cual)" },
+    { value: OTHER_ROLE, label: "Dato adicional" },
   ]
   return (
     <li className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,15rem)] sm:items-center sm:gap-4">
@@ -173,9 +173,9 @@ export function SheetCard({
         skipped && "opacity-70"
       )}
     >
-      <header className="flex items-start gap-3">
+      <header className="flex flex-wrap items-start gap-x-3 gap-y-2">
         <TableIcon name={`${kind} ${sheet.sheet_name ?? ""}`} />
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-[12rem] flex-1 space-y-1">
           {shownHeadline && (
             <h4 className="font-display text-xl font-semibold leading-snug text-balance sm:text-2xl">
               {shownHeadline.lead} <Figure>{shownHeadline.kindPhrase}</Figure>
@@ -212,9 +212,9 @@ export function SheetCard({
         />
       ) : (
         result && (
-          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-success-soft/60 px-3.5 py-2.5 text-sm">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-success-soft/60 px-3.5 py-2.5 text-sm">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
-            <span className="min-w-0 flex-1 text-foreground/90">{result.message}</span>
+            <span className="min-w-[12rem] flex-1 text-foreground/90">{result.message}</span>
             {result.table_id && onView && (
               <Button variant="ghost" size="sm" onClick={() => onView(result.table_id!)}>
                 <Eye aria-hidden="true" />
@@ -232,7 +232,7 @@ export function SheetCard({
       )}
 
       {/* Dudas */}
-      {mode === "review" && needs && (
+      {mode === "review" && sheet.needs_review && (
         <Notice tone="warning" title="Revisa esto antes de guardar">
           <ul className="list-disc space-y-1 pl-4">
             {attentionReasons(sheet).map((r) => (
@@ -242,7 +242,7 @@ export function SheetCard({
         </Notice>
       )}
 
-      {mode === "review" && (needs || edited) && ontology && (
+      {mode === "review" && (sheet.needs_review || edited) && ontology && (
         <div className="space-y-1.5">
           <label htmlFor={`${uid}-kind`} className="text-sm font-semibold">
             ¿Qué es este archivo?

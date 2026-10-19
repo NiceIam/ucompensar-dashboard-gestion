@@ -43,13 +43,13 @@ export function UnlocksPanel({ onAsk }: { onAsk: (question: string) => void }) {
           {data.items.length > 0 ? (
             <ul className="space-y-2.5">
               {data.items.map((it) => (
-                <li key={it.id} className="flex items-start gap-2.5">
+                <li key={it.id} className="flex flex-wrap items-start gap-x-2.5 gap-y-1">
                   <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-[12rem] flex-1">
                     <p className="text-[15px] font-semibold leading-snug">{it.title}</p>
                   </div>
                   {it.ask && (
-                    <Button variant="ghost" size="sm" onClick={() => onAsk(it.ask!)}>
+                    <Button variant="ghost" size="sm" className="ml-7 sm:ml-0" onClick={() => onAsk(it.ask!)}>
                       <MessageCircleQuestion aria-hidden="true" />
                       Preguntar
                     </Button>

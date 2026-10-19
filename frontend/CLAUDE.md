@@ -35,7 +35,8 @@ El backend debe estar corriendo en `http://localhost:8000` para que el frontend 
 
 - `src/app/(auth)/` — Login y registro (portada en dos paneles: marca y formulario)
 - `src/app/(dashboard)/` — App principal: inicio (`/`), resumen de la semana (`/resumen`), datos y cargue (`/data`), tableros (`/dashboards`), configuración (`/settings`)
-- `src/lib/upload/` — Flujo de cargue: validación local, lectores CSV/JSON/XLSX sin dependencias, evaluación (¿revisar o guardar directo?), primer vistazo y máquina de estados
+- `src/lib/upload/` — Validación local de archivos (tipo, tamaño, .xlsx real) y lectores CSV/JSON/XLSX sin dependencias
+- `src/lib/intake/` + `src/components/data/intake/` — CARGA INTELIGENTE: una sola zona para soltar varios archivos (`IntakeZone`), estado por archivo (leyendo → entendiendo → listo), panel «Esto es lo que entendí» (`SheetCard`), corrección de tipo/roles con desplegables, «Con esto ya puedo decirte…» (`UnlocksPanel`, sale de GET /insights) y «Deshacer». Lógica pura en `plan.ts` (qué pide ayuda, plan que se confirma) y `state.ts` (reducer). Contrato en `src/types/intake.ts`: `POST /api/v1/intake/analyze` → `POST /api/v1/intake/commit` (se reenvían los mismos archivos) → `POST /api/v1/intake/undo`; `GET /api/v1/intake/ontology`; `PUT /api/v1/schema/tables/{id}/roles`. Solo se pide ayuda con baja confianza o duda de mezcla; si todo es claro se guarda directo.
 - `src/hooks/` — Custom hooks que wrappean TanStack Query por dominio: `use-auth`, `use-files`, `use-dashboards`, `use-agents`, `use-etl`, `use-templates`, `use-floating-chat`
 - `src/lib/api.ts` — Cliente HTTP centralizado con `credentials:'include'` en todos los fetch; los tokens viven en cookies HttpOnly seteadas por el backend (`access_token` path=/, `refresh_token` path=/api/v1/auth/refresh). El frontend nunca toca tokens directamente.
 - `src/types/api.ts` — Tipos TypeScript para toda la API (User, Dashboard, WidgetConfig, ChatMessage, etc.)
