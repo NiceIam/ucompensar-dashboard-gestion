@@ -141,7 +141,7 @@ KIND_GROUPS: dict[str, tuple[tuple[str, ...], ...]] = {
 
 # Que roles guardados alimentan a los hallazgos (campo del detector -> rol de la ontologia).
 INSIGHT_FIELDS_PRODUCTOS = {"nombre": "producto_nombre", "costo": "costo_unitario", "precio_venta": "precio_venta",
-                            "stock": "stock"}
+                            "stock": "stock", "codigo": "producto_codigo"}
 INSIGHT_FIELDS_VENTAS = {"fecha": "fecha", "producto": "producto", "cantidad": "cantidad",
                          "precio_unitario": "precio_unitario", "total": "total", "cliente": "cliente"}
 

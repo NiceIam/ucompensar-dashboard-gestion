@@ -525,6 +525,7 @@ async def understand(
 
     payload = build_payload(sheet_name, profiles)
     started = time.monotonic()
+    usage: Optional[dict] = None
     try:
         data, usage = await call_gemini(payload)
         usage["latency_ms"] = int((time.monotonic() - started) * 1000)
@@ -540,6 +541,7 @@ async def understand(
     except Exception as exc:   # nunca debe tumbar la carga: queda el determinista
         kind = _classify(exc)
         det.ai_error = kind
+        det.usage = usage         # si el modelo contesto algo inservible, esos tokens igual se gastaron
         try:
             logger.warning("Carga IA fallo (causa=%s): %s: %s", kind, type(exc).__name__,
                            _redact(str(exc), settings.GOOGLE_API_KEY))

@@ -102,9 +102,13 @@ async def register_organization(body: UserRegister) -> TokenResponse:
     # 3. Crear base de datos dedicada para la org.
     # Si falla, revertimos org+user para no dejar un usuario sin BD
     # (no podría usar la plataforma). El usuario puede reintentar el registro.
-    business_type = body.sector if body.sector in ("ferreteria", "servicios", "restaurante") else "servicios"
+    # SIN hojas de plantilla por defecto. Antes se creaba el pack "servicios" para TODAS las organizaciones porque
+    # `sector` (terciario, cuaternario, TIC, salud, educacion, comercio) nunca coincide con los packs de plantillas
+    # (ferreteria, servicios, restaurante): cada dueno veia hojas vacias que no eran suyas y la carga podia
+    # sumarles datos. Ahora la organizacion nace vacia: lo que suba define sus hojas (carga inteligente) y las
+    # plantillas solo se crean si la persona elige un tipo de negocio (POST /api/v1/templates/initialize).
     try:
-        await create_org_database(org_id, business_type)
+        await create_org_database(org_id, None)
     except Exception as exc:
         logger.error("Error creando DB de org (org_id=%s): %s", org_id, exc)
         # Revertir para no dejar un usuario huérfano sin BD operativa.

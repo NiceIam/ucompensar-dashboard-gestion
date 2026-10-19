@@ -64,6 +64,7 @@ from typing import Any
 
 from app.database import get_org_pool
 from app.services import data_query_engine as engine
+from app.services import intake_ontology as onto
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +329,32 @@ def field_score(header, synonyms) -> float:
 
 
 @dataclass
+class StoredSheet:
+    """Lo que la carga inteligente dejo guardado de una hoja: tipo y {rol de la ontologia: nombre de columna}."""
+    kind: str
+    trusted: bool                       # confirmado por el modelo o el duenio, o heuristica con confianza alta
+    roles: dict[str, str]
+
+
+_TRUST_CONFIDENCE = 0.8
+
+
+def stored_sheets(records) -> dict[str, StoredSheet]:
+    """{nombre de tabla: StoredSheet} de las tablas de la org que traen `kind`/`role` en su metadata. Las tablas
+    anteriores a la carga inteligente no aparecen: siguen entrando por el detector de sinonimos."""
+    out: dict[str, StoredSheet] = {}
+    for r in records:
+        cols = onto.parse_columns(r["columns_definition"])
+        meta = onto.read_sheet_meta(cols)
+        if meta is None:
+            continue
+        roles = {v["role"]: name for name, v in onto.column_roles(cols).items() if v["role"] != onto.OTHER_ROLE}
+        trusted = meta["mapping_source"] in ("ai", "user") or meta["kind_confidence"] >= _TRUST_CONFIDENCE
+        out[r["table_name"]] = StoredSheet(meta["kind"], trusted, roles)
+    return out
+
+
+@dataclass
 class RoleMatch:
     table: Any                                  # engine.Table
     role: str
@@ -387,13 +414,47 @@ def _qualifies(role: str, fields: dict, scores: dict | None = None) -> bool:
 _ROLE_SPECS = {"productos": _PRODUCT_FIELDS, "ventas": _SALES_FIELDS}
 
 
-def detect_roles(catalog: dict) -> tuple[dict[str, RoleMatch], dict[str, list[RoleMatch]], bool]:
-    """(rol elegido, alternativas descartadas por rol, hay hoja de cartera) a partir del catalogo de la org.
+STORED_BONUS = 100.0       # un rol confirmado gana siempre al detectado por sinonimos
 
-    Cada tabla recibe a lo sumo UN rol. Entre candidatas gana el mayor puntaje; empate: mas filas, luego nombre.
-    Si una tabla califica para dos roles se queda con el de mayor puntaje (empate: ventas)."""
+
+def _stored_match(table, st: StoredSheet) -> RoleMatch:
+    """RoleMatch de una hoja con tipo confirmado: sus columnas salen de los roles guardados, no de sinonimos."""
+    mapping = onto.INSIGHT_FIELDS_PRODUCTOS if st.kind == "productos" else onto.INSIGHT_FIELDS_VENTAS
+    fields = {}
+    for field_name, role in mapping.items():
+        name = st.roles.get(role)
+        col = table.column(name) if name else None
+        if col is not None:
+            fields[field_name] = col
+    scores = {f: 1.0 for f in fields}
+    return RoleMatch(table, "productos" if st.kind == "productos" else "ventas", fields, scores,
+                     STORED_BONUS + sum(scores.values()))
+
+
+def detect_roles_ex(catalog: dict, stored: dict[str, StoredSheet] | None = None):
+    """(rol elegido, alternativas, hay hoja de cartera, hojas de tipo confirmado a las que les falta algo).
+
+    PRIMERO los `kind`/`role` guardados por la carga inteligente (si el tipo esta confirmado, el detector por
+    sinonimos no vuelve a clasificar esa hoja: una hoja de compras nunca se toma por ventas); el detector por
+    sinonimos queda de respaldo para hojas sin metadata o con tipo dudoso."""
+    stored = stored or {}
     candidates: list[RoleMatch] = []
+    partial: dict[str, RoleMatch] = {}
+    confirmed: set[str] = set()
+    has_receivables = False
     for table in catalog.values():
+        st = stored.get(table.name)
+        if st is not None and st.trusted:
+            confirmed.add(table.name)
+            if st.kind in ("productos", "ventas"):
+                m = _stored_match(table, st)
+                if _qualifies(m.role, m.fields, m.scores):
+                    candidates.append(m)
+                elif m.role not in partial or (table.rows or 0) > (partial[m.role].table.rows or 0):
+                    partial[m.role] = m
+            elif st.kind == "cuentas_por_cobrar" and {"cliente", "valor"} <= set(st.roles):
+                has_receivables = True
+            continue
         for role, spec in _ROLE_SPECS.items():
             fields, scores, ambiguous = _match_fields(table, spec)
             if _qualifies(role, fields, scores):
@@ -412,14 +473,25 @@ def detect_roles(catalog: dict) -> tuple[dict[str, RoleMatch], dict[str, list[Ro
         mine = chosen.get(m.role)
         if (mine is not None and m is not mine and m.table.name not in used_tables and (m.table.rows or 0) > 0):
             alternatives[m.role].append(m)
-    has_receivables = False
     for table in catalog.values():
-        if table.name in used_tables:
+        if table.name in used_tables or table.name in confirmed:
             continue
         fields, _s, _a = _match_fields(table, _RECEIVABLES_FIELDS)
         if _qualifies("cartera", fields):
             has_receivables = True
-    return chosen, dict(alternatives), has_receivables
+    # una hoja confirmada de un tipo que ya tiene otra elegida no esta "incompleta": simplemente sobra
+    partial = {k: v for k, v in partial.items() if k not in chosen}
+    return chosen, dict(alternatives), has_receivables, partial
+
+
+def detect_roles(catalog: dict, stored: dict[str, StoredSheet] | None = None
+                 ) -> tuple[dict[str, RoleMatch], dict[str, list[RoleMatch]], bool]:
+    """(rol elegido, alternativas descartadas por rol, hay hoja de cartera) a partir del catalogo de la org.
+
+    Cada tabla recibe a lo sumo UN rol. Entre candidatas gana el mayor puntaje; empate: mas filas, luego nombre.
+    Si una tabla califica para dos roles se queda con el de mayor puntaje (empate: ventas)."""
+    chosen, alternatives, has_receivables, _partial = detect_roles_ex(catalog, stored)
+    return chosen, alternatives, has_receivables
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +510,7 @@ class ProductAgg:
     cost_rows: Decimal = Decimal(0)      # filas con costo (promedio simple si no hay existencias)
     cost_sum: Decimal = Decimal(0)
     cost: Decimal | None = None          # costo unitario final (None = desconocido)
+    codes: set = field(default_factory=set)    # codigos del producto (si la hoja tiene columna de codigo)
 
 
 @dataclass
@@ -449,6 +522,7 @@ class ProductsData:
     unreadable_stock_rows: int
     duplicated: int                      # nombres normalizados que aparecen en mas de una fila
     thousands_lookalikes: int
+    code_index: dict = field(default_factory=dict)    # clave de codigo -> clave del producto (cruce por codigo)
 
 
 @dataclass
@@ -493,8 +567,8 @@ def _count(row) -> int:
     return int(row[-1])
 
 
-def parse_products(rows: list[tuple], has_cost: bool, has_stock: bool) -> ProductsData:
-    """Filas (nombre[, costo][, existencias], veces) del motor -> productos agregados por clave normalizada."""
+def parse_products(rows: list[tuple], has_cost: bool, has_stock: bool, has_code: bool = False) -> ProductsData:
+    """Filas (nombre[, costo][, existencias][, codigo], veces) del motor -> productos agregados por clave normalizada."""
     products: dict[str, ProductAgg] = {}
     blank = negative = unreadable = lookalikes = 0
     per_key_rows: Counter = Counter()
@@ -518,12 +592,16 @@ def parse_products(rows: list[tuple], has_cost: bool, has_stock: bool) -> Produc
                 cost = None
         if has_stock:
             raw = row[i]
+            i += 1
             stock = engine.parse_number(raw)
             if raw is not None and THOUSANDS_LOOKALIKE.match(str(raw)):
                 lookalikes += n
+        code_key = product_key(row[i]) if has_code and row[i] is not None else ""
         agg = products.get(key)
         if agg is None:
             agg = products[key] = ProductAgg(key, str(name))
+        if code_key:
+            agg.codes.add(code_key)
         used += n
         per_key_rows[key] += n
         agg.rows += n
@@ -548,7 +626,8 @@ def parse_products(rows: list[tuple], has_cost: bool, has_stock: bool) -> Produc
             # costo unitario: promedio ponderado por existencias (o promedio simple si no hay existencias)
             agg.cost = agg.value / agg.cost_weight if agg.cost_weight > 0 else agg.cost_sum / agg.cost_rows
     duplicated = sum(1 for c in per_key_rows.values() if c > 1)
-    return ProductsData(products, used, blank, negative, unreadable, duplicated, lookalikes)
+    code_index = {ck: k for k, a in products.items() for ck in a.codes}
+    return ProductsData(products, used, blank, negative, unreadable, duplicated, lookalikes, code_index)
 
 
 def parse_sale_rows(rows: list[tuple], has_client: bool, has_unit: bool,
@@ -599,11 +678,19 @@ def parse_sale_rows(rows: list[tuple], has_client: bool, has_unit: bool,
     return lines, invalid, lookalikes
 
 
-def build_sales(rows: list[tuple], has_client: bool, has_unit: bool, has_total: bool, max_date: date) -> SalesData:
+def build_sales(rows: list[tuple], has_client: bool, has_unit: bool, has_total: bool, max_date: date,
+                key_map: dict | None = None) -> SalesData:
     """Ventas validas del periodo por producto y por cliente.
 
     El periodo sale de las fechas de las ventas VALIDAS (una fila sin cantidad o precio no es una venta, aunque
     comparta hoja: p. ej. movimientos de inventario cargados en la hoja de ventas no estiran el periodo)."""
+    key_map = key_map or {}
+
+    def pkey(name) -> str:
+        """Clave del producto vendido; si la venta trae el CODIGO del producto (no su nombre), se cruza por codigo."""
+        k = product_key(name)
+        return key_map.get(k, k)
+
     lines, invalid, lookalikes = parse_sale_rows(rows, has_client, has_unit, has_total)
     undated = sum(l.n for l in lines if l.day is None)
     dated = [l for l in lines if l.day is not None]
@@ -617,7 +704,7 @@ def build_sales(rows: list[tuple], has_client: bool, has_unit: bool, has_total: 
         period = (p_from, p_to, days)
         window_days = min(STALE_WINDOW_DAYS, days)
         window_from = p_to - timedelta(days=window_days - 1)
-        window_keys = {product_key(l.name) for l in in_range if l.name is not None and l.day >= window_from}
+        window_keys = {pkey(l.name) for l in in_range if l.name is not None and l.day >= window_from}
 
     products: dict[str, SalesAgg] = {}
     acc: dict[str, list] = {}                    # cliente -> [nombre mostrado, mayor grupo, total]
@@ -627,7 +714,7 @@ def build_sales(rows: list[tuple], has_client: bool, has_unit: bool, has_total: 
         amount = l.revenue * l.n
         used += l.n
         total_revenue += amount
-        key = product_key(l.name) if l.name is not None else ""
+        key = pkey(l.name) if l.name is not None else ""
         agg = products.get(key)
         if agg is None:
             agg = products[key] = SalesAgg(key, str(l.name) if l.name is not None else "")
@@ -1081,8 +1168,31 @@ def _labels(fields) -> str:
     return join_es([_FIELD_LABEL[f] for f in fields])
 
 
-def _static_needs(recipe: dict, roles: dict[str, RoleMatch]) -> str | None:
+_KIND_REQUIRED = {
+    "productos": (("nombre",), ("costo", "stock", "precio_venta")),
+    "ventas": (("fecha",), ("producto",), ("cantidad",), ("total", "precio_unitario")),
+}
+_GROUP_LABEL = {("costo", "stock", "precio_venta"): "costo o existencias",
+                ("total", "precio_unitario"): "valor (total o precio unitario)"}
+
+
+def _gap_text(role_name: str, partial: RoleMatch) -> str:
+    """Hoja de tipo confirmado a la que le falta algo, dicho en palabras simples."""
+    noun = "productos" if role_name == "productos" else "ventas"
+    absent = []
+    for group in _KIND_REQUIRED[role_name]:
+        if not any(f in partial.fields for f in group):
+            absent.append(_GROUP_LABEL.get(group) or _FIELD_LABEL[group[0]])
+    shown = short_name(partial.table.display, 60)
+    if not absent:
+        return f"Tu hoja de {noun} ('{shown}') no tiene datos que pueda usar."
+    return (f"A tu hoja de {noun} ('{shown}') le falta: {join_es(absent)}. "
+            "Si la tienes con otro nombre, corrígela en Mis datos.")
+
+
+def _static_needs(recipe: dict, roles: dict[str, RoleMatch], partial: dict[str, RoleMatch] | None = None) -> str | None:
     """Texto de lo que falta segun las columnas detectadas, o None si la receta tiene lo que necesita."""
+    partial = partial or {}
     parts = []
     for role_name, noun, fields, wanted in (
         ("productos", "productos", recipe["products"], "nombre, costo y existencias"),
@@ -1091,6 +1201,9 @@ def _static_needs(recipe: dict, roles: dict[str, RoleMatch]) -> str | None:
         if not fields:
             continue
         role = roles.get(role_name)
+        if role is None and role_name in partial:
+            parts.append(_gap_text(role_name, partial[role_name]))
+            continue
         if role is None:
             labels = _labels(f for f in fields if f != "nombre") if role_name == "productos" else _labels(fields)
             parts.append(f"Necesito una hoja de {noun} con {labels}.")
@@ -1138,7 +1251,7 @@ async def _read_all(pool, roles: dict[str, RoleMatch], now_local: datetime) -> d
     prod, sale = roles.get("productos"), roles.get("ventas")
     plans, kinds = [], []
     if prod is not None:
-        cols = [(prod.fields["nombre"].name, None)] + [(prod.fields[f].name, None) for f in ("costo", "stock")
+        cols = [(prod.fields["nombre"].name, None)] + [(prod.fields[f].name, None) for f in ("costo", "stock", "codigo")
                                                        if f in prod.fields]
         plans.append(_grouped_plan(prod.table, cols))
         kinds.append("products")
@@ -1157,7 +1270,8 @@ async def _read_all(pool, roles: dict[str, RoleMatch], now_local: datetime) -> d
     if "products" in results:
         res = results["products"]
         if _complete(res):
-            out["products"] = parse_products(res.rows, "costo" in prod.fields, "stock" in prod.fields)
+            out["products"] = parse_products(res.rows, "costo" in prod.fields, "stock" in prod.fields,
+                                             "codigo" in prod.fields)
         else:
             out["problems"]["productos"] = ("Tu hoja de productos tiene demasiadas combinaciones distintas para "
                                             "calcular con exactitud.")
@@ -1168,7 +1282,10 @@ async def _read_all(pool, roles: dict[str, RoleMatch], now_local: datetime) -> d
                                          "fecha, cantidad y precio) para calcular con exactitud.")
         else:
             max_date = now_local.date() + timedelta(days=FUTURE_SALE_DAYS)
-            sales = build_sales(res.rows, has_client, has_unit, has_total, max_date)
+            products_data = out["products"]
+            key_map = ({ck: nk for ck, nk in products_data.code_index.items() if ck not in products_data.products}
+                       if products_data is not None else {})
+            sales = build_sales(res.rows, has_client, has_unit, has_total, max_date, key_map)
             out["sales"] = sales
             total_rows = sum(int(r[-1]) for r in res.rows)
             if total_rows == 0:
@@ -1285,7 +1402,7 @@ _EMPTY_RESULT_NEEDS = {
 }
 
 
-def _compose(roles, alternatives, has_receivables, data, now_local: datetime) -> dict:
+def _compose(roles, alternatives, has_receivables, data, now_local: datetime, partial=None) -> dict:
     prod, sale = roles.get("productos"), roles.get("ventas")
     sales_data: SalesData | None = data["sales"]
     period = sales_data.period if sales_data is not None else None
@@ -1307,7 +1424,7 @@ def _compose(roles, alternatives, has_receivables, data, now_local: datetime) ->
     items: list[dict] = []
     missing: list[dict] = []
     for recipe in RECIPES:
-        needs = _static_needs(recipe, roles) or _runtime_needs(recipe, data)
+        needs = _static_needs(recipe, roles, partial) or _runtime_needs(recipe, data)
         item = None
         if needs is None:
             try:
@@ -1352,9 +1469,9 @@ async def _compute(org_id: str, now: datetime | None) -> dict:
             "SELECT id, table_name, display_name, row_count, columns_definition FROM org_data_tables"
         )
     catalog = engine.build_catalog(records)
-    roles, alternatives, has_receivables = detect_roles(catalog)
+    roles, alternatives, has_receivables, partial = detect_roles_ex(catalog, stored_sheets(records))
     data = await _read_all(pool, roles, now_local)
-    composed = _compose(roles, alternatives, has_receivables, data, now_local)
+    composed = _compose(roles, alternatives, has_receivables, data, now_local, partial)
     period = data["sales"].period if data["sales"] is not None and not data["problems"].get("ventas") else None
     return {
         "generated_at": now_local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
