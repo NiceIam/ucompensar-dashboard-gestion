@@ -2,12 +2,23 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
+import type { MappingSource, SheetKind } from "@/types/intake"
 
 export interface OrgTable {
   id: string
   table_name: string
   display_name: string
-  columns_definition: Array<{ name: string; type: string; label: string; required?: boolean }>
+  columns_definition: Array<{
+    name: string
+    type: string
+    label: string
+    required?: boolean
+    /** Uso de la columna que dejó la carga inteligente ("costo_unitario"...); las hojas antiguas no lo traen. */
+    role?: string
+    role_confidence?: number
+    /** Solo en la primera columna: lo que se entendió de la hoja entera. */
+    sheet?: { kind: SheetKind; kind_confidence: number; mapping_source: MappingSource }
+  }>
   row_count: number
 }
 

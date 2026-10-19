@@ -258,7 +258,7 @@ class TestSmartUpload:
 
         db = org_dbs.db(ORG_A)
         assert result["status"] == "created_new_table"
-        assert result["table_name"] == "productos"
+        assert result["table_name"] == "inventario"      # nombre derivado del archivo
         assert result["rows_inserted"] == 2 and result["total_rows"] == 2
         tid = next(iter(db.tables))
         assert [c["name"] for c in db.columns_of(tid)] == ["producto", "precio_venta", "stock"]
@@ -284,35 +284,23 @@ class TestSmartUpload:
         from app.services.schema_agent_service import smart_upload
 
         db = org_dbs.db(ORG_A)
-        tid = db.add_table("personas", ["nombre", "ciudad", "edad"])
-        df = pd.DataFrame({"nombre": ["Ana"], "ciudad": ["Cali"], "edad": [30], "puntaje": [4.5]})
+        tid = db.add_table("ventas", ["fecha", "producto", "cantidad", "total"],
+                           column_types={"fecha": "date", "cantidad": "integer", "total": "number"})
+        df = pd.DataFrame({"fecha": ["2026-05-02"], "producto": ["Gasas"], "cantidad": [3], "total": [4500],
+                           "puntaje": [4.5]})
 
         result = await smart_upload(df, ORG_A, "f.csv")
 
         assert result["status"] == "loaded_to_existing"
-        assert [a["action"] for a in result["actions"]] == ["modify_table", "load_data"]
+        assert result["table_id"] == str(tid)
         nuevas = [c for c in db.columns_of(tid) if c["name"] == "puntaje"]
-        assert nuevas == [{"name": "puntaje", "type": "number"}]
+        assert len(nuevas) == 1 and nuevas[0]["type"] == "number" and nuevas[0]["role"] == "otro"
         assert db.rows_of(tid)[0]["puntaje"] == 4.5
 
     @pytest.mark.asyncio
-    async def test_score_04_no_alcanza_para_reutilizar_tabla(self, org_dbs):
-        """find_matching_table acepta desde 0.3 pero smart_upload exige >= 0.5."""
-        from app.services.schema_agent_service import find_matching_table, smart_upload, analyze_csv
-
-        db = org_dbs.db(ORG_A)
-        existente = db.add_table("personas", TEN_COLS)
-        df = pd.DataFrame({"nombre": ["Ana"], "edad": ["30"], "x1": ["a"], "x2": ["b"]})
-        assert (await find_matching_table(ORG_A, analyze_csv(df)["columns"]))["match_score"] == 0.4
-
-        result = await smart_upload(df, ORG_A, "f.csv")
-
-        assert result["status"] == "created_new_table"
-        assert result["table_id"] != str(existente)
-        assert db.rows_of(existente) == []
-
-    @pytest.mark.asyncio
-    async def test_score_06_reutiliza_tabla(self, org_dbs):
+    async def test_datos_sin_tipo_con_pocas_columnas_en_comun_no_se_mezclan(self, org_dbs):
+        """Antes (score 0,4 o 0,6) se sumaban a la tabla parecida; ahora una hoja sin tipo solo se suma a otra con
+        EXACTAMENTE las mismas columnas."""
         from app.services.schema_agent_service import smart_upload
 
         db = org_dbs.db(ORG_A)
@@ -321,9 +309,9 @@ class TestSmartUpload:
 
         result = await smart_upload(df, ORG_A, "f.csv")
 
-        assert result["status"] == "loaded_to_existing"
-        assert result["table_id"] == str(existente)
-        assert result["match_score"] == 0.6
+        assert result["status"] == "created_new_table"
+        assert result["table_id"] != str(existente)
+        assert db.rows_of(existente) == []
 
     @pytest.mark.asyncio
     async def test_aislamiento_no_reutiliza_tabla_de_otra_org(self, org_dbs):

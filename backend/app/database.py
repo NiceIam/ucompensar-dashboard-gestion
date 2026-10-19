@@ -438,7 +438,7 @@ async def init_main_db():
     logger.info("Base de datos principal inicializada.")
 
 
-async def create_org_database(org_id: str, business_type: str = "ferreteria"):
+async def create_org_database(org_id: str, business_type: str | None = "ferreteria"):
     """Crea una base de datos dedicada para la organizacion e inicializa su schema."""
     db_name = _org_db_name(org_id)
     s = get_settings()
@@ -471,7 +471,7 @@ async def create_org_database(org_id: str, business_type: str = "ferreteria"):
         await _dedupe_org_data_tables(conn)
 
         # Insertar tablas del tipo de negocio
-        tables = BUSINESS_TYPE_TABLES.get(business_type, [])
+        tables = BUSINESS_TYPE_TABLES.get(business_type, []) if business_type else []
         import json
         for table_def in tables:
             await conn.execute(

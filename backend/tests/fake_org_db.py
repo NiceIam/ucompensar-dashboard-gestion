@@ -67,6 +67,8 @@ class FakeOrgDB:
         self.jsonb_as_text = True
         self.sql_log: list[str] = []
         self.tx_depth = 0
+        self.tx_now: Optional[datetime] = None     # NOW() de la transaccion en curso (igual para todas sus filas)
+        self._clock = datetime(2026, 10, 19, 12, 0, 0, 123456, tzinfo=timezone.utc)
         self.tx_flags: list[bool] = []   # paralelo a sql_log: la sentencia corrio dentro de una transaccion
         # Inyeccion de fallos: callable(sql_normalizado, args) -> bool
         self.fail_when: Optional[Callable[[str, tuple], bool]] = None
@@ -99,7 +101,7 @@ class FakeOrgDB:
             "row_count": len(rows or []),
         }
         for data in rows or []:
-            self.rows.append({"id": uuid.uuid4(), "table_id": table_id, "data": data})
+            self.rows.append({"id": uuid.uuid4(), "table_id": table_id, "data": data, "created_at": self._clock})
         for i in range(legacy_records):
             self.records.append({"table_name": table_name, "data": {"legacy": i}})
         return table_id
@@ -151,6 +153,9 @@ class _Tx:
 
     async def __aenter__(self):
         self.snap = self.db.snapshot()
+        if self.db.tx_depth == 0:
+            self.db._clock += timedelta(seconds=1)       # cada transaccion tiene su propio NOW()
+            self.db.tx_now = self.db._clock
         self.db.tx_depth += 1
         return self
 
@@ -337,11 +342,26 @@ class FakeConn:
         if q == "insert into org_data_rows (table_id, data) values ($1, $2::jsonb)":
             if args[0] not in t:
                 raise FakeDBError("violates foreign key constraint")
-            db.rows.append({"id": uuid.uuid4(), "table_id": args[0], "data": _strict_json(args[1])})
+            db.rows.append({"id": uuid.uuid4(), "table_id": args[0], "data": _strict_json(args[1]),
+                            "created_at": db.tx_now or db._clock})
             return []
 
         if q == "insert into data_records (table_name, data) values ($1, $2::jsonb)":
-            db.records.append({"table_name": args[0], "data": _strict_json(args[1])})
+            db.records.append({"table_name": args[0], "data": _strict_json(args[1]),
+                               "created_at": db.tx_now or db._clock})
+            return []
+
+        if q == "select max(created_at) from org_data_rows where table_id = $1":
+            stamps = [r["created_at"] for r in db.rows if r["table_id"] == args[0] and r.get("created_at")]
+            return [{"max": max(stamps) if stamps else None}]
+
+        if q == "delete from org_data_rows where table_id = $1 and created_at = $2 returning id":
+            gone = [r for r in db.rows if r["table_id"] == args[0] and r.get("created_at") == args[1]]
+            db.rows = [r for r in db.rows if r not in gone]
+            return [{"id": r["id"]} for r in gone]
+
+        if q == "delete from data_records where table_name = $1 and created_at = $2":
+            db.records = [r for r in db.records if not (r["table_name"] == args[0] and r.get("created_at") == args[1])]
             return []
 
         if q == "select count(*) from org_data_rows where table_id = $1":

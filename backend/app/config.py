@@ -49,6 +49,17 @@ class Settings(BaseSettings):
     # Vacio = no se envia y el modelo usa su default. No se activa por defecto: no esta verificado con una
     # llamada real que el modelo configurado lo acepte (un valor no soportado haria fallar cada mensaje).
     GEMINI_THINKING_LEVEL: str = ""
+    # Carga inteligente (agente de esquema): UNA llamada a Gemini por hoja AMBIGUA (las claras no llaman). Tope
+    # de espera por llamada, tope de tokens de salida (incluye el razonamiento), nivel de razonamiento ("low"
+    # esta probado con el modelo configurado; vacio = default del modelo) y topes de gasto: llamadas por
+    # peticion y por organizacion por hora (en memoria de cada instancia: es un freno, no un contador exacto).
+    # INTAKE_AI_ENABLED=False deja solo el resultado determinista.
+    INTAKE_AI_ENABLED: bool = True
+    INTAKE_AI_TIMEOUT_SECONDS: float = 20.0
+    INTAKE_AI_MAX_OUTPUT_TOKENS: int = 1200
+    INTAKE_THINKING_LEVEL: str = "low"
+    INTAKE_AI_MAX_CALLS_PER_REQUEST: int = 8
+    INTAKE_AI_MAX_CALLS_PER_ORG_HOUR: int = 40
     # Function calling del chat: una ronda = el modelo pide herramientas y el servidor las ejecuta. Tras la
     # ultima ronda el modelo debe responder con texto, asi que un mensaje hace como maximo rondas + 1 llamadas.
     CHAT_MAX_TOOL_ROUNDS: int = 4

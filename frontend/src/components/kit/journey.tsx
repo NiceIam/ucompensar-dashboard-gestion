@@ -4,13 +4,13 @@ import { cn } from "@/lib/utils"
 const STEPS = [
   {
     icon: Upload,
-    title: "Sube un archivo",
-    text: "Un Excel, un CSV o un JSON, tal como lo tienes. Sin plantillas obligatorias.",
+    title: "Suelta lo que tengas",
+    text: "Uno o varios Excel, CSV o JSON, en el orden que sea y tal como los tienes. Sin plantillas obligatorias.",
   },
   {
     icon: Wand2,
     title: "Lo entendemos por ti",
-    text: "Detectamos fechas, valores y categorías, y te mostramos lo que encontramos.",
+    text: "Reconocemos qué es cada archivo y cada columna, y te contamos lo que encontramos.",
   },
   {
     icon: MessageCircleQuestion,

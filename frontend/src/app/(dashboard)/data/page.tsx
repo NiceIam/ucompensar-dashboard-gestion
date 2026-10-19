@@ -13,7 +13,8 @@ import { AdvancedSettings } from "@/components/data/advanced-settings"
 import { DataCard } from "@/components/data/data-card"
 import { DataViewer } from "@/components/data/data-viewer"
 import { EditTableDialog } from "@/components/data/edit-table-dialog"
-import { UploadFlow } from "@/components/data/upload-flow"
+import { RolesDialog } from "@/components/data/intake/roles-dialog"
+import { IntakeZone } from "@/components/data/intake/intake-zone"
 import { downloads, useDeleteTable } from "@/hooks/use-data"
 import { useOrgTables, type OrgTable } from "@/hooks/use-templates"
 import { useChat } from "@/providers/chat-provider"
@@ -44,6 +45,7 @@ export default function DataPage() {
   const deleteTable = useDeleteTable()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<OrgTable | null>(null)
+  const [fixing, setFixing] = useState<OrgTable | null>(null)
   const [deleting, setDeleting] = useState<OrgTable | null>(null)
   const viewerRef = useRef<HTMLDivElement>(null)
   const selected = tables.find((t) => t.id === selectedId) ?? null
@@ -78,6 +80,7 @@ export default function DataPage() {
           `Hazme un resumen de ${t.display_name}`
       ),
     onRename: () => setEditing(t),
+    onFixRoles: () => setFixing(t),
     onDelete: () => setDeleting(t),
     onDownloadTemplate: () => runDownload(() => downloads.tableTemplate(t.id, t.table_name), `Plantilla de «${t.display_name}» descargada`),
     onExport: () => runDownload(() => downloads.tableExport(t.id, t.table_name), `Datos de «${t.display_name}» descargados`),
@@ -90,12 +93,12 @@ export default function DataPage() {
         title={isLoading ? "Tu información" : hasData ? "Tu información" : "Empecemos por tus datos"}
         description={
           hasData
-            ? "Aquí vive todo lo que has subido. Agrega más archivos cuando quieras: los organizamos solos."
-            : "Sube un Excel, CSV o JSON y lo organizamos por ti. Luego puedes preguntarle lo que quieras."
+            ? "Aquí vive todo lo que has subido. Suelta más archivos cuando quieras, en el orden que sea: yo los entiendo y los organizo."
+            : "Suelta lo que tengas: Excel o CSV, uno o varios a la vez, aunque estén desordenados. Yo entiendo qué es cada cosa y lo organizo por ti."
         }
       />
 
-      <UploadFlow tables={tables} hero={!isLoading && !hasData} onViewTable={view} onAsk={(q) => ask(q)} />
+      <IntakeZone tables={tables} hero={!isLoading && !hasData} onViewTable={view} onAsk={(q) => ask(q)} />
 
       {!isLoading && !hasData && !isError && <Journey />}
 
@@ -171,6 +174,7 @@ export default function DataPage() {
 
       {!isLoading && <AdvancedSettings tables={tables} />}
 
+      <RolesDialog table={fixing} open={Boolean(fixing)} onOpenChange={(o) => !o && setFixing(null)} />
       <EditTableDialog table={editing} open={Boolean(editing)} onOpenChange={(o) => !o && setEditing(null)} />
 
       <ConfirmDialog

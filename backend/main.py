@@ -23,6 +23,7 @@ from app.routers import (
     etl,
     files,
     insights,
+    intake,
     templates,
     schema,
 )
@@ -39,6 +40,8 @@ def _on_rate_limit_exceeded(request: Request, exc: RateLimitExceeded):
         what = "Estás enviando mensajes muy rápido."
     elif path.startswith("/api/v1/insights"):
         what = "Estás consultando tus hallazgos muy seguido."
+    elif path.startswith("/api/v1/intake"):
+        what = "Estás subiendo archivos muy rápido."
     else:
         return _rate_limit_exceeded_handler(request, exc)
     retry_after = max(1, int(exc.limit.limit.get_expiry()))  # ventana completa: cota superior del tiempo de espera
@@ -114,6 +117,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboards.router)
     app.include_router(chat.router)
     app.include_router(insights.router)
+    app.include_router(intake.router)
     app.include_router(templates.router)
     app.include_router(etl.router)
     app.include_router(analytics.router)

@@ -578,6 +578,26 @@ async def delete_table(org_id: str, table_id: str) -> dict:
 # Cargar datos de CSV a tabla
 # ---------------------------------------------------------------------------
 
+def frame_rows(df: pd.DataFrame) -> list[dict]:
+    """Filas de un DataFrame tal como se guardan en org_data_rows: columnas con nombre limpio (desduplicado igual
+    que analyze_csv) y solo las celdas con valor (None = se omite la clave).
+
+    Series.tolist() devuelve tipos nativos de Python y respeta el dtype de cada columna (iterrows() subiria
+    enteros a float cuando hay una columna decimal al lado)."""
+    df = df.copy()
+    df.columns = _clean_column_names(df.columns)
+    col_values = {col: df[col].tolist() for col in df.columns}
+    rows = []
+    for i in range(len(df)):
+        row_data = {}
+        for col in df.columns:
+            val = _json_safe_value(col_values[col][i])
+            if val is not None:
+                row_data[col] = val
+        rows.append(row_data)
+    return rows
+
+
 async def load_csv_to_table(
     df: pd.DataFrame,
     org_id: str,
@@ -612,25 +632,14 @@ async def load_csv_to_table(
         if column_mapping:
             df = df.rename(columns=column_mapping)
 
-        # Limpiar nombres de columnas (desduplicados igual que en analyze_csv)
-        df.columns = _clean_column_names(df.columns)
-
-        # Valores por columna: Series.tolist() devuelve tipos nativos de Python y
-        # respeta el dtype de cada columna (iterrows() subiria enteros a float
-        # cuando hay una columna decimal al lado).
-        col_values = {col: df[col].tolist() for col in df.columns}
+        # Filas ya limpias (nombres desduplicados igual que en analyze_csv, valores serializables)
+        row_dicts = frame_rows(df)
 
         # Insertar filas. Envuelto en una transaccion: si una fila falla a
         # mitad de archivo, se revierte todo en vez de dejar datos parciales.
         inserted = 0
         async with conn.transaction():
-            for i in range(len(df)):
-                row_data = {}
-                for col in df.columns:
-                    val = _json_safe_value(col_values[col][i])
-                    if val is not None:
-                        row_data[col] = val
-
+            for row_data in row_dicts:
                 await conn.execute(
                     "INSERT INTO org_data_rows (table_id, data) VALUES ($1, $2::jsonb)",
                     table_uuid,
@@ -645,6 +654,11 @@ async def load_csv_to_table(
                 )
                 inserted += 1
 
+            # Marca de esta carga: las filas insertadas en UNA transaccion comparten created_at (NOW() es el
+            # inicio de la transaccion). Sirve para deshacer solo esta carga (undo_load).
+            loaded_at = await conn.fetchval(
+                "SELECT max(created_at) FROM org_data_rows WHERE table_id = $1", table_uuid,
+            ) if inserted else None
             # Actualizar row_count
             total = await conn.fetchval(
                 "SELECT count(*) FROM org_data_rows WHERE table_id = $1",
@@ -671,7 +685,47 @@ async def load_csv_to_table(
         "table_name": table_name,
         "rows_inserted": inserted,
         "total_rows": total,
+        "loaded_at": loaded_at.isoformat() if hasattr(loaded_at, "isoformat") else None,
     }
+
+
+async def undo_load(org_id: str, table_id: str, loaded_at: str) -> dict:
+    """Deshace UNA carga: borra solo las filas insertadas con la marca `loaded_at` (la devuelve load_csv_to_table) y
+    deja el conteo y el rango de fechas de la tabla como si no hubiera pasado. No toca las demas filas."""
+    table_uuid = _parse_uuid(table_id)
+    if table_uuid is None:
+        return {"error": "Tabla no encontrada"}
+    try:
+        stamp = datetime.fromisoformat(str(loaded_at))
+    except ValueError:
+        return {"error": "No reconozco esa carga."}
+    if stamp.tzinfo is None:
+        return {"error": "No reconozco esa carga."}
+    pool = await get_org_pool(org_id)
+    async with pool.acquire() as conn:
+        table_row = await conn.fetchrow(
+            "SELECT id, table_name, columns_definition FROM org_data_tables WHERE id = $1", table_uuid,
+        )
+        if not table_row:
+            return {"error": "Tabla no encontrada"}
+        async with conn.transaction():
+            gone = await conn.fetch(
+                "DELETE FROM org_data_rows WHERE table_id = $1 AND created_at = $2 RETURNING id", table_uuid, stamp,
+            )
+            await conn.execute(
+                "DELETE FROM data_records WHERE table_name = $1 AND created_at = $2", table_row["table_name"], stamp,
+            )
+            total = await conn.fetchval("SELECT count(*) FROM org_data_rows WHERE table_id = $1", table_uuid)
+            await conn.execute("UPDATE org_data_tables SET row_count = $1 WHERE id = $2", total, table_uuid)
+            if gone:
+                cols_def = _parse_columns_definition(table_row["columns_definition"])
+                new_cols, changed = await _refresh_date_ranges(conn, table_uuid, cols_def)
+                if changed:
+                    await conn.execute(
+                        "UPDATE org_data_tables SET columns_definition = $1::jsonb WHERE id = $2",
+                        json.dumps(new_cols), table_uuid,
+                    )
+    return {"table_id": table_id, "rows_deleted": len(gone), "total_rows": total}
 
 
 # ---------------------------------------------------------------------------
@@ -682,13 +736,18 @@ async def smart_upload(
     df: pd.DataFrame,
     org_id: str,
     filename: str,
+    *,
+    sheet_name: Optional[str] = None,
+    understanding=None,
 ) -> dict:
-    """Pipeline completo: analiza CSV, decide destino, carga datos.
+    """Pipeline completo: entiende la hoja, decide el destino SIN mezclar en silencio, carga los datos.
 
-    1. Analiza columnas del CSV
-    2. Busca tabla existente compatible
-    3. Si encuentra match >= 50%: carga en tabla existente (agrega columnas faltantes)
-    4. Si no: crea tabla nueva y carga
+    1. Entiende el tipo de hoja (`kind`) y el rol de cada columna (cache de firma -> determinista; si recibe
+       `understanding` ya resuelto, p. ej. con Gemini, usa ese).
+    2. Una carga se SUMA a una hoja existente solo si el tipo coincide Y las columnas se parecen >= 80 %
+       (o es una plantilla vacia compatible). Si hay duda o no coincide, crea una hoja NUEVA con nombre derivado
+       del archivo/hoja: nunca mezcla datos distintos.
+    3. Carga y deja los roles en la metadata (columns_definition).
     """
     # Sin columnas (JSON '[]', Excel en blanco) no hay nada que cargar: rechazar
     # antes de crear una tabla fantasma.
@@ -698,119 +757,50 @@ async def smart_upload(
             detail="El archivo no tiene columnas (encabezados). Verifique que no este vacio.",
         )
 
-    analysis = analyze_csv(df)
-    matching_table = await find_matching_table(org_id, analysis["columns"])
+    # import perezoso: intake_service importa este modulo
+    from app.services import intake_service as intake
+    from app.services import schema_ai_service as ai_service
 
-    actions = []
+    prep = intake.prepare_sheet(df, enforce_limits=False)
+    analysis = prep.analysis
+    org_tables = await intake.load_org_tables(org_id)
+    und = understanding or await ai_service.understand(
+        org_id, prep.profiles, sheet_name=sheet_name, file_name=filename, org_tables=org_tables, use_ai=False,
+    )
+    cand = intake.best_candidate(und, [intake.view_of_table(t) for t in org_tables])
+    decision = intake.decide(und, cand)
+    actions: list[dict] = []
 
-    if matching_table and matching_table["match_score"] >= 0.5:
-        # --- Usar tabla existente ---
-        table_id = matching_table["table_id"]
-        table_name = matching_table["table_name"]
-
-        # Agregar columnas faltantes si las hay
-        if matching_table["missing_in_table"]:
-            new_cols = [
-                {
-                    "name": col_name,
-                    "type": next(
-                        (c["inferred_type"] for c in analysis["columns"] if c["clean_name"] == col_name),
-                        "text"
-                    ),
-                }
-                for col_name in matching_table["missing_in_table"]
-            ]
-            modify_result = await modify_table(org_id, table_id, add_columns=new_cols)
-            actions.append({
-                "action": "modify_table",
-                "detail": f"Agregadas {len(new_cols)} columnas a '{table_name}': {', '.join(matching_table['missing_in_table'])}",
-            })
-
-        # Cargar datos
-        load_result = await load_csv_to_table(df, org_id, table_id)
-        actions.append({
-            "action": "load_data",
-            "detail": f"Cargados {load_result['rows_inserted']} registros en '{table_name}'",
-        })
-
+    if decision == "append" and cand is not None:
+        table_row = next(t for t in org_tables if str(t["id"]) == cand.table.table_id)
+        res = await intake.append_sheet(org_id, prep, und, table_row, guard_duplicates=False)
+        actions.append({"action": "load_data",
+                        "detail": f"Cargados {res['rows_inserted']} registros en '{res['table_name']}'"})
         return {
             "status": "loaded_to_existing",
-            "table_name": table_name,
-            "table_id": table_id,
-            "match_score": matching_table["match_score"],
-            "rows_inserted": load_result["rows_inserted"],
-            "total_rows": load_result["total_rows"],
+            "table_name": res["table_name"],
+            "table_id": res["table_id"],
+            "match_score": round(cand.similarity, 2),
+            "kind": und.kind,
+            "rows_inserted": res["rows_inserted"],
+            "total_rows": res["total_rows"],
             "actions": actions,
             "analysis": analysis,
         }
 
-    else:
-        # --- Crear tabla nueva ---
-        table_name = analysis["suggested_table_name"]
-        display_name = analysis["suggested_display_name"]
-
-        # Definir columnas
-        columns_def = [
-            {
-                "name": col["clean_name"],
-                "type": col["inferred_type"],
-                "required": col["is_required"],
-            }
-            for col in analysis["columns"]
-        ]
-
-        create_result = await create_table(org_id, table_name, display_name, columns_def)
-
-        if "error" in create_result:
-            # Tabla ya existia — declarar las columnas nuevas y cargar ahi
-            table_id = create_result["table_id"]
-            modify_result = await modify_table(
-                org_id,
-                table_id,
-                add_columns=[{"name": c["name"], "type": c["type"]} for c in columns_def],
-            )
-            if modify_result.get("columns_added"):
-                actions.append({
-                    "action": "modify_table",
-                    "detail": f"Agregadas {modify_result['columns_added']} columnas a '{table_name}'",
-                })
-            load_result = await load_csv_to_table(df, org_id, table_id)
-            actions.append({
-                "action": "load_to_existing",
-                "detail": f"Tabla '{table_name}' ya existia. Cargados {load_result['rows_inserted']} registros adicionales.",
-            })
-            return {
-                "status": "loaded_to_existing",
-                "table_name": table_name,
-                "table_id": table_id,
-                "rows_inserted": load_result["rows_inserted"],
-                "total_rows": load_result["total_rows"],
-                "actions": actions,
-                "analysis": analysis,
-            }
-
-        actions.append({
-            "action": "create_table",
-            "detail": f"Tabla '{display_name}' creada con {len(columns_def)} columnas",
-        })
-
-        # Cargar datos. Si falla, la tabla recien creada no debe quedar huerfana.
-        try:
-            load_result = await load_csv_to_table(df, org_id, create_result["table_id"])
-        except Exception:
-            await _drop_table_record(org_id, create_result["table_id"])
-            raise
-        actions.append({
-            "action": "load_data",
-            "detail": f"Cargados {load_result['rows_inserted']} registros",
-        })
-
-        return {
-            "status": "created_new_table",
-            "table_name": table_name,
-            "table_id": create_result["table_id"],
-            "rows_inserted": load_result["rows_inserted"],
-            "total_rows": load_result["total_rows"],
-            "actions": actions,
-            "analysis": analysis,
-        }
+    # --- Crear tabla nueva (tambien cuando hay duda: no se mezcla en silencio) ---
+    display = intake.derive_display_name(und.kind, filename, sheet_name, bool(sheet_name))
+    res = await intake.create_sheet(org_id, prep, und, display)
+    actions.append({"action": "create_table",
+                    "detail": f"Tabla '{display}' creada con {len(prep.profiles)} columnas"})
+    actions.append({"action": "load_data", "detail": f"Cargados {res['rows_inserted']} registros"})
+    return {
+        "status": "created_new_table",
+        "table_name": res["table_name"],
+        "table_id": res["table_id"],
+        "kind": und.kind,
+        "rows_inserted": res["rows_inserted"],
+        "total_rows": res["total_rows"],
+        "actions": actions,
+        "analysis": analysis,
+    }

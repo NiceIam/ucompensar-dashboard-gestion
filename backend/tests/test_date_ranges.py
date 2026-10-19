@@ -201,16 +201,18 @@ class TestRangoAlAgregarFilas:
 
     async def test_smart_upload_declara_columnas_nuevas_de_fecha_y_calcula_su_rango(self, org_dbs):
         db = org_dbs.db(ORG_A)
-        tid = db.add_table("ventas", ["producto", "total"], [{"producto": "a", "total": 1}],
-                           column_types={"total": "number"})
+        tid = db.add_table("ventas", ["fecha", "producto", "cantidad", "total"],
+                           [{"fecha": "2026-03-01", "producto": "a", "cantidad": 1, "total": 1}],
+                           column_types={"fecha": "date", "cantidad": "integer", "total": "number"})
         df = pd.DataFrame({
-            "producto": ["a", "b"], "total": [1, 2], "fecha": ["2026-02-01", "2026-09-30"],
+            "fecha": ["2026-02-01", "2026-09-30"], "producto": ["a", "b"], "cantidad": [1, 1], "total": [1, 2],
+            "fecha_entrega": ["2026-02-05", "2026-10-02"],
         })
 
         result = await svc.smart_upload(df, ORG_A, "ventas.csv")
 
         assert result["table_id"] == str(tid)
-        assert column(org_dbs, tid)["range"] == ["2026-02-01", "2026-09-30"]
+        assert column(org_dbs, tid, "fecha_entrega")["range"] == ["2026-02-05", "2026-10-02"]
 
     async def test_modify_table_con_columna_de_fecha_que_ya_tiene_datos_anota_el_rango(self, org_dbs):
         db = org_dbs.db(ORG_A)

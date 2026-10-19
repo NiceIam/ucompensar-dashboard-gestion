@@ -14,34 +14,35 @@ const FORMATS = [
 ]
 
 /**
- * Zona para arrastrar o elegir un archivo. No filtra por tipo: la validación
- * la hace quien la usa (con mensajes humanos), así nunca hay rechazos mudos.
+ * Zona única para soltar o elegir lo que la persona tenga: uno o varios archivos a la vez, en cualquier orden.
+ * No filtra por tipo: la validación la hace quien la usa (con mensajes humanos), así nunca hay rechazos mudos.
  * Accesible con teclado (Enter/Espacio abren el selector).
  */
 export function FileDrop({
-  onFile,
+  onFiles,
   disabled = false,
   compact = false,
   className,
   title,
+  subtitle,
 }: {
-  onFile: (file: File) => void
+  onFiles: (files: File[]) => void
   disabled?: boolean
   compact?: boolean
   className?: string
   title?: string
+  subtitle?: string
 }) {
   const onDrop = useCallback(
     (accepted: File[]) => {
-      const file = accepted[0]
-      if (file) onFile(file)
+      if (accepted.length > 0) onFiles(accepted)
     },
-    [onFile]
+    [onFiles]
   )
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    multiple: false,
+    multiple: true,
     disabled,
     noKeyboard: false,
   })
@@ -58,7 +59,7 @@ export function FileDrop({
           <span className="text-muted-foreground">{hint}</span>
         </li>
       ))}
-      <li className="text-xs text-muted-foreground">hasta 10 MB</li>
+      <li className="text-xs text-muted-foreground">hasta 10 MB cada uno</li>
     </ul>
   )
 
@@ -66,7 +67,7 @@ export function FileDrop({
     <div
       {...getRootProps({
         role: "button",
-        "aria-label": title ?? "Elegir un archivo para subir",
+        "aria-label": title ?? "Elegir archivos para subir",
         "aria-disabled": disabled || undefined,
       })}
       className={cn(
@@ -94,13 +95,13 @@ export function FileDrop({
             </span>
             <div className="text-left">
               <p className="font-semibold">
-                {isDragActive ? "Suéltalo aquí" : title ?? "Agrega más datos"}
+                {isDragActive ? "Suéltalos aquí" : title ?? "Agrega más datos"}
               </p>
               <p className="text-sm text-muted-foreground">
-                <span className="[@media(pointer:coarse)]:hidden">Arrastra un archivo o </span>
+                {subtitle ?? "Excel, CSV, varios a la vez. "}
                 <span className="font-semibold text-primary underline-offset-4 group-hover:underline">
-                  <span className="[@media(pointer:coarse)]:hidden">elígelo</span>
-                  <span className="hidden [@media(pointer:coarse)]:inline">Toca para elegir un archivo</span>
+                  <span className="[@media(pointer:coarse)]:hidden">Elígelos</span>
+                  <span className="hidden [@media(pointer:coarse)]:inline">Toca para elegir</span>
                 </span>
               </p>
             </div>
@@ -115,13 +116,13 @@ export function FileDrop({
           />
           <div className="space-y-1.5">
             <p className="font-display text-2xl font-semibold leading-tight">
-              {isDragActive ? "Suéltalo aquí" : title ?? "Arrastra tu archivo aquí"}
+              {isDragActive ? "Suéltalos aquí" : title ?? "Suelta aquí lo que tengas"}
             </p>
             <p className="text-[15px] text-muted-foreground">
-              <span className="[@media(pointer:coarse)]:hidden">o </span>
+              {subtitle ?? "Excel, CSV, varios a la vez, en el orden que sea. "}
               <span className="font-semibold text-primary underline-offset-4 group-hover:underline">
-                <span className="[@media(pointer:coarse)]:hidden">elige uno de tu computador</span>
-                <span className="hidden [@media(pointer:coarse)]:inline">Toca para elegir un archivo</span>
+                <span className="[@media(pointer:coarse)]:hidden">O elígelos de tu computador</span>
+                <span className="hidden [@media(pointer:coarse)]:inline">Toca para elegir archivos</span>
               </span>
             </p>
           </div>
