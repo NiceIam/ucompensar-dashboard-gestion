@@ -31,10 +31,15 @@ logger = logging.getLogger(__name__)
 
 
 def _on_rate_limit_exceeded(request: Request, exc: RateLimitExceeded):
-    """429 de slowapi. En /api/v1/chat usa la misma estructura de `detail` que el tope por cuota
-    (code/message/retry_after_seconds), para que el frontend no tenga que distinguirlos; el resto
-    de rutas (auth) conserva el cuerpo por defecto de slowapi."""
-    if not request.url.path.startswith("/api/v1/chat/"):
+    """429 de slowapi. En /api/v1/chat y /api/v1/insights usa la misma estructura de `detail` que el tope por cuota
+    (code/message/retry_after_seconds), para que el frontend no tenga que distinguirlos; el resto de rutas (auth)
+    conserva el cuerpo por defecto de slowapi."""
+    path = request.url.path
+    if path.startswith("/api/v1/chat/"):
+        what = "Estás enviando mensajes muy rápido."
+    elif path.startswith("/api/v1/insights"):
+        what = "Estás consultando tus hallazgos muy seguido."
+    else:
         return _rate_limit_exceeded_handler(request, exc)
     retry_after = max(1, int(exc.limit.limit.get_expiry()))  # ventana completa: cota superior del tiempo de espera
     retry_at = datetime.now(timezone.utc) + timedelta(seconds=retry_after)
@@ -42,7 +47,7 @@ def _on_rate_limit_exceeded(request: Request, exc: RateLimitExceeded):
         {
             "detail": {
                 "code": "rate_limit_user",
-                "message": f"Estás enviando mensajes muy rápido. Intenta de nuevo en {retry_after} segundos.",
+                "message": f"{what} Intenta de nuevo en {retry_after} segundos.",
                 "retry_after_seconds": retry_after,
                 "retry_at": retry_at.isoformat(),
             }

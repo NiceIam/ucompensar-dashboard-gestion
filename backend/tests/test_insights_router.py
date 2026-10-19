@@ -128,6 +128,10 @@ class TestInsightsRouter:
         assert all(client.get(URL).status_code == 200 for _ in range(30))
         resp = client.get(URL)
         assert resp.status_code == 429
+        detail = resp.json()["detail"]      # misma estructura que el 429 del chat
+        assert detail["code"] == "rate_limit_user" and detail["retry_after_seconds"] == 60
+        assert detail["message"] == "Estás consultando tus hallazgos muy seguido. Intenta de nuevo en 60 segundos."
+        assert resp.headers["Retry-After"] == "60"
         # otro usuario tiene su propio cupo
         as_user(ORG_A, USER_B)
         assert client.get(URL).status_code == 200
