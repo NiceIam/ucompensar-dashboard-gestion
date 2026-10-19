@@ -228,9 +228,11 @@ class TestFerreteria:
         assert result["generated_at"] == "2025-10-20T15:00:00Z"
         assert result["recipe_pack"] == "ferreteria"
         assert result["period"] == {"from": "2025-07-02", "to": "2025-10-08", "days": 99}
-        assert [i["id"] for i in result["items"]] == [
-            "capital_inventario", "reposicion", "margen_bajo", "sin_movimiento", "clientes_concentracion",
-            "productos_estrella"]
+        # severidad, luego lo accionable (con action) y al final los "todo bien"; a igual cosa, por impacto
+        assert [(i["id"], i["severity"], i["action"] is not None) for i in result["items"]] == [
+            ("capital_inventario", "important", True), ("sin_movimiento", "info", True),
+            ("clientes_concentracion", "info", True), ("productos_estrella", "info", True),
+            ("reposicion", "info", False), ("margen_bajo", "info", False)]
         for it in result["items"]:
             assert set(it) == {"id", "kind", "severity", "title", "sentence", "metrics", "action", "ask", "how"}
             assert it["kind"] in ("money", "risk", "opportunity", "info")
@@ -248,8 +250,8 @@ class TestFerreteria:
         assert it["severity"] == "important" and it["kind"] == "money"
         assert it["title"] == "Tienes $47,6 M en mercancía"
         assert it["sentence"] == (
-            "Tienes $47,6 M en mercancía (a costo). Entre el 2 de julio y el 8 de octubre de 2025 vendiste "
-            "$10,2 M: a ese ritmo, tu inventario tardaría más de un año en venderse.")
+            "Es lo que pagaste por el inventario que hoy tienes en bodega. Entre el 2 de julio y el 8 de octubre "
+            "de 2025 vendiste $10,2 M: a ese ritmo, tardaría más de un año en venderse.")
         assert metrics(it) == {"Mercancía a costo": 47_620_000, "Vendido en el periodo": 10_234_700,
                                "Meses de inventario": 21.0}
         assert it["how"]["tables"] == ["Productos", "Ventas"]
@@ -264,24 +266,23 @@ class TestFerreteria:
         assert it["severity"] == "info" and it["kind"] == "opportunity"
         assert it["title"] == "Tus 3 productos estrella dejan el 36 % de tu utilidad"
         assert it["sentence"] == (
-            "Tus 3 productos que más utilidad dejan son Cemento Argos 50kg ($370.500), Pintura vinilo blanco "
-            "5gal ($324.000) y Varilla corrugada 1/2 x 6m ($302.500): juntos son el 36 % de toda tu utilidad "
-            "($2,7 M).")
+            "Son Cemento Argos 50kg ($370.500), Pintura vinilo blanco 5gal ($324.000) y Varilla corrugada 1/2 x "
+            "6m ($302.500). Juntos dejan $997.000 de los $2,7 M que ganaste con todas tus ventas.")
         assert metrics(it) == {"Utilidad de los productos estrella": 997_000, "Parte de la utilidad total": 36.3,
                                "Utilidad total": 2_746_700}
 
     def test_reposicion_ninguno_se_agota(self, result):
         it = item(result, "reposicion")
         assert it["severity"] == "info"
-        assert it["sentence"] == "Ninguno de tus productos se acaba en menos de 15 días al ritmo que vendes."
+        assert it["sentence"] == "Al ritmo que vendes, todos tus productos te alcanzan para 15 días o más."
         assert metrics(it) == {"Productos por agotarse": 0}
 
     def test_clientes_concentracion(self, result):
         it = item(result, "clientes_concentracion")
         assert it["severity"] == "info"
         assert it["sentence"] == (
-            "Tus ventas están repartidas: tus 3 mejores clientes suman el 37 % y el primero (Constructora "
-            "Andes SAS) el 16 %.")
+            "Tus 3 mejores clientes suman el 37 % de lo que vendes y el primero, Constructora Andes SAS, el 16 %: "
+            "ninguno pesa demasiado.")
         assert metrics(it) == {"Los 3 mejores clientes": 37.5, "El mejor cliente": 15.5, "Clientes distintos": 22}
         assert it["how"]["rows_used"] == 40
 
@@ -289,21 +290,21 @@ class TestFerreteria:
         it = item(result, "sin_movimiento")
         assert it["severity"] == "info"
         assert it["sentence"] == (
-            "Tienes $360.000 parados en 1 producto que no vendiste en los últimos 90 días, sobre todo "
-            "Regadera plastica 10L ($360.000).")
+            "Es plata de 1 producto que no vendiste en los últimos 90 días, sobre todo Regadera plastica 10L "
+            "($360.000).")
         assert metrics(it) == {"Plata parada": 360_000, "Productos sin movimiento": 1, "Parte de tu mercancía": 0.8}
 
     def test_margen_bajo_ninguno(self, result):
         it = item(result, "margen_bajo")
         assert it["severity"] == "info"
         assert metrics(it) == {"Productos con margen bajo": 0}
-        assert it["sentence"] == ("Ningún producto vendido deja menos de 10 % de margen ni se vendió por debajo "
-                                  "de su costo.")
+        assert it["sentence"] == ("Ninguno de los que vendiste deja menos de 10 % de margen ni se vendió por "
+                                  "debajo de su costo.")
 
     def test_resumen_para_whatsapp(self, result):
         lines = result["summary_text"].split("\n")
         assert lines[0] == "Resumen de tu negocio (lunes 20 de octubre)"
-        assert lines[1].startswith("• Tienes $47,6 M en mercancía (a costo).")
+        assert lines[1].startswith("• Tienes $47,6 M en mercancía. Es lo que pagaste por el inventario")
         assert all(l.startswith("• ") for l in lines[1:-1])
         assert len(lines) == 8
         assert lines[-1] == "Calculado con tus ventas entre el 2 de julio y el 8 de octubre de 2025."
@@ -359,16 +360,16 @@ class TestCasoSintetico:
         it = item(result, "capital_inventario")
         assert metrics(it) == {"Mercancía a costo": 56_600, "Vendido en el periodo": 8_425,
                                "Meses de inventario": 3.1}
-        assert it["sentence"] == ("Tienes $56.600 en mercancía (a costo). Entre el 1 de marzo y el 10 de marzo de "
-                                  "2025 vendiste $8.425: a ese ritmo, tu inventario tardaría unos 3 meses en "
-                                  "venderse.")
+        assert it["sentence"] == ("Es lo que pagaste por el inventario que hoy tienes en bodega. Entre el 1 de "
+                                  "marzo y el 10 de marzo de 2025 vendiste $8.425: a ese ritmo, tardaría unos 3 "
+                                  "meses en venderse.")
         assert "El periodo de ventas es corto (10 días): la cifra puede cambiar con más historia." in (
             it["how"]["notes"])
 
     def test_reposicion(self, result):
         it = item(result, "reposicion")
         assert it["title"] == "3 productos se te agotan en menos de 15 días"
-        assert it["sentence"] == ("3 productos se te acaban pronto: Epsilon (ya se agotó), Beta (en 1 día) y "
+        assert it["sentence"] == ("Al ritmo que vendes se acaban: Epsilon (ya se agotó), Beta (en 1 día) y "
                                   "Alfa (en 10 días).")
         assert metrics(it) == {"Productos por agotarse": 3, "Más urgente": "Epsilon", "Días que le quedan": 0}
         assert it["action"] == "Haz hoy el pedido de Epsilon a tu proveedor."
@@ -376,21 +377,22 @@ class TestCasoSintetico:
     def test_margen_bajo(self, result):
         it = item(result, "margen_bajo")
         assert it["title"] == "2 productos te dejan muy poca ganancia"
-        assert it["sentence"] == ("2 productos te dejan muy poca ganancia: Gamma (vendido por debajo de su costo) "
-                                  "y Epsilon (margen 4,8 %). En las ventas bajo el costo perdiste $100.")
+        assert it["sentence"] == ("Los que más preocupan: Gamma (vendido por debajo de su costo) y Epsilon "
+                                  "(margen 4,8 %). Las ventas bajo el costo te hicieron perder $100.")
         assert metrics(it) == {"Productos con margen bajo": 2, "Productos vendidos con pérdida": 1,
                                "Pérdida en ventas bajo el costo": 100}
 
     def test_clientes(self, result):
         it = item(result, "clientes_concentracion")
-        assert it["sentence"] == ("Tus 3 mejores clientes te compran el 95 % de lo que vendes, y el primero "
-                                  "(Yolanda) solo, el 71 %.")
+        assert it["sentence"] == ("Solo Yolanda, el primero, es el 71 % de lo que vendes: depender de pocos "
+                                  "clientes te deja expuesto si alguno deja de comprar.")
+        assert it["title"] == "Tus 3 mejores clientes son el 95 % de tus ventas"
         assert metrics(it) == {"Los 3 mejores clientes": 95.3, "El mejor cliente": 71.2, "Clientes distintos": 4}
 
     def test_sin_movimiento_con_periodo_corto(self, result):
         it = item(result, "sin_movimiento")
-        assert it["sentence"] == ("Tienes $5.000 parados en 1 producto que no vendiste en todo el periodo "
-                                  "(10 días), sobre todo Delta ($5.000).")
+        assert it["sentence"] == ("Es plata de 1 producto que no vendiste en todo el periodo (10 días), sobre "
+                                  "todo Delta ($5.000).")
         assert metrics(it) == {"Plata parada": 5_000, "Productos sin movimiento": 1, "Parte de tu mercancía": 8.8}
         assert "Tus ventas cubren solo 10 días: usé todo el periodo en lugar de 90 días." in it["how"]["notes"]
 
@@ -398,8 +400,8 @@ class TestCasoSintetico:
         it = item(result, "productos_estrella")
         assert it["title"] == "Tus 3 productos estrella sostienen tu utilidad"
         assert it["sentence"] == (
-            "Tus 3 productos que más utilidad dejan son Beta ($2.000), Alfa ($500) y Epsilon ($25): juntos dejan "
-            "$2.525, más que toda tu utilidad ($2.425), porque otros productos te hacen perder plata.")
+            "Son Beta ($2.000), Alfa ($500) y Epsilon ($25). Juntos dejan $2.525, más que toda tu utilidad "
+            "($2.425), porque otros productos te hacen perder plata.")
         assert metrics(it)["Utilidad total"] == 2_425
 
     async def test_estrella_cuando_la_utilidad_total_es_negativa(self, backend):
@@ -408,14 +410,95 @@ class TestCasoSintetico:
                    sales(("2025-03-01", "A", 1, 150), ("2025-03-02", "B", 5, 50)))
         it = item(await run(), "productos_estrella")
         assert it["title"] == "Tu producto estrella deja $50"
-        assert it["sentence"] == ("Tu producto que más utilidad deja es A ($50): deja $50, pero en total tus "
-                                  "productos pierden plata (-$200).")
+        assert it["sentence"] == "Es A. Aun así, en total tus productos pierden plata (-$200)."
         assert metrics(it) == {"Utilidad de los productos estrella": 50, "Utilidad total": -200}
 
     async def test_numeros_como_texto_dan_exactamente_lo_mismo(self, backend, result):
         # misma organizacion en otra org con TODOS los numeros guardados como texto (cargas antiguas)
         await load(backend, stringify(S1_PRODUCTOS), stringify(S1_VENTAS), org=ORG_B)
         assert await run(org=ORG_B) == result
+
+
+# ===========================================================================
+# Orden y redaccion: el titulo es el titular; la frase aporta contexto sin repetirlo
+# ===========================================================================
+
+def _letters(text: str) -> str:
+    return svc.fold(text).replace(" ", "")
+
+
+def assert_titulo_y_frase_distintos(result: dict) -> None:
+    for it in result["items"]:
+        title, sentence = _letters(it["title"]), _letters(it["sentence"])
+        assert sentence[:25] != title[:25], (it["id"], it["title"], it["sentence"])
+        assert not sentence.startswith(title), (it["id"], it["title"], it["sentence"])
+        # la cifra principal del titular no puede ser el arranque de la frase
+        first_words = " ".join(it["sentence"].split()[:3])
+        assert not any(tok in first_words for tok in it["title"].split() if tok.startswith("$")), it["id"]
+
+
+def assert_orden(result: dict) -> None:
+    rank = {"important": 0, "attention": 1, "info": 2}
+    keys = [(rank[i["severity"]], 0 if i["action"] else 1) for i in result["items"]]
+    assert keys == sorted(keys), [(i["id"], i["severity"], i["action"]) for i in result["items"]]
+
+
+_ESCENARIOS = {
+    "sintetico": (S1_PRODUCTOS, S1_VENTAS),
+    "todo_bien": (prods(("A", 100, 1000)), sales(("2025-03-01", "A", 1, 150, "C1"), ("2025-03-02", "A", 1, 150, "C2"),
+                                                  ("2025-03-03", "A", 1, 150, "C3"), ("2025-03-04", "A", 1, 150, "C4"),
+                                                  ("2025-03-05", "A", 1, 150, "C5"), ("2025-03-06", "A", 1, 150, "C6"),
+                                                  ("2025-03-07", "A", 1, 150, "C7"), ("2025-03-08", "A", 1, 150, "C8"))),
+    "utilidad_negativa": (prods(("A", 100, 10), ("B", 100, 10)),
+                          sales(("2025-03-01", "A", 1, 150), ("2025-03-02", "B", 5, 50))),
+    "un_cliente": (prods(("A", 100, 10)), sales(("2025-03-01", "A", 1, 150, "Unico"), ("2025-03-02", "A", 1, 150, "Unico"))),
+    "sin_ventas_con_costo": (prods(("A", 0, 10)), sales(("2025-03-01", "A", 1, 150, "C"))),
+    "reposicion_muchos": (prods(*[(f"P{i}", 10, 1) for i in range(8)], ("Q", 10, 5000)),
+                          sales(*[("2025-03-01", f"P{i}", 5, 20, "C") for i in range(8)], ("2025-03-10", "Q", 1, 20, "C"))),
+}
+
+
+class TestOrdenYRedaccion:
+    @pytest.mark.parametrize("escenario", list(_ESCENARIOS))
+    async def test_escenarios(self, backend, escenario):
+        productos, ventas = _ESCENARIOS[escenario]
+        await load(backend, productos, ventas)
+        result = await run()
+        assert result["items"]
+        assert_titulo_y_frase_distintos(result)
+        assert_orden(result)
+
+    async def test_ferreteria(self, backend):
+        await load_ferreteria(backend)
+        result = await run()
+        assert_titulo_y_frase_distintos(result)
+        assert_orden(result)
+        # el top 3 son hallazgos con contenido; los "todo bien" van al final
+        assert [i["id"] for i in result["items"][:3]] == ["capital_inventario", "sin_movimiento",
+                                                          "clientes_concentracion"]
+        assert [i["id"] for i in result["items"][-2:]] == ["reposicion", "margen_bajo"]
+        assert all(i["action"] is None for i in result["items"][-2:])
+
+    @pytest.mark.parametrize("seed", range(25))
+    async def test_datos_aleatorios(self, backend, seed):
+        productos, ventas = _random_case(seed)
+        await load(backend, productos, ventas)
+        result = await run()
+        assert_titulo_y_frase_distintos(result)
+        assert_orden(result)
+
+    async def test_los_todo_bien_van_despues_de_los_informativos_con_contenido(self, backend):
+        # reposicion "todo bien" (info sin action) debe quedar detras de estrella/clientes (info con action)
+        await load(backend, *_ESCENARIOS["todo_bien"])
+        ids = [(i["id"], i["action"] is not None) for i in (await run())["items"]]
+        con_accion = [x for x in ids if x[1]]
+        assert ids[:len(con_accion)] == con_accion
+
+    def test_la_regla_detecta_una_frase_que_repite_el_titulo(self):
+        malo = {"items": [{"id": "x", "title": "Tienes $47,6 M en mercancía",
+                           "sentence": "Tienes $47,6 M en mercancía (a costo). Algo más."}]}
+        with pytest.raises(AssertionError):
+            assert_titulo_y_frase_distintos(malo)
 
 
 # ===========================================================================
@@ -458,7 +541,7 @@ class TestUmbrales:
         assert (it["metrics"][0]["value"] == 1) == listed
         assert it["severity"] == severity
         if listed:
-            assert it["sentence"] == f"Un producto se te acaba pronto: P (en {stock} días)."
+            assert it["sentence"] == f"Al ritmo que vendes se acaba: P (en {stock} días)."
 
     async def test_reposicion_ritmo_cero_se_excluye_y_no_divide_por_cero(self, backend):
         # P no se vende (ritmo 0), con poco stock: no aparece; Q si se vende
@@ -746,7 +829,7 @@ class TestRobustez:
         result = await run()
         assert result["period"] == {"from": "2025-03-01", "to": "2025-03-01", "days": 1}
         repo = item(result, "reposicion")
-        assert repo["sentence"] == "Un producto se te acaba pronto: A (en 2 días)."      # 5/dia -> 10 / 5
+        assert repo["sentence"] == "Al ritmo que vendes se acaba: A (en 2 días)."      # 5/dia -> 10 / 5
         assert "El periodo de ventas es corto (1 día)" in " ".join(repo["how"]["notes"])
         # meses = 1000 x 1 dia / (costo vendido 500 x 30) = 0,067
         assert metrics(item(result, "capital_inventario"))["Meses de inventario"] == 0.1

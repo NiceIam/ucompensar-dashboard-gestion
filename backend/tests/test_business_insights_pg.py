@@ -77,8 +77,8 @@ def assert_ferreteria(result: dict) -> None:
     """Los literales de test-data/ferreteria (calculados de forma independiente con pandas y con csv + Fraction)."""
     assert result["period"] == {"from": "2025-07-02", "to": "2025-10-08", "days": 99}
     assert [i["id"] for i in result["items"]] == [
-        "capital_inventario", "reposicion", "margen_bajo", "sin_movimiento", "clientes_concentracion",
-        "productos_estrella"]
+        "capital_inventario", "sin_movimiento", "clientes_concentracion", "productos_estrella", "reposicion",
+        "margen_bajo"]
     assert metrics(item(result, "capital_inventario")) == {
         "Mercancía a costo": 47_620_000, "Vendido en el periodo": 10_234_700, "Meses de inventario": 21.0}
     assert metrics(item(result, "productos_estrella")) == {

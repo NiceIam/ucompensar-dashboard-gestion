@@ -103,7 +103,10 @@ GENERIC_CLIENTS = frozenset({
 THOUSANDS_LOOKALIKE = re.compile(r"^\s*[0-9]{1,3}(\.[0-9]{3})+\s*$")
 
 SEVERITY_RANK = {"info": 0, "attention": 1, "important": 2}
-# Desempate entre items de la misma severidad: la plata en juego primero.
+# Orden de items: severidad (important > attention > info); dentro de cada severidad primero los accionables (con
+# `action`) y al final los "todo bien" (sin `action`); y a igual severidad y accion, por impacto: primero la plata
+# inmovilizada o en riesgo (mercancia, faltantes, margen, plata parada), luego la dependencia de clientes y al final
+# la oportunidad (productos estrella). Es estable y determinista.
 IMPACT_ORDER = ("capital_inventario", "reposicion", "margen_bajo", "sin_movimiento",
                 "clientes_concentracion", "productos_estrella")
 
@@ -757,14 +760,14 @@ def recipe_capital_inventario(ctx: Context) -> dict:
         elif months > INVENTORY_ATTENTION_MONTHS:
             severity = "attention"
     period = fmt_range(ctx.period_from, ctx.period_to)
-    base = f"Tienes {fmt_money(merchandise)} en mercancía (a costo)."
+    base = "Es lo que pagaste por el inventario que hoy tienes en bodega."
     if months is None:
         sentence = (f"{base} No pude calcular en cuánto tiempo se vende porque no encontré ventas de productos "
                     f"con costo.")
         notes.append("Sin ventas de productos con costo no hay forma de medir cuánto tarda en venderse.")
     else:
-        sentence = (f"{base} {period.capitalize()} vendiste {fmt_money(sold_revenue)}: a ese ritmo, tu inventario "
-                    f"tardaría {months_phrase(months)} en venderse.")
+        sentence = (f"{base} {period.capitalize()} vendiste {fmt_money(sold_revenue)}: a ese ritmo, tardaría "
+                    f"{months_phrase(months)} en venderse.")
     if severity in ("attention", "important"):
         action = "Revisa qué productos compraste de más antes de volver a pedir."
     else:
@@ -811,24 +814,25 @@ def recipe_productos_estrella(ctx: Context) -> dict | None:
     top_total = sum((r[1] for r in positive), Decimal(0))
     names = [f"{short_name(r[0].label)} ({fmt_money(r[1])})" for r in positive]
     n = len(positive)
-    lead = f"Tus {n} productos que más utilidad dejan son" if n > 1 else "Tu producto que más utilidad deja es"
+    lead = f"Son {join_es(names)}." if n > 1 else f"Es {names[0]}."
+    together = "Juntos dejan" if n > 1 else "Deja"
     metrics = [_metric("Utilidad de los productos estrella", _money_value(top_total), "money")]
     if total > 0 and top_total <= total:
         share = top_total / total
-        sentence = (f"{lead} {join_es(names)}: {'juntos son' if n > 1 else 'es'} el {fmt_percent(share)} de toda tu "
-                    f"utilidad ({fmt_money(total)}).")
+        sentence = f"{lead} {together} {fmt_money(top_total)} de los {fmt_money(total)} que ganaste con todas tus ventas."
         title = (f"Tus {n} productos estrella dejan el {fmt_percent(share)} de tu utilidad" if n > 1
                  else f"Tu producto estrella deja el {fmt_percent(share)} de tu utilidad")
         metrics.append(_metric("Parte de la utilidad total", _pct_value(share), "percent"))
     else:
         # otros productos pierden plata: los estrella dejan MAS que la utilidad neta total (que puede ser negativa)
-        verdict = (f"más que toda tu utilidad ({fmt_money(total)}), porque otros productos te hacen perder plata"
-                   if total > 0 else f"pero en total tus productos pierden plata ({fmt_money(total)})")
-        sentence = f"{lead} {join_es(names)}: {'juntos dejan' if n > 1 else 'deja'} {fmt_money(top_total)}, {verdict}."
         if total > 0:
+            sentence = (f"{lead} {together} {fmt_money(top_total)}, más que toda tu utilidad ({fmt_money(total)}), "
+                        "porque otros productos te hacen perder plata.")
             title = (f"Tus {n} productos estrella sostienen tu utilidad" if n > 1
                      else "Tu producto estrella sostiene tu utilidad")
         else:
+            alone = f"Es {short_name(positive[0][0].label)}." if n == 1 else lead   # el titular ya trae su cifra
+            sentence = f"{alone} Aun así, en total tus productos pierden plata ({fmt_money(total)})."
             title = (f"Tus {n} productos estrella dejan {fmt_money(top_total)}" if n > 1
                      else f"Tu producto estrella deja {fmt_money(top_total)}")
     metrics.append(_metric("Utilidad total", _money_value(total), "money"))
@@ -872,14 +876,14 @@ def recipe_reposicion(ctx: Context) -> dict:
     how = _how(ctx, steps, [ctx.product_table, ctx.sales_table], ctx.products.rows_used + ctx.sales.rows_used, notes)
     if not low:
         return _item("reposicion", "info", "info", "Ningún producto se te agota pronto",
-                     f"Ninguno de tus productos se acaba en menos de {int(RESTOCK_DAYS)} días al ritmo que vendes.",
+                     f"Al ritmo que vendes, todos tus productos te alcanzan para {int(RESTOCK_DAYS)} días o más.",
                      [_metric("Productos por agotarse", 0, "count")], None,
                      "¿Qué productos debo reponer esta semana?", how)
     shown = low[:RESTOCK_MAX_LISTED]
     parts = [f"{short_name(p.label)} ({_days_phrase(left, p.stock)})" for left, p, _r in shown]
     more = len(low) - len(shown)
     n = len(low)
-    head = "Un producto se te acaba pronto" if n == 1 else f"{fmt_int(n)} productos se te acaban pronto"
+    head = "Al ritmo que vendes se acaba" if n == 1 else "Al ritmo que vendes se acaban"
     sentence = f"{head}: {join_es(parts)}" + (f" y {plural(more, 'más', 'más')}" if more else "") + "."
     urgent = any(left < RESTOCK_URGENT_DAYS for left, _p, _r in low)
     first_left, first, _ = low[0]
@@ -914,14 +918,19 @@ def recipe_clientes_concentracion(ctx: Context) -> dict | None:
     n_top = len(top)
     lead = f"Tus {n_top} mejores clientes" if n_top > 1 else "Tu mejor cliente"
     if concentrated:
-        sentence = (f"{lead} {'te compran' if n_top > 1 else 'te compra'} el {fmt_percent(top_share)} de lo que "
-                    f"vendes, y el primero ({short_name(first[0])}) solo, el {fmt_percent(first_share)}.")
+        sentence = (f"Solo {short_name(first[0])}, el primero, es el {fmt_percent(first_share)} de lo que vendes: "
+                    "depender de pocos clientes te deja expuesto si alguno deja de comprar.")
         action = (f"Cuida tu relación con {short_name(first[0])} y busca más clientes para depender menos de pocos.")
-        title = f"Tus {n_top} mejores clientes son el {fmt_percent(top_share)} de tus ventas"
+        title = (f"Tus {n_top} mejores clientes son el {fmt_percent(top_share)} de tus ventas" if n_top > 1
+                 else f"Tu mejor cliente es el {fmt_percent(top_share)} de tus ventas")
         severity = "attention"
     else:
-        sentence = (f"Tus ventas están repartidas: {lead.lower()} suman el {fmt_percent(top_share)} y el primero "
-                    f"({short_name(first[0])}) el {fmt_percent(first_share)}.")
+        if n_top > 1:
+            sentence = (f"{lead} suman el {fmt_percent(top_share)} de lo que vendes y el primero, "
+                        f"{short_name(first[0])}, el {fmt_percent(first_share)}: ninguno pesa demasiado.")
+        else:
+            sentence = (f"{lead}, {short_name(first[0])}, es el {fmt_percent(first_share)} de lo que vendes: "
+                        "ninguno pesa demasiado.")
         action = "Sigue ampliando tu base de clientes."
         title = "Tus ventas están repartidas entre tus clientes"
         severity = "info"
@@ -965,15 +974,14 @@ def recipe_sin_movimiento(ctx: Context) -> dict:
     how = _how(ctx, steps, [ctx.product_table, ctx.sales_table], ctx.products.rows_used + ctx.sales.rows_used, notes)
     if not stuck:
         return _item("sin_movimiento", "info", "info", "Todos tus productos se han movido",
-                     f"Todos los productos que tienes en existencia tuvieron ventas {window_text}.",
+                     f"Cada producto con existencias tuvo al menos una venta {window_text}: no hay plata quieta.",
                      [_metric("Productos sin movimiento", 0, "count")], None,
                      "¿Qué productos no se están vendiendo?", how)
     share = parked / merchandise if merchandise > 0 else Decimal(0)
     severity = "attention" if merchandise > 0 and share >= PARKED_ATTENTION_SHARE else "info"
     top = sorted(stuck, key=lambda p: (-p.value, p.key))[:3]
     top_text = join_es([f"{short_name(p.label)} ({fmt_money(p.value)})" for p in top if p.value > 0])
-    sentence = (f"Tienes {fmt_money(parked)} parados en {plural(len(stuck), 'producto', 'productos')} que no "
-                f"vendiste {window_text}")
+    sentence = (f"Es plata de {plural(len(stuck), 'producto', 'productos')} que no vendiste {window_text}")
     sentence += f", sobre todo {top_text}." if top_text else "."
     return _item("sin_movimiento", "money", severity, f"Tienes {fmt_money(parked)} en productos que no se mueven",
                  sentence,
@@ -1010,8 +1018,8 @@ def recipe_margen_bajo(ctx: Context) -> dict:
     how = _how(ctx, steps, [ctx.product_table, ctx.sales_table], ctx.products.rows_used + ctx.sales.rows_used, notes)
     if not flagged:
         return _item("margen_bajo", "info", "info", "Tus productos dejan un margen sano",
-                     f"Ningún producto vendido deja menos de {fmt_percent(LOW_MARGIN)} de margen ni se vendió por "
-                     f"debajo de su costo.", [_metric("Productos con margen bajo", 0, "count")], None,
+                     f"Ninguno de los que vendiste deja menos de {fmt_percent(LOW_MARGIN)} de margen ni se vendió "
+                     "por debajo de su costo.", [_metric("Productos con margen bajo", 0, "count")], None,
                      "¿Qué productos me dejan menos margen?", how)
     losing = [r for r in flagged if r[2]]
     total_loss = sum((r[3] for r in losing), Decimal(0))
@@ -1022,10 +1030,10 @@ def recipe_margen_bajo(ctx: Context) -> dict:
         parts.append(f"{short_name(p.label)} ({what})")
     more = len(flagged) - len(shown)
     n = len(flagged)
-    head = "Un producto te deja" if n == 1 else f"{fmt_int(n)} productos te dejan"
-    sentence = f"{head} muy poca ganancia: {join_es(parts)}" + (f" y {plural(more, 'más', 'más')}" if more else "") + "."
+    head = "El que más preocupa" if n == 1 else "Los que más preocupan"
+    sentence = f"{head}: {join_es(parts)}" + (f" y {plural(more, 'más', 'más')}" if more else "") + "."
     if losing:
-        sentence += f" En las ventas bajo el costo perdiste {fmt_money(total_loss)}."
+        sentence += f" Las ventas bajo el costo te hicieron perder {fmt_money(total_loss)}."
     metrics = [_metric("Productos con margen bajo", n, "count"),
                _metric("Productos vendidos con pérdida", len(losing), "count")]
     if losing:
@@ -1317,7 +1325,8 @@ def _compose(roles, alternatives, has_receivables, data, now_local: datetime) ->
     if not has_receivables:
         missing.append(dict(RECEIVABLES_MISSING))
     order = {rid: i for i, rid in enumerate(IMPACT_ORDER)}
-    items.sort(key=lambda it: (-SEVERITY_RANK[it["severity"]], order.get(it["id"], 99)))
+    # severidad; dentro de cada una primero lo accionable (con `action`) y al final los "todo bien"; luego impacto
+    items.sort(key=lambda it: (-SEVERITY_RANK[it["severity"]], 0 if it["action"] else 1, order.get(it["id"], 99)))
     return {"items": items, "missing": missing}
 
 
@@ -1325,7 +1334,7 @@ def build_summary_text(now_local: datetime, items: list[dict], missing: list[dic
     heading = f"Resumen de tu negocio ({_WEEKDAYS[now_local.weekday()]} {now_local.day} de {_MONTHS[now_local.month - 1]})"
     lines = [heading]
     if items:
-        lines += [f"• {it['sentence']}" for it in items]
+        lines += [f"• {it['title']}. {it['sentence']}" for it in items]
         if period is not None:
             lines.append(f"Calculado con tus ventas {fmt_range(period[0], period[1])}.")
     else:
