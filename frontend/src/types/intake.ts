@@ -145,6 +145,8 @@ export interface PlanSheet {
   display_name?: string | null
   kind?: SheetKind | null
   mapping_source?: MappingSource | null
+  /** Confianza del tipo que propuso el servidor (0..1); si la persona lo corrigió, el servidor guarda 1. */
+  kind_confidence?: number | null
   columns?: PlanColumn[] | null
 }
 

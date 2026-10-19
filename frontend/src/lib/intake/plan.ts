@@ -174,6 +174,7 @@ export function buildPlan(
       display_name: action === "create" ? edit?.displayName?.trim() || dest.new_display_name : null,
       kind,
       mapping_source: sheet.mapping_source ?? "heuristic",
+      kind_confidence: kindChanged ? 1 : sheet.kind_confidence ?? null,
       columns,
     }
   })

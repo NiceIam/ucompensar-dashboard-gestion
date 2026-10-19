@@ -54,6 +54,7 @@ class PlanSheet(BaseModel):
     display_name: Optional[str] = Field(default=None, max_length=150)
     kind: Optional[str] = Field(default=None, max_length=40)
     mapping_source: Optional[str] = Field(default=None, max_length=12)
+    kind_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     columns: Optional[list[PlanColumn]] = Field(default=None, max_length=200)
 
 

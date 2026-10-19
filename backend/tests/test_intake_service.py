@@ -648,3 +648,13 @@ class TestDeshacerCarga:
         res = await intake.undo_commit_load(ORG_A, r["table_id"], primera_marca)
         assert res["rows_deleted"] == 3 and res["total_rows"] == 3
         assert {x["created_at"].isoformat() for x in dbs.db(ORG_A).rows} == {r["loaded_at"]}     # quedo la segunda carga
+
+
+class TestConfianzaDelTipoGuardada:
+    async def test_la_confianza_propuesta_se_guarda_y_la_corregida_vale_uno(self, dbs):
+        proposal = await intake.analyze_uploads(ORG_A, [csv_up("ventas.csv", VENTAS_CSV)])
+        plan = plan_from(proposal)
+        plan[0]["kind_confidence"] = 0.93
+        await intake.commit_uploads(ORG_A, [csv_up("ventas.csv", VENTAS_CSV)], plan)
+        cols = dbs.db(ORG_A).columns_of(next(iter(dbs.db(ORG_A).tables)))
+        assert onto.read_sheet_meta(cols)["kind_confidence"] == 0.93

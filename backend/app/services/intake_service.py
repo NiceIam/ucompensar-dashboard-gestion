@@ -625,7 +625,9 @@ async def _understanding_from_plan(org_id: str, prep: Prepared, item: dict, fnam
         cols.append(su.ColumnResult(p.index, p.original, p.clean, role, conf, "user"))
     any_edited = any(e for (_r, _c, e) in roles.values())
     source = "user" if any_edited else (item.get("mapping_source") if item.get("mapping_source") in ("heuristic", "ai") else "heuristic")
-    kind_conf = 1.0 if any_edited else 0.8
+    given = item.get("kind_confidence")
+    given = float(given) if isinstance(given, (int, float)) and not isinstance(given, bool) and 0 <= given <= 1 else 0.8
+    kind_conf = 1.0 if any_edited else given
     return su.Understanding(kind, kind_conf, cols, source=source, signature=sig, clear=True)
 
 
