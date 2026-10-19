@@ -40,11 +40,11 @@ describe("InsightsSection (inicio)", () => {
     expect(screen.queryByRole("article")).toBeNull()
   })
 
-  test("muestra solo los 3 más importantes, en orden, y enlaza a /resumen con el total", () => {
+  test("muestra los 3 primeros tal como llegan (sin reordenar) y enlaza a /resumen con el total", () => {
     const items = [item("a", "info"), item("b", "attention"), item("c", "important"), item("d", "info"), item("e", "important")]
     render(<InsightsSection query={query({ data: DATA({ items }) })} onAsk={vi.fn()} />)
     const titles = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)
-    expect(titles).toEqual(["Título c", "Título e", "Título b"])
+    expect(titles).toEqual(["Título a", "Título b", "Título c"])
     const link = screen.getByRole("link", { name: /Ver todos \(5\)/ })
     expect(link).toHaveAttribute("href", "/resumen")
     expect(screen.getByText("Ventas del 2 de julio al 8 de octubre de 2025")).toBeInTheDocument()

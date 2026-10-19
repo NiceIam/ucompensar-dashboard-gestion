@@ -15,7 +15,7 @@ import { useInsights } from "@/hooks/use-insights"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useChat } from "@/providers/chat-provider"
 import { humanizeError } from "@/lib/errors"
-import { buildSummaryText, dayLabel, periodLabel, sortInsights } from "@/lib/insights"
+import { buildSummaryText, dayLabel, periodLabel } from "@/lib/insights"
 
 export default function ResumenPage() {
   usePageTitle("Resumen de la semana")
@@ -23,7 +23,7 @@ export default function ResumenPage() {
   const query = useInsights()
   const data = query.data
 
-  const items = useMemo(() => sortInsights(data?.items ?? []), [data])
+  const items = useMemo(() => data?.items ?? [], [data])
   const missing = data?.missing ?? []
   const summary = useMemo(() => (data ? buildSummaryText(data) : ""), [data])
 
@@ -95,7 +95,7 @@ export default function ResumenPage() {
               <SectionHeader
                 id="resumen-hallazgos"
                 title={items.length === 1 ? "1 hallazgo" : `${items.length} hallazgos`}
-                description="Ordenados del más importante al menos importante."
+                description="Primero lo que conviene atender esta semana."
               />
               <InsightList items={items} onAsk={(q) => ask(q)} />
             </section>

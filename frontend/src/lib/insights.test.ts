@@ -7,7 +7,7 @@ import {
   parseIsoDate,
   periodLabel,
   prettyTable,
-  sortInsights,
+  splitCommonNotes,
   topInsights,
   whatsappUrl,
 } from "./insights"
@@ -65,7 +65,7 @@ describe("formato de cifras según su unidad", () => {
   })
 })
 
-describe("orden y selección de hallazgos", () => {
+describe("selección de hallazgos: el orden lo manda el servidor", () => {
   const items = [
     insight("a", "info"),
     insight("b", "important"),
@@ -74,20 +74,69 @@ describe("orden y selección de hallazgos", () => {
     insight("e", "info"),
   ]
 
-  test("severidad de mayor a menor y, a igual severidad, el orden del servidor", () => {
-    expect(sortInsights(items).map((i) => i.id)).toEqual(["b", "d", "c", "a", "e"])
+  test("el inicio muestra los 3 primeros tal como llegan, sin reordenar por severidad", () => {
+    expect(topInsights(items).map((i) => i.id)).toEqual(["a", "b", "c"])
+    expect(topInsights(items, 2).map((i) => i.id)).toEqual(["a", "b"])
+    expect(topInsights([])).toEqual([])
   })
 
   test("no modifica la lista original", () => {
     const copy = [...items]
-    sortInsights(items)
+    topInsights(items)
     expect(items).toEqual(copy)
   })
+})
 
-  test("los 3 más importantes para el inicio", () => {
-    expect(topInsights(items).map((i) => i.id)).toEqual(["b", "d", "c"])
-    expect(topInsights(items.slice(0, 2)).map((i) => i.id)).toEqual(["b", "a"])
-    expect(topInsights([])).toEqual([])
+describe("avisos repetidos entre hallazgos", () => {
+  const withNotes = (id: string, notes: string[]): Insight => ({
+    ...insight(id, "attention"),
+    how: { steps: [], tables: [], rows_used: 0, notes },
+  })
+  const LAST_SALE = "Tu última venta registrada es del 8 de octubre de 2025: si ya vendiste después, sube el archivo actualizado."
+
+  test("un aviso idéntico en 2 o más hallazgos sale una vez y se quita de las tarjetas", () => {
+    const { common, items } = splitCommonNotes([
+      withNotes("a", [LAST_SALE, "Propio de A"]),
+      withNotes("b", [LAST_SALE]),
+      withNotes("c", [LAST_SALE, "Propio de C"]),
+    ])
+    expect(common).toEqual([LAST_SALE])
+    expect(items.map((i) => i.how.notes)).toEqual([["Propio de A"], [], ["Propio de C"]])
+  })
+
+  test("con un solo hallazgo el aviso se queda en su tarjeta", () => {
+    const one = [withNotes("a", [LAST_SALE])]
+    const out = splitCommonNotes(one)
+    expect(out.common).toEqual([])
+    expect(out.items[0].how.notes).toEqual([LAST_SALE])
+  })
+
+  test("avisos distintos no se tocan", () => {
+    const list = [withNotes("a", ["Uno"]), withNotes("b", ["Dos"])]
+    const out = splitCommonNotes(list)
+    expect(out.common).toEqual([])
+    expect(out.items).toBe(list)
+  })
+
+  test("orden estable: los comunes salen en el orden de su primera aparición", () => {
+    const { common } = splitCommonNotes([
+      withNotes("a", ["Zeta", "Alfa"]),
+      withNotes("b", ["Alfa", "Zeta", "Solo B"]),
+    ])
+    expect(common).toEqual(["Zeta", "Alfa"])
+  })
+
+  test("espacios de más no esconden un aviso repetido; un aviso repetido dentro de UN hallazgo no cuenta", () => {
+    const { common } = splitCommonNotes([withNotes("a", ["Mismo  aviso", "Mismo aviso"]), withNotes("b", ["Otro"])])
+    expect(common).toEqual([])
+    const out = splitCommonNotes([withNotes("a", ["Mismo  aviso"]), withNotes("b", [" Mismo aviso "])])
+    expect(out.common).toEqual(["Mismo aviso"])
+  })
+
+  test("no modifica los hallazgos originales", () => {
+    const a = withNotes("a", [LAST_SALE])
+    splitCommonNotes([a, withNotes("b", [LAST_SALE])])
+    expect(a.how.notes).toEqual([LAST_SALE])
   })
 })
 
@@ -131,13 +180,13 @@ describe("compartir el resumen", () => {
     )
   })
 
-  test("si el servidor no lo manda, se arma con las frases ordenadas por importancia", () => {
+  test("si el servidor no lo manda, se arma con las frases en el orden en que llegan", () => {
     const text = buildSummaryText({
       generated_at: "2026-10-19T14:05:00",
       summary_text: null,
       items: [insight("a", "info", "Frase A"), insight("b", "important", "Frase B")],
     })
-    expect(text).toBe("Resumen de tu negocio (lunes 19 de octubre)\n• Frase B\n• Frase A")
+    expect(text).toBe("Resumen de tu negocio (lunes 19 de octubre)\n• Frase A\n• Frase B")
   })
 })
 

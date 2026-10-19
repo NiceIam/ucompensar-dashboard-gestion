@@ -17,17 +17,44 @@ export const SEVERITY_LABEL: Record<InsightSeverity, string> = {
   info: "Dato",
 }
 
-/** Más importante primero; a igual severidad se respeta el orden del servidor (impacto). */
-export function sortInsights(items: Insight[]): Insight[] {
-  return items
-    .map((item, index) => ({ item, index }))
-    .sort((a, b) => (SEVERITY_RANK[b.item.severity] ?? 0) - (SEVERITY_RANK[a.item.severity] ?? 0) || a.index - b.index)
-    .map(({ item }) => item)
+/**
+ * El servidor decide el orden (lo accionable primero, los "todo bien" al final):
+ * el cliente NO reordena. El inicio muestra los N primeros tal como llegan.
+ */
+export function topInsights(items: Insight[], n = 3): Insight[] {
+  return items.slice(0, n)
 }
 
-/** Los N hallazgos más importantes (3 en el inicio). */
-export function topInsights(items: Insight[], n = 3): Insight[] {
-  return sortInsights(items).slice(0, n)
+/* ── Avisos repetidos ──────────────────────────────────── */
+
+const normalizeNote = (note: string) => note.replace(/\s+/g, " ").trim()
+
+/**
+ * Avisos COMUNES: el mismo texto en 2 o más hallazgos de la lista. Se muestran una
+ * sola vez arriba y cada tarjeta conserva solo los suyos. Con un solo hallazgo no
+ * hay nada que compartir: el aviso se queda en su tarjeta. Orden estable (por
+ * primera aparición) y sin modificar la lista original.
+ */
+export function splitCommonNotes(items: Insight[]): { common: string[]; items: Insight[] } {
+  if (items.length < 2) return { common: [], items }
+  const count = new Map<string, number>()
+  const firstSeen: string[] = []
+  for (const item of items) {
+    for (const note of Array.from(new Set(item.how.notes.map(normalizeNote).filter(Boolean)))) {
+      if (!count.has(note)) firstSeen.push(note)
+      count.set(note, (count.get(note) ?? 0) + 1)
+    }
+  }
+  const common = firstSeen.filter((n) => (count.get(n) ?? 0) >= 2)
+  if (common.length === 0) return { common, items }
+  const shared = new Set(common)
+  return {
+    common,
+    items: items.map((item) => ({
+      ...item,
+      how: { ...item.how, notes: item.how.notes.filter((n) => !shared.has(normalizeNote(n))) },
+    })),
+  }
 }
 
 /* ── Cifras ────────────────────────────────────────────── */
@@ -119,7 +146,7 @@ export function buildSummaryText(data: Pick<InsightsResponse, "items" | "summary
   if (fromServer) return fromServer
   const when = new Date(data.generated_at)
   const header = Number.isNaN(when.getTime()) ? "Resumen de tu negocio" : `Resumen de tu negocio (${dayLabel(when)})`
-  const lines = sortInsights(data.items).map((i) => `• ${i.sentence}`)
+  const lines = data.items.map((i) => `• ${i.sentence}`)
   return [header, ...lines].join("\n")
 }
 
