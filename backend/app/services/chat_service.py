@@ -408,6 +408,11 @@ async def send_message(
         for chart in result["charts"]:
             ai_response += f"\n```chart\n{json.dumps(chart, ensure_ascii=False)}\n```"
 
+    # Tableros creados en este mensaje: el bloque (con el id) lo arma SOLO el servidor; cualquier bloque
+    # equivalente escrito por el modelo ya se descarto en process_with_gemini.
+    for board in result.get("dashboards") or []:
+        ai_response += f"\n```dashboard\n{json.dumps(board, ensure_ascii=False)}\n```"
+
     # Guardar respuesta del asistente
     assistant_msg_id = str(uuid.uuid4())
     completed_at = datetime.now(timezone.utc)
@@ -490,6 +495,11 @@ async def send_file_message(
                 result.get("rows_inserted", len(df)),
                 file_id,
             )
+
+        # Si la organizacion aun no tiene tableros, se sugieren (no lanza ni espera mas que su tope de tiempo).
+        if result.get("rows_inserted"):
+            from app.services.dashboard_suggest_service import auto_suggest_after_upload
+            await auto_suggest_after_upload(org_id)
 
         # Construir respuesta descriptiva
         actions_text = "\n".join(f"- {a['detail']}" for a in result["actions"])

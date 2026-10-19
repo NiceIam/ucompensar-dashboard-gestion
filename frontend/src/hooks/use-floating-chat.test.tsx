@@ -113,4 +113,28 @@ describe("useFloatingChat.sendMessage ante límites del backend", () => {
     expect(result.current.error).toBeNull()
     expect(result.current.messages.map((m) => m.content)).toEqual(["hola", "ok"])
   })
+
+  test("si la respuesta trae un tablero recién creado, avisa para refrescar la lista (solo con un UUID válido)", async () => {
+    const ID = "3f2c1f7e-1111-4222-8333-444455556666"
+    const onDashboardCreated = vi.fn()
+    const block = (id: string) => `Listo.
+\`\`\`dashboard
+${JSON.stringify({ id, name: "Ventas", widgets: 3, existing: false })}
+\`\`\``
+    post
+      .mockResolvedValueOnce({ message_id: "m1", role: "assistant", content: block(ID), created_at: "2026-01-01T00:00:00Z" })
+      .mockResolvedValueOnce({ message_id: "m2", role: "assistant", content: block("no-es-uuid"), created_at: "2026-01-01T00:00:00Z" })
+    const hook = renderHook(() => useFloatingChat({ onDashboardCreated }))
+    await waitFor(() => expect(hook.result.current.isLoading).toBe(false))
+
+    await act(async () => {
+      await hook.result.current.sendMessage("creame un tablero")
+    })
+    expect(onDashboardCreated).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await hook.result.current.sendMessage("otro")
+    })
+    expect(onDashboardCreated).toHaveBeenCalledTimes(1) // el bloque con id inválido no cuenta
+  })
 })

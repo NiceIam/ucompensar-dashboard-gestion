@@ -1089,6 +1089,7 @@ class TestGraficos:
             "data": [{"name": "Sierra", "value": 300}, {"name": "Taladro", "value": 200},
                      {"name": "Martillo", "value": 150.5}],
             "x": "name", "y": "value", "color": "#3b82f6",
+            "unit": "money",            # sum(total): la columna medida tiene nombre de dinero
         }]
         (fr,) = sent_function_responses(gemini.send, 1)
         assert fr.response == {"ok": True, "puntos": 3}
@@ -1918,7 +1919,7 @@ class TestRondaFinalDirecta:
         assert gemini.send.call_count == 3                       # ninguna llamada extra al modelo
         assert "fallback_reason" not in result
         assert result["final_round_direct"] is True
-        assert set(result) == {"text", "charts", "actions", "usage", "final_round_direct"}
+        assert set(result) == {"text", "charts", "dashboards", "actions", "usage", "final_round_direct"}
         assert result["charts"] == [] and result["actions"] == []
         assert result["usage"]["tool_rounds"] == 2
         assert result["usage"]["tools"] == ["query_table", "describe_table", "query_table"]

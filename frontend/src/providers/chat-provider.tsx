@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useFloatingChat, type FloatingChatState } from "@/hooks/use-floating-chat"
 
 /** Pregunta que otra parte de la app le pasa al chat (inicio, cierre del cargue...). */
@@ -54,7 +55,9 @@ function isDesktop(): boolean {
  * Atajo global: Ctrl/⌘ + K abre o cierra el chat.
  */
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const chat = useFloatingChat()
+  const queryClient = useQueryClient()
+  // Si el chat crea un tablero, la lista de tableros se refresca sin esperar a que caduque su caché.
+  const chat = useFloatingChat({ onDashboardCreated: () => void queryClient.invalidateQueries({ queryKey: ["dashboards"] }) })
   const [isOpen, setIsOpen] = useState(false)
   const [pending, setPending] = useState<PendingQuestion | null>(null)
   const counter = useRef(0)

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
-import type { Dashboard, WidgetConfig } from "@/types/api"
+import type { Dashboard } from "@/types/api"
 
 export interface DashboardDetail {
   dashboard_id: string
@@ -17,37 +17,50 @@ export interface ChartDataPoint {
   [key: string]: string | number
 }
 
+export type MeasureUnit = "money" | "count" | "number"
+
 export interface ChartConfig {
+  /** Id del widget guardado (null en los tableros antiguos, que se calculan por defecto). */
+  id?: string | null
   type: "bar" | "line" | "pie" | "area"
   title: string
   data: ChartDataPoint[]
   x: string
   y: string
   color: string
+  /** Unidad de la medida (la decide el servidor por la columna medida). */
+  unit?: MeasureUnit
+  /** Si el gráfico no se pudo calcular (columna renombrada, hoja borrada…): el resto del tablero sigue. */
+  error?: string
 }
 
 export interface KpiConfig {
+  id?: string | null
   label: string
-  value: number
+  /** null cuando la cifra no se pudo calcular (ver `error`). */
+  value: number | null
   /** Pista de icono del backend ("Database", "TrendingUp", "DollarSign"…). */
   icon: string
-  /**
-   * Unidad explícita (opcional, aún no la manda el backend). Si llega, manda
-   * sobre cualquier heurística: "money" se muestra en pesos, "count" como cantidad.
-   */
-  unit?: "money" | "count" | "number"
-  /** Columna de origen del cálculo (opcional). Si es de dinero (total, precio, valor…), se muestra en pesos. */
+  /** Unidad explícita del servidor: manda sobre cualquier heurística ("money" en pesos, "count" cantidad). */
+  unit?: MeasureUnit
+  /** Columna de origen del cálculo. Si es de dinero (total, precio, valor…), se muestra en pesos. */
   column?: string
+  error?: string
 }
 
 export interface ExecuteResult {
   charts: ChartConfig[]
   kpis: KpiConfig[]
+  /** true: tablero sin gráficos guardados, calculado con la regla por defecto. */
+  legacy?: boolean
 }
 
-export interface ScriptResponse {
-  script: string
-  dashboard_id: string
+export type SuggestStatus = "created" | "exists" | "no_data" | "has_dashboards" | "already_suggested" | "nothing"
+
+export interface SuggestResult {
+  status: SuggestStatus
+  source: "ai" | "rules" | null
+  dashboards: { id: string; name: string; widgets: number | null; existing: boolean }[]
 }
 
 export function useDashboards() {
@@ -70,20 +83,14 @@ export function useDashboardMeta(id: string) {
 }
 
 /**
- * Ejecuta el script Python del dashboard (POST con efectos de lado en el
- * servidor). Se modela como `useQuery` -- aunque el verbo HTTP sea POST, para
- * TanStack Query no importa: `queryFn` se llama una sola vez por `queryKey`
- * (respetando `staleTime`), igual que un GET. Antes se usaba `useMutation`
- * disparada a mano desde un `useEffect`, pero ese patron queda atascado en
- * "pending" para siempre en dev bajo React Strict Mode (el doble-montaje de
- * efectos deja el observer interno de la mutation desincronizado del render
- * activo). `useQuery` esta diseñado para ser resistente a ese doble-montaje.
+ * Calcula el tablero con los datos de este momento (POST sin efectos de lado visibles). Se modela como
+ * `useQuery`: `queryFn` se llama una sola vez por `queryKey` (respetando `staleTime`), igual que un GET, y
+ * resiste el doble montaje de React Strict Mode (una mutation disparada desde un efecto queda atascada).
  */
 export function useDashboardExecute(id: string) {
   const query = useQuery<ExecuteResult>({
     queryKey: ["dashboard-execute", id],
-    queryFn: (): Promise<ExecuteResult> =>
-      api.post(`/api/v1/dashboards/${id}/execute`, {}),
+    queryFn: (): Promise<ExecuteResult> => api.post(`/api/v1/dashboards/${id}/execute`, {}),
     enabled: Boolean(id),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
@@ -102,43 +109,15 @@ export function useDashboardExecute(id: string) {
   }
 }
 
-export function useDashboardScript(id: string, enabled: boolean) {
-  return useQuery<ScriptResponse>({
-    queryKey: ["dashboard-script", id],
-    queryFn: (): Promise<ScriptResponse> =>
-      api.get(`/api/v1/dashboards/${id}/script`),
-    enabled: Boolean(id) && enabled,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-  })
-}
-
-export function useCreateDashboard() {
+/** "Sugerir tableros": crea 1-3 tableros con los datos (una llamada pequeña a la IA o una regla sin IA). */
+export function useSuggestDashboards() {
   const queryClient = useQueryClient()
 
-  return useMutation<Dashboard, Error, { name: string; description?: string; file_id?: string }>({
-    mutationFn: (data): Promise<Dashboard> =>
-      api.post("/api/v1/dashboards", data),
+  return useMutation<SuggestResult, Error, { auto?: boolean } | void>({
+    mutationFn: (options): Promise<SuggestResult> =>
+      api.post("/api/v1/dashboards/suggest", { auto: Boolean(options && options.auto) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["dashboards"] })
-    },
-  })
-}
-
-export function useUpdateWidget() {
-  const queryClient = useQueryClient()
-
-  return useMutation<
-    WidgetConfig,
-    Error,
-    { dashboardId: string; widgetId: string; data: Partial<WidgetConfig> }
-  >({
-    mutationFn: ({ dashboardId, widgetId, data }): Promise<WidgetConfig> =>
-      api.put(`/api/v1/dashboards/${dashboardId}/widgets/${widgetId}`, data),
-    onSuccess: (_result, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ["dashboards", variables.dashboardId],
-      })
     },
   })
 }
@@ -147,23 +126,11 @@ export function useDeleteDashboard() {
   const queryClient = useQueryClient()
 
   return useMutation<void, Error, string>({
-    mutationFn: (id: string): Promise<void> =>
-      api.delete(`/api/v1/dashboards/${id}`),
+    mutationFn: (id: string): Promise<void> => api.delete(`/api/v1/dashboards/${id}`),
     onSuccess: (_void, id) => {
       queryClient.invalidateQueries({ queryKey: ["dashboards"] })
       queryClient.removeQueries({ queryKey: ["dashboard-meta", id] })
       queryClient.removeQueries({ queryKey: ["dashboard-execute", id] })
-      queryClient.removeQueries({ queryKey: ["dashboard-script", id] })
     },
-  })
-}
-
-export function useDownloadDashboardScript() {
-  return useMutation<void, Error, { id: string }>({
-    mutationFn: ({ id }) =>
-      api.downloadBlob(
-        `/api/v1/dashboards/${id}/script/download`,
-        `dashboard_${id.slice(0, 8)}.py`,
-      ),
   })
 }

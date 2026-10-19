@@ -20,6 +20,8 @@ os.environ.setdefault("GOOGLE_API_KEY", "test-google-api-key")
 os.environ.setdefault("APP_SECRET_KEY", "test-app-secret-key-at-least-32-chars-ok")
 os.environ.setdefault("APP_ENV", "development")
 os.environ.setdefault("BCRYPT_ROUNDS", "10")
+# Las cargas de los tests no deben intentar sugerir tableros (usaria una BD real); las pruebas de sugerencias lo encienden.
+os.environ.setdefault("DASHBOARD_AUTO_SUGGEST", "false")
 
 
 # ---------------------------------------------------------------------------

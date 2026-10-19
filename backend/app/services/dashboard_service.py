@@ -33,16 +33,30 @@ async def create_dashboard(org_id: str, user_id: str, body: DashboardCreate) -> 
     return _map_dashboard(dict(row), org_id)
 
 
+# Lista con lo justo para la tarjeta (cuantos graficos, quien lo creo, vista previa y titulos): una sola
+# consulta, sin ejecutar ningun grafico. La vista previa son NUMEROS guardados al crear (nunca texto de celdas).
+LIST_SQL = """
+SELECT d.id, d.name, d.description, d.is_default, d.is_public, d.created_at, d.updated_at, d.deleted_at,
+  (SELECT count(*) FROM widgets w WHERE w.dashboard_id = d.id) AS widget_count,
+  (SELECT w.data_source_query->>'by' FROM widgets w
+     WHERE w.dashboard_id = d.id AND w.data_source_query IS NOT NULL
+     ORDER BY w.position_y, w.position_x, w.created_at LIMIT 1) AS source,
+  (SELECT w.config->'preview' FROM widgets w
+     WHERE w.dashboard_id = d.id AND w.widget_type <> 'kpi_card' AND w.config->'preview' IS NOT NULL
+     ORDER BY w.position_y, w.position_x, w.created_at LIMIT 1) AS preview,
+  ARRAY(SELECT w.title FROM widgets w
+     WHERE w.dashboard_id = d.id AND w.widget_type <> 'kpi_card'
+     ORDER BY w.position_y, w.position_x, w.created_at LIMIT 3) AS highlights
+FROM dashboards d
+WHERE d.deleted_at IS NULL
+ORDER BY d.created_at DESC
+"""
+
+
 async def list_dashboards(org_id: str) -> list[DashboardResponse]:
     pool = await get_org_pool(org_id)
     async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT * FROM dashboards
-            WHERE deleted_at IS NULL
-            ORDER BY created_at DESC
-            """
-        )
+        rows = await conn.fetch(LIST_SQL)
     return [_map_dashboard(dict(r), org_id) for r in rows]
 
 
@@ -219,7 +233,25 @@ async def soft_delete_widget(widget_id: str, dashboard_id: str, org_id: str) -> 
 # Mappers
 # ---------------------------------------------------------------------------
 
+def _preview(raw) -> dict | None:
+    """Vista previa guardada ({type, points[numeros]}); solo si tiene la forma exacta (el JSON puede venir de REST)."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return None
+    if not isinstance(raw, dict) or raw.get("type") not in ("bar", "line", "pie"):
+        return None
+    points = raw.get("points")
+    if not isinstance(points, list):
+        return None
+    nums = [p for p in points[:12] if isinstance(p, (int, float)) and not isinstance(p, bool)]
+    return {"type": raw["type"], "points": nums} if nums else None
+
+
 def _map_dashboard(row: dict, org_id: str) -> DashboardResponse:
+    source = row.get("source")
+    highlights = row.get("highlights")
     return DashboardResponse(
         dashboard_id=str(row["id"]),
         org_id=org_id,
@@ -228,6 +260,10 @@ def _map_dashboard(row: dict, org_id: str) -> DashboardResponse:
         is_public=row.get("is_public", False),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        widget_count=row.get("widget_count"),
+        source=source if source in ("assistant", "ai", "rules") else None,
+        preview=_preview(row.get("preview")),
+        highlights=[str(h)[:80] for h in highlights[:3]] if isinstance(highlights, (list, tuple)) else None,
     )
 
 

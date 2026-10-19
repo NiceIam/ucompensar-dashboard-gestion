@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react"
 import { SimpleChart, type ChartForm } from "@/components/charts/simple-chart"
+import { DashboardCard } from "@/components/chat/dashboard-card"
+import { MESSAGE_BLOCK, parseDashboardBlock } from "@/lib/dashboard-block"
 import { monthName } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -13,6 +15,8 @@ export interface ChatChartConfig {
   x?: string
   y?: string
   color?: string
+  /** Unidad de la medida (money en pesos); el servidor la decide por la columna medida. */
+  unit?: "money" | "count" | "number"
 }
 
 /** Etiquetas de fecha del servidor ("2026-07", "2026-07-15") en español corto. */
@@ -33,7 +37,7 @@ function InlineChart({ config }: { config: ChatChartConfig }) {
   return (
     <figure className="my-2 rounded-xl border bg-background/60 p-3">
       <figcaption className="pr-24 text-[13px] font-semibold">{config.title || "Gráfico"}</figcaption>
-      <SimpleChart form={form} points={points} unit="number" label={config.title || "Gráfico"} height={190} />
+      <SimpleChart form={form} points={points} unit={config.unit === "money" ? "money" : "number"} label={config.title || "Gráfico"} height={190} />
     </figure>
   )
 }
@@ -184,15 +188,17 @@ function renderTextBlock(text: string, keyPrefix: string): ReactNode {
   return <>{blocks}</>
 }
 
-const CHART_BLOCK = /(```chart\s*\n[\s\S]*?\n```)/
-
-/** Contenido del asistente: texto con formato + gráficos en línea. */
+/** Contenido del asistente: texto con formato + gráficos y tarjetas de tablero en línea. */
 export function MessageContent({ text }: { text: string }) {
-  const parts = text.split(CHART_BLOCK)
+  const parts = text.split(MESSAGE_BLOCK)
   return (
     <>
       {parts.map((part, i) => {
-        if (CHART_BLOCK.test(part) && part.startsWith("```chart")) {
+        if (part.startsWith("```dashboard") && MESSAGE_BLOCK.test(part)) {
+          const board = parseDashboardBlock(part.replace(/^```dashboard\s*\n/, "").replace(/\n```$/, ""))
+          return board ? <DashboardCard key={i} dashboard={board} /> : null
+        }
+        if (part.startsWith("```chart") && MESSAGE_BLOCK.test(part)) {
           const json = part.replace(/^```chart\s*\n/, "").replace(/\n```$/, "")
           try {
             return <InlineChart key={i} config={JSON.parse(json) as ChatChartConfig} />
@@ -207,10 +213,10 @@ export function MessageContent({ text }: { text: string }) {
   )
 }
 
-/** Texto plano del mensaje, sin bloques de gráfico (para copiar). */
+/** Texto plano del mensaje, sin bloques de gráfico ni de tablero (para copiar). */
 export function plainText(text: string): string {
   return text
-    .replace(/```chart\s*\n[\s\S]*?\n```/g, "")
+    .replace(/```(?:chart|dashboard)\s*\n[\s\S]*?\n```/g, "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .trim()
 }

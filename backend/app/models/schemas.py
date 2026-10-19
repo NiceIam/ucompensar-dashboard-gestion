@@ -209,6 +209,12 @@ class DashboardResponse(BaseModel):
     is_public: bool
     created_at: datetime
     updated_at: datetime
+    # Solo en la lista (para la tarjeta): cuantos graficos tiene, quien lo creo ("assistant" a pedido en el
+    # chat, "ai"/"rules" sugerido), vista previa (solo numeros) y los titulos de sus primeros graficos.
+    widget_count: Optional[int] = None
+    source: Optional[str] = None
+    preview: Optional[dict] = None
+    highlights: Optional[List[str]] = None
 
 
 class DashboardDetail(DashboardResponse):

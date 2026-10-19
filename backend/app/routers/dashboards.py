@@ -1,7 +1,7 @@
 from typing import List
 
-from fastapi import APIRouter, File, UploadFile, status
-from fastapi.responses import Response
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
 
 from app.auth import CurrentUserDep
 from app.models.schemas import (
@@ -27,19 +27,41 @@ from app.services.dashboard_service import (
 
 router = APIRouter(prefix="/api/v1/dashboards", tags=["Dashboards"])
 
+# Quien borra tableros. Crear (por chat o sugerencias) lo puede hacer cualquier miembro; borrar, solo
+# owner/admin (los tableros son de toda la organizacion y no tienen dueno propio).
+_DELETE_ROLES = ("owner", "admin")
+
+
+def _require_delete_role(current_user) -> None:
+    if current_user.role not in _DELETE_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Solo el propietario o un administrador puede eliminar tableros."
+        )
+
 
 @router.post(
     "",
     response_model=DashboardResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Crea un nuevo dashboard con script Python auto-generado",
+    summary="Crea un dashboard vacio (los tableros con graficos los crea el asistente o /suggest)",
 )
 async def create(body: DashboardCreate, current_user: CurrentUserDep) -> DashboardResponse:
-    from app.services.dashboard_script_service import create_dashboard_script
-    result = await create_dashboard(current_user.org_id, current_user.user_id, body)
-    # Auto-generar script Python
-    await create_dashboard_script(current_user.org_id, result.dashboard_id)
-    return result
+    return await create_dashboard(current_user.org_id, current_user.user_id, body)
+
+
+class SuggestRequest(BaseModel):
+    # auto=True: solo si la organizacion no tiene tableros y esos datos no se sugirieron antes (lo usa Tableros
+    # cuando esta vacio). auto=False: el boton "Sugerir tableros".
+    auto: bool = False
+
+
+@router.post(
+    "/suggest",
+    summary="Sugiere y crea 1-3 tableros con tus datos (una llamada pequeña a la IA o una regla sin IA)",
+)
+async def suggest(current_user: CurrentUserDep, body: SuggestRequest | None = None):
+    from app.services.dashboard_suggest_service import suggest as suggest_dashboards
+    return await suggest_dashboards(current_user.org_id, auto=bool(body and body.auto))
 
 
 @router.get("", response_model=List[DashboardResponse], summary="Lista dashboards de la organización")
@@ -90,6 +112,7 @@ async def patch(
     summary="Soft delete del dashboard",
 )
 async def delete(dashboard_id: str, current_user: CurrentUserDep) -> MessageResponse:
+    _require_delete_role(current_user)
     await soft_delete_dashboard(dashboard_id, current_user.org_id)
     return MessageResponse(message="Dashboard eliminado correctamente.")
 
@@ -158,54 +181,14 @@ async def delete_widget(
 
 
 # ---------------------------------------------------------------------------
-# Script Python del Dashboard
+# Calculo del tablero
 # ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/{dashboard_id}/script",
-    summary="Obtiene el script Python del dashboard",
-)
-async def get_script(dashboard_id: str, current_user: CurrentUserDep):
-    from app.services.dashboard_script_service import get_dashboard_script, create_dashboard_script
-    script = get_dashboard_script(current_user.org_id, dashboard_id)
-    if script is None:
-        script = await create_dashboard_script(current_user.org_id, dashboard_id)
-    return {"script": script, "dashboard_id": dashboard_id}
-
-
-@router.get(
-    "/{dashboard_id}/script/download",
-    summary="Descarga el script Python como archivo .py",
-)
-async def download_script(dashboard_id: str, current_user: CurrentUserDep):
-    from app.services.dashboard_script_service import get_dashboard_script, create_dashboard_script
-    script = get_dashboard_script(current_user.org_id, dashboard_id)
-    if script is None:
-        script = await create_dashboard_script(current_user.org_id, dashboard_id)
-    return Response(
-        content=script,
-        media_type="text/x-python",
-        headers={"Content-Disposition": f'attachment; filename="dashboard_{dashboard_id[:8]}.py"'},
-    )
-
-
-@router.put(
-    "/{dashboard_id}/script",
-    summary="Sube/actualiza el script Python del dashboard",
-)
-async def update_script(dashboard_id: str, file: UploadFile = File(...), current_user: CurrentUserDep = None):
-    from app.services.dashboard_script_service import save_dashboard_script
-    content = (await file.read()).decode("utf-8")
-    save_dashboard_script(current_user.org_id, dashboard_id, content)
-    return {"message": "Script actualizado", "size": len(content)}
 
 
 @router.post(
     "/{dashboard_id}/execute",
-    summary="Ejecuta el script Python y retorna charts + kpis para Recharts",
+    summary="Calcula los graficos y cifras del tablero con tus datos de este momento",
 )
-async def execute_script(dashboard_id: str, current_user: CurrentUserDep):
-    from app.services.dashboard_script_service import execute_dashboard_script
-    result = await execute_dashboard_script(current_user.org_id, dashboard_id)
-    return result
+async def execute(dashboard_id: str, current_user: CurrentUserDep):
+    from app.services.dashboard_render_service import render_dashboard
+    return await render_dashboard(current_user.org_id, dashboard_id)

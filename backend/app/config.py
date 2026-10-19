@@ -70,6 +70,31 @@ class Settings(BaseSettings):
     CHAT_USER_WINDOW_SECONDS: int = 60
     CHAT_ORG_DAILY_MESSAGES: int = 300
 
+    # Tableros creados por la IA (herramienta create_dashboard del chat y sugerencias). El modelo solo CREA:
+    # nunca edita ni borra. Con el interruptor apagado la herramienta no se declara en ningun turno.
+    CHAT_DASHBOARD_TOOL_ENABLED: bool = True
+    # Graficos/cifras por tablero (el tablero se crea con los validos hasta este tope).
+    CHAT_DASHBOARD_MAX_WIDGETS: int = 6
+    # Tableros por organizacion en 24 h (cuenta TAMBIEN los borrados: borrar y repetir no evade el tope) y en total.
+    CHAT_DASHBOARD_DAILY_LIMIT: int = 10
+    CHAT_DASHBOARD_MAX_TOTAL: int = 50
+    # Turnos con create_dashboard: razonamiento bajo (si GEMINI_THINKING_LEVEL no esta definido) y tope de tokens de
+    # salida mas ajustado (4 graficos son ~200 tokens de argumentos; el razonamiento descuenta de este tope).
+    DASHBOARD_THINKING_LEVEL: str = "low"
+    DASHBOARD_CHAT_MAX_OUTPUT_TOKENS: int = 1024
+    # Presupuesto de tiempo (s) para validar los graficos de un tablero al crearlo y para calcularlos al abrirlo.
+    DASHBOARD_CREATE_TIMEOUT_SECONDS: float = 10.0
+    DASHBOARD_RENDER_TIMEOUT_SECONDS: float = 12.0
+    # Sugerencias de tableros: UNA llamada pequena a Gemini por catalogo nuevo (cache por firma del catalogo);
+    # sin clave, sin cupo o ante cualquier falla se usa una regla determinista sin IA.
+    DASHBOARD_SUGGEST_USE_LLM: bool = True
+    # Tope de llamadas de sugerencia por organizacion en 24 h (cuenta catalogos distintos con sugerencia IA).
+    DASHBOARD_SUGGEST_DAILY_CALLS: int = 3
+    DASHBOARD_SUGGEST_MAX_OUTPUT_TOKENS: int = 900
+    DASHBOARD_SUGGEST_TIMEOUT_SECONDS: float = 12.0
+    # Al terminar una carga, si la organizacion no tiene tableros, se sugieren automaticamente.
+    DASHBOARD_AUTO_SUGGEST: bool = True
+
     # App
     APP_ENV: str = "development"
     APP_SECRET_KEY: str = ""

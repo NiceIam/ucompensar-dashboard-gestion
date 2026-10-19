@@ -20,14 +20,22 @@ bugs o pueden causarlos:
   de `data` (tambien columns_definition, que ya se guarda como texto JSON).
 
 Tambien emula las lecturas que usa agent_tools_service (query_data,
-analyze_table, create_chart) y la tabla chat_messages (chat_service).
+analyze_table, create_chart) y la tabla chat_messages (chat_service), y las tablas `dashboards` y `widgets`
+(creacion transaccional de tableros, lista, detalle y calculo): sus sentencias se importan de los modulos de
+servicio, asi que un cambio de SQL sin actualizar el emulador hace fallar los tests.
 """
 
 import copy
 import json
 import re
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
+
+from app.services import dashboard_builder_service as _bld
+from app.services import dashboard_render_service as _rnd
+from app.services import dashboard_service as _dsv
+from app.services import dashboard_suggest_service as _sug
 
 
 class FakeDBError(Exception):
@@ -53,6 +61,9 @@ class FakeOrgDB:
         self.rows: list[dict] = []
         self.records: list[dict] = []
         self.chat: list[dict] = []
+        self.dashboards: dict[uuid.UUID, dict] = {}
+        self.widgets: list[dict] = []
+        self.status = "OK"          # estado que devuelve execute() (como asyncpg: "UPDATE 1", "DELETE 0"...)
         self.jsonb_as_text = True
         self.sql_log: list[str] = []
         self.tx_depth = 0
@@ -107,11 +118,30 @@ class FakeOrgDB:
 
     # -- transacciones ------------------------------------------------------
 
+    def add_dashboard(self, name: str, *, deleted: bool = False, created_at=None, widgets=()) -> uuid.UUID:
+        """Tablero de ejemplo. widgets: [(title, widget_type, data_source_query | None, config | None)]."""
+        did = uuid.uuid4()
+        when = created_at or datetime.now(timezone.utc)
+        self.dashboards[did] = {
+            "id": did, "name": name, "description": None, "is_default": False, "is_public": False,
+            "created_at": when, "updated_at": when, "deleted_at": when if deleted else None,
+        }
+        for i, (title, wtype, dsq, config) in enumerate(widgets):
+            self.widgets.append({
+                "id": uuid.uuid4(), "dashboard_id": did, "title": title, "widget_type": wtype,
+                "config": config or {}, "position_x": (i % 2) * 6, "position_y": i // 2 * 4, "width": 6,
+                "height": 4, "data_source_query": dsq, "created_at": when, "updated_at": when,
+            })
+        return did
+
+    def widgets_of(self, dashboard_id) -> list[dict]:
+        return [w for w in self.widgets if w["dashboard_id"] == dashboard_id]
+
     def snapshot(self):
-        return copy.deepcopy((self.tables, self.rows, self.records, self.chat))
+        return copy.deepcopy((self.tables, self.rows, self.records, self.chat, self.dashboards, self.widgets))
 
     def restore(self, snap) -> None:
-        self.tables, self.rows, self.records, self.chat = snap
+        self.tables, self.rows, self.records, self.chat, self.dashboards, self.widgets = snap
 
 
 class _Tx:
@@ -154,8 +184,9 @@ class FakeConn:
         return next(iter(out[0].values()))
 
     async def execute(self, sql: str, *args):
+        self.db.status = "OK"
         self._run(sql, args)
-        return "OK"
+        return self.db.status
 
     # -- interprete de SQL ----------------------------------------------------
 
@@ -333,6 +364,135 @@ class FakeConn:
             t.pop(args[0], None)
             db.rows = [r for r in db.rows if r["table_id"] != args[0]]  # ON DELETE CASCADE
             return []
+
+        # -- tableros (dashboard_service, dashboard_builder_service, dashboard_render_service) --------------
+        def jsonb(value):
+            return json.dumps(value) if db.jsonb_as_text and value is not None else value
+
+        def widget_row(w):
+            out = dict(w)
+            out["config"] = jsonb(w["config"])
+            out["data_source_query"] = jsonb(w["data_source_query"])
+            return out
+
+        live = [d for d in db.dashboards.values() if d["deleted_at"] is None]
+
+        if q == _norm(_bld.LOCK_SQL):
+            if db.tx_depth == 0:
+                raise FakeDBError("pg_advisory_xact_lock fuera de una transaccion no protege nada")
+            return [{"pg_advisory_xact_lock": None}]
+
+        if q == _norm(_bld.RECENT_COUNT_SQL):
+            since = datetime.now(timezone.utc) - timedelta(hours=24)
+            return [{"count": sum(1 for d in db.dashboards.values() if d["created_at"] > since)}]
+
+        if q == _norm(_bld.TOTAL_COUNT_SQL):
+            return [{"count": len(live)}]
+
+        if q == _norm(_bld.SAME_CONTENT_SQL):
+            hits = [
+                d for d in live
+                if any(
+                    isinstance(w["data_source_query"], dict) and w["data_source_query"].get("fp") == args[0]
+                    for w in db.widgets_of(d["id"])
+                )
+            ]
+            hits.sort(key=lambda d: d["created_at"], reverse=True)
+            return [{"id": hits[0]["id"], "name": hits[0]["name"]}] if hits else []
+
+        if q == _norm(_bld.WIDGET_COUNT_SQL):
+            return [{"count": len(db.widgets_of(args[0]))}]
+
+        if q == _norm(_bld.NAMES_SQL):
+            return [{"name": d["name"]} for d in live]
+
+        if q == _norm(_bld.INSERT_DASHBOARD_SQL):
+            if len(args[0]) > 120:
+                raise FakeDBError("value too long for type character varying(120)")
+            did = uuid.uuid4()
+            now = datetime.now(timezone.utc)
+            db.dashboards[did] = {
+                "id": did, "name": args[0], "description": args[1], "is_default": False, "is_public": False,
+                "created_at": now, "updated_at": now, "deleted_at": None,
+            }
+            return [{"id": did}]
+
+        if q == _norm(_bld.INSERT_WIDGET_SQL):
+            if args[0] not in db.dashboards:
+                raise FakeDBError("violates foreign key constraint")
+            if len(args[1]) > 120:
+                raise FakeDBError("value too long for type character varying(120)")
+            now = datetime.now(timezone.utc)
+            db.widgets.append({
+                "id": uuid.uuid4(), "dashboard_id": args[0], "title": args[1], "widget_type": args[2],
+                "config": json.loads(args[3]), "position_x": args[4], "position_y": args[5], "width": args[6],
+                "height": args[7], "data_source_query": json.loads(args[8]) if args[8] is not None else None,
+                "created_at": now, "updated_at": now,
+            })
+            return []
+
+        if q == _norm(_sug.SIG_USED_SQL):
+            hits = [
+                d for d in sorted(db.dashboards.values(), key=lambda d: d["created_at"])
+                if any(isinstance(w["data_source_query"], dict) and w["data_source_query"].get("sig") == args[0]
+                       for w in db.widgets_of(d["id"]))
+            ]
+            return [{"id": d["id"], "name": d["name"], "deleted_at": d["deleted_at"]} for d in hits]
+
+        if q == _norm(_sug.LLM_SIGS_SQL):
+            since = datetime.now(timezone.utc) - timedelta(hours=24)
+            sigs = {
+                w["data_source_query"].get("sig") for w in db.widgets
+                if isinstance(w["data_source_query"], dict) and w["data_source_query"].get("by") == "ai"
+                and w["created_at"] > since
+            }
+            return [{"count": len(sigs)}]
+
+        if q == _norm(_dsv.LIST_SQL):
+            out = []
+            for d in sorted(live, key=lambda d: d["created_at"], reverse=True):
+                ws = sorted(db.widgets_of(d["id"]), key=lambda w: (w["position_y"], w["position_x"], w["created_at"]))
+                charts = [w for w in ws if w["widget_type"] != "kpi_card"]
+                with_dsq = [w for w in ws if w["data_source_query"] is not None]
+                with_prev = [w for w in charts if isinstance(w["config"], dict) and w["config"].get("preview") is not None]
+                row = dict(d)
+                row["widget_count"] = len(ws)
+                dsq = with_dsq[0]["data_source_query"] if with_dsq else None
+                row["source"] = dsq.get("by") if isinstance(dsq, dict) else None
+                row["preview"] = jsonb(with_prev[0]["config"]["preview"]) if with_prev else None
+                row["highlights"] = [w["title"] for w in charts[:3]]
+                out.append(row)
+            return out
+
+        if q == "select * from dashboards where id = $1 and deleted_at is null":
+            return [dict(d) for d in live if d["id"] == args[0]]
+
+        if q == _norm(_rnd.DASHBOARD_SQL):
+            return [{"id": d["id"], "name": d["name"]} for d in live if d["id"] == args[0]]
+
+        if q == "select * from widgets where dashboard_id = $1 order by position_y, position_x":
+            ws = sorted(db.widgets_of(args[0]), key=lambda w: (w["position_y"], w["position_x"]))
+            return [widget_row(w) for w in ws]
+
+        if q == _norm(_rnd.WIDGETS_SQL):
+            ws = sorted(db.widgets_of(args[0]), key=lambda w: (w["position_y"], w["position_x"], w["created_at"]))
+            return [widget_row(w) for w in ws[:24]]
+
+        if q == "update dashboards set deleted_at = now() where id = $1 and deleted_at is null":
+            hit = [d for d in live if d["id"] == args[0]]
+            for d in hit:
+                d["deleted_at"] = datetime.now(timezone.utc)
+            db.status = f"UPDATE {len(hit)}"
+            return []
+
+        if q == "insert into dashboards (name, description, is_public) values ($1, $2, $3) returning *":
+            did = uuid.uuid4()
+            now = datetime.now(timezone.utc)
+            db.dashboards[did] = {
+                "id": did, "name": args[0], "description": args[1], "is_default": False, "is_public": args[2],
+                "created_at": now, "updated_at": now, "deleted_at": None,
+            }
+            return [dict(db.dashboards[did])]
 
         raise AssertionError(f"SQL no soportado por FakeConn: {q}")
 

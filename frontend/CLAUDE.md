@@ -104,9 +104,13 @@ Cada dominio tiene hooks en `src/hooks/` que siguen el mismo patrón:
 - Navegación: «Resumen de la semana» está en el menú lateral y en la barra inferior del celular; Configuración sale de esa barra (queda en el menú de la cuenta) vía `NavItem.mobile = false`.
 - Impresión (`@media print` en `globals.css` + clases `print:`): sin barra lateral, barra superior ni chat; el cálculo de cada hallazgo sale abierto (`data-print-open`); las tarjetas no se parten entre páginas; siempre en tema claro (`usePrintInLight` en `app-shell.tsx`).
 
-### Widget / Dashboard System
+### Tableros creados por la IA
 
-Los dashboards contienen `WidgetConfig[]`. Cada widget tiene: `chart_type` (bar/line/pie/area/radar/metric/table), `x_key`, `y_keys`, `data`, `width` (1-4 cols), `height` (1-2 rows). `ChartRenderer` en `src/components/charts/chart-renderer.tsx` maneja el dispatch por tipo.
+- **No hay creación manual**: el formulario «Nuevo tablero» se eliminó. Los tableros los arma el asistente: (1) la persona lo pide en el chat («creame un tablero de ventas por mes y por producto») y el servidor declara la herramienta `create_dashboard` solo en esos turnos; (2) «Sugerir tableros» y la sugerencia automática (`POST /api/v1/dashboards/suggest`; `{auto:true}` solo si no hay tableros: Tableros la pide una vez al abrir vacío con datos).
+- `/dashboards`: botón «Pídele un tablero al asistente» (abre el chat con una pregunta guía SIN enviarla), «Sugerir tableros», tarjetas con vista previa (`preview` = solo números guardados al crear, `DashboardPreview` decorativo), qué muestra (`highlights`) y quién lo creó (`source`). Estado vacío con 3 pedidos clicables generados SOLO con plantillas locales (`lib/dashboard-examples.ts`, sin IA).
+- Chat: el servidor agrega al mensaje un bloque ```dashboard con `{id,name,widgets,existing}`. `lib/dashboard-block.ts` lo valida (UUID obligatorio: sin UUID no hay enlace ni tarjeta) y `DashboardCard` ofrece «Abrir tablero» y «Deshacer»/«Eliminar» (borrado lógico). Al llegar el mensaje se invalida `["dashboards"]` (`ChatProvider` -> `useFloatingChat({ onDashboardCreated })`). El nombre se pinta siempre como texto de React.
+- Detalle `/dashboards/[id]`: `POST /execute` devuelve `{charts, kpis, legacy}`. Cada gráfico/cifra trae `unit` ("money" | "count" | "number") decidida por el servidor y manda sobre `isMoneyLike`; un widget con `error` se pinta como aviso en su tarjeta y el resto sigue. Ya no existe «Descargar su código»: el script .py se retiró.
+- `WidgetConfig` (contrato de `ChartRenderer`) solo ganó el campo opcional `unit`.
 
 ## Convenciones
 
