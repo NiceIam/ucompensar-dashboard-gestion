@@ -235,7 +235,7 @@ export function FloatingChat() {
 
       {/* Fondo oscuro en tableta (en celular el panel ocupa todo) */}
       {isOpen && (
-        <div className="fixed inset-0 z-40 hidden bg-[hsl(var(--shadow)/0.4)] backdrop-blur-[2px] md:block lg:hidden" onClick={close} aria-hidden="true" />
+        <div className="fixed inset-0 z-40 hidden bg-[hsl(var(--shadow)/0.4)] backdrop-blur-[2px] md:block lg:hidden print:hidden" onClick={close} aria-hidden="true" />
       )}
 
       <div
@@ -244,7 +244,7 @@ export function FloatingChat() {
         aria-label="Asistente IA"
         onKeyDown={onPanelKeyDown}
         className={cn(
-          "flex flex-col overflow-hidden bg-background",
+          "flex flex-col overflow-hidden bg-background print:hidden",
           // Celular y tableta: por encima del contenido
           "fixed inset-0 z-50 transition-transform duration-300 ease-out md:inset-y-0 md:left-auto md:right-0 md:w-[440px] md:border-l",
           // La sombra solo con el panel abierto: cerrado, se asomaba como una franja gris en el borde.

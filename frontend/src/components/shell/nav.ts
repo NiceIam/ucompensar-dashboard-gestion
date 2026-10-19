@@ -1,4 +1,4 @@
-import { FolderOpen, Home, LayoutDashboard, Settings, type LucideIcon } from "lucide-react"
+import { ClipboardList, FolderOpen, Home, LayoutDashboard, Settings, type LucideIcon } from "lucide-react"
 
 export interface NavItem {
   href: string
@@ -6,13 +6,19 @@ export interface NavItem {
   /** Etiqueta corta para la barra inferior del celular. */
   short: string
   icon: LucideIcon
+  /**
+   * false = no va en la barra inferior del celular (que tiene 4 lugares + el botón del chat).
+   * Configuración se alcanza desde el menú de la cuenta (avatar), que ya la trae.
+   */
+  mobile?: boolean
 }
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Inicio", short: "Inicio", icon: Home },
+  { href: "/resumen", label: "Resumen de la semana", short: "Resumen", icon: ClipboardList },
   { href: "/data", label: "Mis datos", short: "Datos", icon: FolderOpen },
   { href: "/dashboards", label: "Tableros", short: "Tableros", icon: LayoutDashboard },
-  { href: "/settings", label: "Configuración", short: "Ajustes", icon: Settings },
+  { href: "/settings", label: "Configuración", short: "Ajustes", icon: Settings, mobile: false },
 ]
 
 export function isActive(pathname: string, href: string): boolean {

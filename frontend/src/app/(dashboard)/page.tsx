@@ -10,11 +10,13 @@ import { EmptyState, ErrorState } from "@/components/kit/empty-state"
 import { Journey } from "@/components/kit/journey"
 import { SectionHeader } from "@/components/kit/page-header"
 import { CardGridSkeleton, ListSkeleton } from "@/components/kit/skeletons"
+import { InsightsSection } from "@/components/insights/insights-section"
 import { ColumnPill } from "@/components/data/column-kind"
 import { TableIcon } from "@/components/data/table-icon"
 import { firstName } from "@/components/shell/user-menu"
 import { useDashboards } from "@/hooks/use-dashboards"
 import { usePageTitle } from "@/hooks/use-page-title"
+import { useInsights } from "@/hooks/use-insights"
 import { useOrgTables } from "@/hooks/use-templates"
 import { useAuthContext } from "@/providers/auth-provider"
 import { useChat } from "@/providers/chat-provider"
@@ -34,6 +36,7 @@ export default function HomePage() {
   const { ask } = useChat()
   const tablesQuery = useOrgTables()
   const dashboardsQuery = useDashboards()
+  const insightsQuery = useInsights()
 
   const tables = useMemo(() => tablesQuery.data?.tables ?? [], [tablesQuery.data])
   const withRows = useMemo(() => tables.filter((t) => t.row_count > 0).sort((a, b) => b.row_count - a.row_count), [tables])
@@ -69,7 +72,7 @@ export default function HomePage() {
           {loading
             ? "Estamos trayendo tu información…"
             : withRows.length > 0
-              ? "Esto es lo que tienes hoy. Pregunta lo que quieras: las respuestas salen de tus propios datos."
+              ? "Lo que conviene mirar esta semana, calculado con tus propios datos."
               : "Todo está listo. Solo falta tu información para empezar a orientarte."}
         </p>
       </header>
@@ -125,7 +128,9 @@ export default function HomePage() {
       ) : (
         /* ── Con datos ── */
         <>
-          <AskBox onAsk={(q) => ask(q)} suggestions={suggestions} />
+          <InsightsSection query={insightsQuery} onAsk={(q) => ask(q)} />
+
+          <AskBox compact onAsk={(q) => ask(q)} suggestions={suggestions} />
 
           <div className="flex flex-wrap gap-8">
             <section aria-labelledby="home-data" className="min-w-0 flex-[1.6_1_26rem] space-y-5">

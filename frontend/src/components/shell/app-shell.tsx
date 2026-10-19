@@ -33,7 +33,7 @@ function Sidebar() {
   const pathname = usePathname()
   const { open, isOpen } = useChat()
   return (
-    <aside className="hidden w-[264px] shrink-0 flex-col border-r bg-sidebar lg:flex">
+    <aside className="hidden w-[264px] shrink-0 flex-col border-r bg-sidebar lg:flex print:hidden">
       <div className="flex h-[72px] items-center px-5">
         <Link href="/" className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`${BRAND.name}: ir al inicio`}>
           <Wordmark />
@@ -112,7 +112,7 @@ function TopBar() {
   )
   const { open, isOpen } = useChat()
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6 lg:h-[72px] lg:px-8">
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 print:hidden items-center gap-3 border-b bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6 lg:h-[72px] lg:px-8">
       <Link href="/" className="flex min-h-11 items-center gap-2 rounded-xl lg:hidden" aria-label={`${BRAND.name}: ir al inicio`}>
         <BrandMark className="h-8 w-8" />
         <BrandName size="sm" />
@@ -160,7 +160,7 @@ function TopBar() {
 function BottomNav() {
   const pathname = usePathname()
   const { toggle, isOpen } = useChat()
-  const [first, second, third, fourth] = NAV_ITEMS
+  const [first, second, third, fourth] = NAV_ITEMS.filter((it) => it.mobile !== false)
   const item = (it: (typeof NAV_ITEMS)[number]) => {
     const active = isActive(pathname, it.href)
     return (
@@ -184,7 +184,7 @@ function BottomNav() {
     <nav
       aria-label="Principal"
       data-shell="bottom-nav"
-      className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 px-2 pb-safe backdrop-blur-md lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 px-2 pb-safe backdrop-blur-md lg:hidden print:hidden"
     >
       <div className="mx-auto flex max-w-xl items-center gap-1 pt-1">
         {item(first)}
@@ -207,14 +207,39 @@ function BottomNav() {
   )
 }
 
+/**
+ * Al imprimir o guardar como PDF siempre se usa el tema claro (en oscuro el texto
+ * casi blanco desaparecería sobre el papel); al terminar se restaura el tema.
+ */
+function usePrintInLight() {
+  useEffect(() => {
+    const root = document.documentElement
+    let wasDark = false
+    const before = () => {
+      wasDark = root.classList.contains("dark")
+      root.classList.remove("dark")
+    }
+    const after = () => {
+      if (wasDark) root.classList.add("dark")
+    }
+    window.addEventListener("beforeprint", before)
+    window.addEventListener("afterprint", after)
+    return () => {
+      window.removeEventListener("beforeprint", before)
+      window.removeEventListener("afterprint", after)
+    }
+  }, [])
+}
+
 /** Esqueleto de la aplicación: barra lateral, barra superior, contenido y chat acoplado. */
 export function AppShell({ children, chat }: { children: ReactNode; chat: ReactNode }) {
   const pathname = usePathname()
+  usePrintInLight()
   return (
     <div data-shell="root" className="flex h-dvh overflow-hidden bg-background">
       <a
         href="#contenido"
-        className="sr-only z-50 rounded-xl bg-primary px-4 py-2 font-semibold text-primary-foreground focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:flex focus:min-h-11 focus:items-center"
+        className="sr-only z-50 print:hidden rounded-xl bg-primary px-4 py-2 font-semibold text-primary-foreground focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:flex focus:min-h-11 focus:items-center"
       >
         Saltar al contenido
       </a>

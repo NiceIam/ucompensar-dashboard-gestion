@@ -13,10 +13,13 @@ import { cn } from "@/lib/utils"
 export function AskBox({
   onAsk,
   suggestions,
+  compact = false,
   className,
 }: {
   onAsk: (question: string) => void
   suggestions: string[]
+  /** Versión más baja (el inicio ya tiene los hallazgos como protagonistas). */
+  compact?: boolean
   className?: string
 }) {
   const [value, setValue] = useState("")
@@ -31,22 +34,28 @@ export function AskBox({
       aria-labelledby="ask-title"
       className={cn(
         "relative overflow-hidden rounded-3xl bg-brand px-5 py-7 text-brand-foreground shadow-card ring-1 ring-inset ring-highlight/15 sm:px-8 sm:py-9",
+        compact && "py-5 sm:px-7 sm:py-6",
         className
       )}
     >
       <DotField fade="top-right" className="[--dots-alpha:0.35] [--dots-gap:20px] [--dots-size:1.8px]" />
 
-      <div className="relative space-y-5">
+      <div className={cn("relative", compact ? "space-y-4" : "space-y-5")}>
         <div className="space-y-1.5">
           <p className="inline-flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-primary-strong">
             <Sparkles className="h-4 w-4 text-highlight" aria-hidden="true" />
             Asistente
           </p>
-          <h2 id="ask-title" className="font-display text-[28px] font-semibold leading-tight sm:text-[34px]">
+          <h2
+            id="ask-title"
+            className={cn("font-display font-semibold leading-tight", compact ? "text-[24px] sm:text-[26px]" : "text-[28px] sm:text-[34px]")}
+          >
             Pregúntale a tus datos
           </h2>
           <p className="max-w-xl text-[15px] text-brand-foreground/80">
-            Escribe como le hablarías a un colega. Te respondemos con cifras de tus propias hojas.
+            {compact
+              ? "¿Quieres saber algo más? Escríbelo como se lo dirías a un colega."
+              : "Escribe como le hablarías a un colega. Te respondemos con cifras de tus propias hojas."}
           </p>
         </div>
 
