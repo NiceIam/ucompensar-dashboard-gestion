@@ -60,3 +60,31 @@ export function ListSkeleton({ rows = 4 }: { rows?: number }) {
     </div>
   )
 }
+
+/** Esqueleto de una tarjeta de hallazgo: título, frase, tres cifras y botones. */
+export function InsightCardSkeleton({ count = 3, className }: { count?: number; className?: string }) {
+  return (
+    <div className={cn("auto-grid gap-4 [--auto-grid-min:20rem]", className)} aria-busy="true" aria-label="Buscando tus hallazgos">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="surface space-y-4 overflow-hidden">
+          <Skeleton className="h-1 w-full rounded-none" />
+          <div className="space-y-4 p-5 sm:p-6">
+            <Skeleton className="h-7 w-28 rounded-full" />
+            <Skeleton className="h-7 w-4/5" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-11/12" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Skeleton className="h-16 rounded-xl" />
+              <Skeleton className="h-16 rounded-xl" />
+              <Skeleton className="h-16 rounded-xl" />
+            </div>
+            <Skeleton className="h-11 w-44 rounded-xl" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
