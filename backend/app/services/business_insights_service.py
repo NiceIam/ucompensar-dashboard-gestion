@@ -456,17 +456,32 @@ class SalesAgg:
 
 
 @dataclass
+class SaleLine:
+    """Una forma de venta valida (producto o cliente, dia, cantidad, precio) repetida `n` veces."""
+    name: str | None
+    day: date | None
+    qty: Decimal
+    price: Decimal            # precio real de UNA unidad
+    revenue: Decimal          # lo vendido en UNA venta de esta forma (cantidad x precio, o el total)
+    n: int
+
+
+@dataclass
 class SalesData:
     products: dict[str, SalesAgg]
     clients: dict[str, tuple[str, Decimal]]      # clave -> (nombre, ventas)
     generic_client_revenue: Decimal
     blank_client_revenue: Decimal
-    total_revenue: Decimal                       # ventas validas (todas)
+    total_revenue: Decimal                       # todas las ventas validas del periodo
     client_total: Decimal                        # lo mismo, leido en la consulta por cliente
-    rows_used: int
-    invalid_rows: int
+    rows_used: int                               # ventas validas con fecha legible
+    invalid_rows: int                            # sin cantidad > 0 o sin precio/total legible
+    undated_rows: int                            # validas pero sin fecha legible
+    out_of_range_rows: int                       # validas pero con fecha imposible
     thousands_lookalikes: int
-    truncated: bool
+    period: tuple[date, date, int] | None        # (primera, ultima, dias) de las ventas validas
+    window_days: int
+    window_keys: set[str]                        # productos con alguna venta en la ventana de sin_movimiento
 
 
 def _count(row) -> int:
@@ -531,94 +546,115 @@ def parse_products(rows: list[tuple], has_cost: bool, has_stock: bool) -> Produc
     return ProductsData(products, used, blank, negative, unreadable, duplicated, lookalikes, False)
 
 
-def parse_sales(prod_rows: list[tuple], client_rows: list[tuple] | None, has_unit: bool, has_total: bool) -> SalesData:
-    """Filas (producto|cliente, cantidad[, precio][, total], veces) -> ventas validas por producto y por cliente.
+def parse_sale_rows(rows: list[tuple], has_unit: bool, has_total: bool) -> tuple[list[SaleLine], int, int]:
+    """Filas (clave, dia, cantidad[, precio][, total], veces) del motor -> (ventas validas, invalidas, "1.200").
 
-    Precio real de la venta = precio unitario de la fila; si falta, total / cantidad."""
-    lookalikes = 0
-
-    def sale_line(row):
-        nonlocal lookalikes
-        n = _count(row)
-        qty_raw = row[1]
-        i = 2
-        unit = total = None
-        if has_unit:
-            unit = engine.parse_number(row[i])
-            if row[i] is not None and THOUSANDS_LOOKALIKE.match(str(row[i])):
-                lookalikes += n
-            i += 1
-        if has_total:
-            total = engine.parse_number(row[i])
-        if qty_raw is not None and THOUSANDS_LOOKALIKE.match(str(qty_raw)):
-            lookalikes += n
-        qty = engine.parse_number(qty_raw)
+    Valida = cantidad > 0 y precio real legible. Precio real de la venta = precio unitario de la fila (>= 0); si
+    falta, total / cantidad (total >= 0)."""
+    lines: list[SaleLine] = []
+    invalid = lookalikes = 0
+    for row in rows:
+        n = int(row[-1])
+        raws = row[2:-1]
+        qty = engine.parse_number(raws[0])
+        unit = engine.parse_number(raws[1]) if has_unit else None
+        total = engine.parse_number(raws[1 + has_unit]) if has_total else None
+        lookalikes += n * sum(1 for r in raws if r is not None and THOUSANDS_LOOKALIKE.match(str(r)))
         if qty is None or qty <= 0:
-            return None
+            invalid += n
+            continue
         if unit is not None and unit >= 0:
-            return qty, unit, qty * unit, n
-        if total is not None and total >= 0:
-            return qty, total / qty, total, n
-        return None
+            price, revenue = unit, qty * unit
+        elif total is not None and total >= 0:
+            price, revenue = total / qty, total
+        else:
+            invalid += n
+            continue
+        day = None
+        if row[1] is not None:
+            try:
+                day = date.fromisoformat(row[1])
+            except ValueError:
+                day = None
+        lines.append(SaleLine(row[0], day, qty, price, revenue, n))
+    return lines, invalid, lookalikes
+
+
+def build_sales(prod_rows: list[tuple], client_rows: list[tuple] | None, has_unit: bool, has_total: bool,
+                max_date: date) -> SalesData:
+    """Ventas validas del periodo por producto y por cliente.
+
+    El periodo sale de las fechas de las ventas VALIDAS (una fila sin cantidad o precio no es una venta, aunque
+    comparta hoja: p. ej. movimientos de inventario cargados en la hoja de ventas no estiran el periodo)."""
+    lines, invalid, lookalikes = parse_sale_rows(prod_rows, has_unit, has_total)
+    undated = sum(l.n for l in lines if l.day is None)
+    dated = [l for l in lines if l.day is not None]
+    in_range = [l for l in dated if MIN_SALE_DATE <= l.day <= max_date]
+    out_of_range = sum(l.n for l in dated) - sum(l.n for l in in_range)
+    period = None
+    window_days, window_keys = 0, set()
+    if in_range:
+        p_from, p_to = min(l.day for l in in_range), max(l.day for l in in_range)
+        days = (p_to - p_from).days + 1
+        period = (p_from, p_to, days)
+        window_days = min(STALE_WINDOW_DAYS, days)
+        window_from = p_to - timedelta(days=window_days - 1)
+        window_keys = {product_key(l.name) for l in in_range if l.name is not None and l.day >= window_from}
 
     products: dict[str, SalesAgg] = {}
-    invalid = used = 0
     total_revenue = Decimal(0)
-    for row in prod_rows:
-        line = sale_line(row)
-        if line is None:
-            invalid += _count(row)
-            continue
-        qty, price, revenue, n = line
-        used += n
-        total_revenue += revenue * n
-        name = row[0]
-        key = product_key(name) if name is not None else ""
+    used = 0
+    for l in in_range:
+        used += l.n
+        total_revenue += l.revenue * l.n
+        key = product_key(l.name) if l.name is not None else ""
         agg = products.get(key)
         if agg is None:
-            agg = products[key] = SalesAgg(key, str(name) if name is not None else "")
-        agg.units += qty * n
-        agg.revenue += revenue * n
-        agg.lines.append((qty, price, revenue, n))
+            agg = products[key] = SalesAgg(key, str(l.name) if l.name is not None else "")
+        agg.units += l.qty * l.n
+        agg.revenue += l.revenue * l.n
+        agg.lines.append((l.qty, l.price, l.revenue, l.n))
 
     acc: dict[str, list] = {}                    # clave -> [nombre mostrado, mayor grupo, total]
     generic = blank = client_total = Decimal(0)
-    for row in client_rows or []:
-        line = sale_line(row)
-        if line is None:
-            continue
-        _qty, _price, revenue, n = line
-        amount = revenue * n
-        client_total += amount
-        name = row[0]
-        key = product_key(name) if name is not None else ""
-        if not key:
-            blank += amount
-        elif key in GENERIC_CLIENTS:
-            generic += amount
-        elif key not in acc:
-            acc[key] = [str(name), amount, amount]
-        else:
-            acc[key][2] += amount
-            if amount > acc[key][1]:             # se muestra el nombre del grupo con mas ventas
-                acc[key][0], acc[key][1] = str(name), amount
+    if client_rows is not None and period is not None:
+        c_lines, _bad, _look = parse_sale_rows(client_rows, has_unit, has_total)
+        for l in c_lines:
+            if l.day is None or not (MIN_SALE_DATE <= l.day <= max_date):
+                continue
+            amount = l.revenue * l.n
+            client_total += amount
+            key = product_key(l.name) if l.name is not None else ""
+            if not key:
+                blank += amount
+            elif key in GENERIC_CLIENTS:
+                generic += amount
+            elif key not in acc:
+                acc[key] = [str(l.name), amount, amount]
+            else:
+                acc[key][2] += amount
+                if amount > acc[key][1]:         # se muestra el nombre del grupo con mas ventas
+                    acc[key][0], acc[key][1] = str(l.name), amount
     clients = {k: (v[0], v[2]) for k, v in acc.items()}
-    return SalesData(products, clients, generic, blank, total_revenue, client_total, used, invalid, lookalikes,
-                     False)
+    return SalesData(products, clients, generic, blank, total_revenue, client_total, used, invalid, undated,
+                     out_of_range, lookalikes, period, window_days, window_keys)
 
 
 # ---------------------------------------------------------------------------
 # Plan de consultas
 # ---------------------------------------------------------------------------
 
-def _plan(table, group_by: list[str], filters=None, limit: int | None = None):
-    limit = MAX_GROUPS if limit is None else limit
-    return engine.build_plan(
-        table, group_by=group_by, aggregates=["count"], filters=filters or None, limit=limit, max_rows=limit
-    )
+def _grouped_plan(table, columns: list[tuple[str, str | None]]):
+    """Plan del motor: agrupa por (columna, bucket de fecha opcional) y cuenta filas. Sin LIMIT practico (el tope es
+    de seguridad: ver _complete) y sin orden de salida (el motor ordena por las claves)."""
+    keys = []
+    for name, bucket in columns:
+        col = table.column(name)
+        keys.append(engine.Key(f"{bucket}({col.name})" if bucket else col.name, col, bucket))
+    return engine.Plan(table.id, tuple(keys), (engine.Agg("count", "count", None),), (), (), MAX_GROUPS)
 
 
-def _complete(result, limit: int) -> bool:
+def _complete(result) -> bool:
     """El resultado trae TODOS los grupos (si no, una cifra seria parcial)."""
     return result.total <= len(result.rows)
 
@@ -1074,106 +1110,60 @@ def _role_notes(role: RoleMatch, alternatives: list[RoleMatch], label: str) -> l
 
 
 async def _read_all(pool, roles: dict[str, RoleMatch], now_local: datetime) -> dict:
-    """Lee con el motor todo lo que las recetas usan: productos, ventas, periodo, ventana y clientes.
+    """Lee con el motor, en UNA transaccion de solo lectura (foto consistente), todo lo que las recetas usan.
 
-    Devuelve un dict; `problems` trae, por rol, por que no se pudo leer (la receta pasa a `missing`)."""
-    out: dict[str, Any] = {"products": None, "sales": None, "clients": False, "period": None, "window_keys": set(),
-                           "window_days": 0, "date_notes": [], "problems": {}}
+    Devuelve un dict con `products`, `sales` y `problems` (por rol: por que no se pudo leer; la receta pasa a
+    `missing`)."""
+    out: dict[str, Any] = {"products": None, "sales": None, "problems": {}}
     prod, sale = roles.get("productos"), roles.get("ventas")
-    batch1, kinds = [], []
-    try:
-        if prod is not None:
-            cols = [prod.fields["nombre"].name] + [prod.fields[f].name for f in ("costo", "stock") if f in prod.fields]
-            batch1.append(_plan(prod.table, cols))
-            kinds.append("products")
-        if sale is not None:
-            batch1.append(_plan(sale.table, [f"day({sale.fields['fecha'].name})"], limit=MAX_DAYS_ROWS))
-            kinds.append("days")
-    except engine.QueryError:
-        logger.warning("Plan de hallazgos no valido para las columnas detectadas", exc_info=True)
-        for role_name in roles:
-            out["problems"][role_name] = "No pude leer las columnas de tu hoja con el formato que tiene."
+    plans, kinds = [], []
+    if prod is not None:
+        cols = [(prod.fields["nombre"].name, None)] + [(prod.fields[f].name, None) for f in ("costo", "stock")
+                                                       if f in prod.fields]
+        plans.append(_grouped_plan(prod.table, cols))
+        kinds.append("products")
+    has_unit = has_total = False
+    if sale is not None:
+        has_unit, has_total = "precio_unitario" in sale.fields, "total" in sale.fields
+        tail = [(sale.fields[f].name, None) for f in ("precio_unitario", "total") if f in sale.fields]
+        fecha, cantidad = sale.fields["fecha"].name, sale.fields["cantidad"].name
+        plans.append(_grouped_plan(sale.table, [(sale.fields["producto"].name, None), (fecha, "day"),
+                                                (cantidad, None)] + tail))
+        kinds.append("sales")
+        if "cliente" in sale.fields:
+            plans.append(_grouped_plan(sale.table, [(sale.fields["cliente"].name, None), (fecha, "day"),
+                                                    (cantidad, None)] + tail))
+            kinds.append("clients")
+    if not plans:
         return out
-    results = dict(zip(kinds, await engine.run_plans(pool, batch1))) if batch1 else {}
+    results = dict(zip(kinds, await engine.run_plans(pool, plans)))
 
     if "products" in results:
         res = results["products"]
-        if _complete(res, MAX_GROUPS):
+        if _complete(res):
             out["products"] = parse_products(res.rows, "costo" in prod.fields, "stock" in prod.fields)
         else:
             out["problems"]["productos"] = ("Tu hoja de productos tiene demasiadas combinaciones distintas para "
                                             "calcular con exactitud.")
-    if "days" not in results:
-        return out
-    days_res = results["days"]
-    if not _complete(days_res, MAX_DAYS_ROWS):
-        out["problems"]["ventas"] = "Tus ventas tienen fechas demasiado dispersas para calcular con exactitud."
-        return out
-
-    max_date = now_local.date() + timedelta(days=FUTURE_SALE_DAYS)
-    undated = out_of_range = 0
-    in_range: list[date] = []
-    for label, n in days_res.rows:
-        d = None
-        if label is not None:
-            try:
-                d = date.fromisoformat(label)
-            except ValueError:
-                d = None
-        if d is None:
-            undated += int(n)
-        elif d < MIN_SALE_DATE or d > max_date:
-            out_of_range += int(n)
+    if "sales" in results:
+        res, cres = results["sales"], results.get("clients")
+        if not _complete(res) or (cres is not None and not _complete(cres)):
+            out["problems"]["ventas"] = ("Tus ventas tienen demasiadas combinaciones distintas (producto, fecha, "
+                                         "cantidad y precio) para calcular con exactitud.")
         else:
-            in_range.append(d)
-    if undated:
-        out["date_notes"].append(
-            f"{plural(undated, 'venta sin fecha legible no se contó', 'ventas sin fecha legible no se contaron')}."
-        )
-    if out_of_range:
-        out["date_notes"].append(
-            f"{plural(out_of_range, 'venta con una fecha imposible no se contó', 'ventas con una fecha imposible no se contaron')} "
-            "(antes del año 2000 o más de un año en el futuro)."
-        )
-    if not days_res.rows:
-        out["problems"]["ventas"] = "Tu hoja de ventas está vacía: sube tus ventas con fecha, producto, cantidad y valor."
-        return out
-    if not in_range:
-        out["problems"]["ventas"] = "Tus ventas no tienen fechas que pueda leer (por ejemplo 2025-07-02 o 02/07/2025)."
-        return out
-
-    p_from, p_to = min(in_range), max(in_range)
-    days = (p_to - p_from).days + 1
-    window_days = min(STALE_WINDOW_DAYS, days)
-    window_from = p_to - timedelta(days=window_days - 1)
-    out["period"] = (p_from, p_to, days)
-    out["window_days"] = window_days
-
-    fecha, producto, cantidad = (sale.fields[f].name for f in ("fecha", "producto", "cantidad"))
-    has_unit, has_total = "precio_unitario" in sale.fields, "total" in sale.fields
-    value_cols = [sale.fields[f].name for f in ("precio_unitario", "total") if f in sale.fields]
-    in_period = [[fecha, ">=", p_from.isoformat()], [fecha, "<=", p_to.isoformat()]]
-    try:
-        batch2 = [
-            _plan(sale.table, [producto, cantidad] + value_cols, in_period),
-            _plan(sale.table, [producto], [[fecha, ">=", window_from.isoformat()], [fecha, "<=", p_to.isoformat()],
-                                           [cantidad, ">", 0]]),
-        ]
-        if "cliente" in sale.fields:
-            batch2.append(_plan(sale.table, [sale.fields["cliente"].name, cantidad] + value_cols, in_period))
-    except engine.QueryError:
-        logger.warning("Plan de ventas no valido para las columnas detectadas", exc_info=True)
-        out["problems"]["ventas"] = "No pude leer las columnas de tu hoja de ventas con el formato que tiene."
-        return out
-    res2 = await engine.run_plans(pool, batch2)
-    if not all(_complete(r, MAX_GROUPS) for r in res2):
-        out["problems"]["ventas"] = ("Tus ventas tienen demasiadas combinaciones distintas (producto, cantidad y "
-                                     "precio) para calcular con exactitud.")
-        return out
-    client_rows = res2[2].rows if len(res2) > 2 else None
-    out["sales"] = parse_sales(res2[0].rows, client_rows, has_unit, has_total)
-    out["clients"] = client_rows is not None
-    out["window_keys"] = {product_key(r[0]) for r in res2[1].rows if r[0] is not None}
+            max_date = now_local.date() + timedelta(days=FUTURE_SALE_DAYS)
+            sales = build_sales(res.rows, cres.rows if cres is not None else None, has_unit, has_total, max_date)
+            out["sales"] = sales
+            total_rows = sum(int(r[-1]) for r in res.rows)
+            if total_rows == 0:
+                out["problems"]["ventas"] = ("Tu hoja de ventas está vacía: sube tus ventas con fecha, producto, "
+                                             "cantidad y valor.")
+            elif sales.period is None:
+                if sales.invalid_rows == total_rows:
+                    out["problems"]["ventas"] = "Tus ventas no tienen cantidades y valores que pueda leer."
+                else:
+                    out["problems"]["ventas"] = ("Tus ventas no tienen fechas que pueda leer (por ejemplo "
+                                                 "2025-07-02 o 02/07/2025).")
     return out
 
 
@@ -1199,7 +1189,6 @@ def _quality_notes(prod, sale, alternatives, data) -> tuple[dict[str, list[str]]
         pn["base"] += _role_notes(prod, alternatives.get("productos", []), "productos")
     if sale is not None:
         sn += _role_notes(sale, alternatives.get("ventas", []), "ventas")
-    sn += data["date_notes"]
     if products is not None:
         if products.blank_names:
             pn["base"].append(_count_note(products.blank_names, "fila sin nombre no se contó en tu hoja de productos",
@@ -1224,6 +1213,14 @@ def _quality_notes(prod, sale, alternatives, data) -> tuple[dict[str, list[str]]
                                               "productos no tienen costo (vacío o en cero): no suman"))
     matched, unmatched_rows = {}, 0
     if sales is not None:
+        if sales.undated_rows:
+            sn.append(_count_note(sales.undated_rows, "venta sin fecha legible no se contó",
+                                  "ventas sin fecha legible no se contaron"))
+        if sales.out_of_range_rows:
+            sn.append(
+                f"{plural(sales.out_of_range_rows, 'venta con una fecha imposible no se contó', 'ventas con una fecha imposible no se contaron')} "
+                "(antes del año 2000 o más de un año en el futuro)."
+            )
         if sales.invalid_rows:
             sn.append(_count_note(sales.invalid_rows, "venta sin cantidad o valor legible no se contó",
                                   "ventas sin cantidad o valor legible no se contaron"))
@@ -1274,7 +1271,8 @@ _EMPTY_RESULT_NEEDS = {
 
 def _compose(roles, alternatives, has_receivables, data, now_local: datetime) -> dict:
     prod, sale = roles.get("productos"), roles.get("ventas")
-    period = data["period"]
+    sales_data: SalesData | None = data["sales"]
+    period = sales_data.period if sales_data is not None else None
     pn, sn, jn, matched, unmatched_rows = _quality_notes(prod, sale, alternatives, data)
     if period is not None:
         gap = (now_local.date() - period[1]).days
@@ -1282,10 +1280,10 @@ def _compose(roles, alternatives, has_receivables, data, now_local: datetime) ->
             sn.append(f"Tu última venta registrada es del {fmt_date(period[1])}: si ya vendiste después, sube el "
                       "archivo actualizado.")
     ctx = None
-    if period is not None and data["sales"] is not None:
+    if period is not None and not data["problems"].get("ventas"):
         ctx = Context(
-            products=data["products"], sales=data["sales"], period_from=period[0], period_to=period[1],
-            window_keys=data["window_keys"], window_days=data["window_days"],
+            products=data["products"], sales=sales_data, period_from=period[0], period_to=period[1],
+            window_keys=sales_data.window_keys, window_days=sales_data.window_days,
             product_table=prod.table.display if prod else "", sales_table=sale.table.display,
             product_notes=pn, sales_notes=sn, join_notes=jn, matched_sales=matched, unmatched_rows=unmatched_rows,
         )
@@ -1340,7 +1338,7 @@ async def _compute(org_id: str, now: datetime | None) -> dict:
     roles, alternatives, has_receivables = detect_roles(catalog)
     data = await _read_all(pool, roles, now_local)
     composed = _compose(roles, alternatives, has_receivables, data, now_local)
-    period = data["period"]
+    period = data["sales"].period if data["sales"] is not None and not data["problems"].get("ventas") else None
     return {
         "generated_at": now_local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "recipe_pack": RECIPE_PACK,
