@@ -195,3 +195,24 @@ async def test_aislamiento_entre_organizaciones(pg):
         admin = await asyncpg.connect(host=HOST, port=int(PORT), user=USER, database="postgres")
         await admin.execute(f'DROP DATABASE IF EXISTS "{database._org_db_name(otra)}" WITH (FORCE)')
         await admin.close()
+
+
+async def test_deshacer_carga_en_postgres_real_restaura_conteo_y_rango_de_fechas(pg):
+    csv = ferreteria("ventas")
+    await subir(pg, ("ventas julio.csv", csv))
+    lines = csv.strip().split("\n")
+    nuevas = "\n".join([lines[0]] + [l.replace("2025-", "2026-") for l in lines[1:6]])
+    _p, done = await subir(pg, ("ventas 2026.csv", nuevas))
+    r = done["results"][0]
+    assert r["status"] == "appended" and r["undo"]["action"] == "delete_rows"
+    res = await intake.undo_commit_load(pg, r["table_id"], r["undo"]["loaded_at"])
+    assert res["rows_deleted"] == 5 and res["total_rows"] == len(lines) - 1
+    t = (await intake.load_org_tables(pg))[0]
+    assert t["row_count"] == len(lines) - 1
+    fecha = next(c for c in t["columns_definition"] if c["name"] == "fecha")
+    assert fecha["range"][1].startswith("2025-")                    # el rango vuelve a lo de antes
+    from app.services import schema_agent_service as sa
+    pool = await sa.get_org_pool(pg)
+    async with pool.acquire() as conn:
+        legacy = await conn.fetchval("SELECT count(*) FROM data_records")
+    assert legacy == len(lines) - 1                                 # las filas legacy de la carga deshecha tambien salieron

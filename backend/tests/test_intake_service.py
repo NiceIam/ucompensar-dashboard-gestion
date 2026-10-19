@@ -581,3 +581,60 @@ class TestCorregirRoles:
         tid = dbs.db(ORG_A).add_table("ventas", ["fecha", "producto", "cantidad", "total"], [])
         res = await intake.update_table_roles(ORG_A, str(tid), {"total": "total"}, None)
         assert res["kind"] == "ventas" and res["mapping_source"] == "user"
+
+
+# ---------------------------------------------------------------------------
+# deshacer una carga que se sumo a una hoja existente
+# ---------------------------------------------------------------------------
+
+class TestDeshacerCarga:
+    async def _dos_cargas(self, dbs):
+        await analyze_and_commit(ORG_A, lambda: [csv_up("ventas mayo.csv", VENTAS_CSV)])
+        nuevo = VENTAS_CSV.replace("Ana", "Eva")
+        _, done = await analyze_and_commit(ORG_A, lambda: [csv_up("ventas nov.csv", nuevo)])
+        return done["results"][0]
+
+    async def test_la_carga_sumada_devuelve_como_deshacerla(self, dbs):
+        r = await self._dos_cargas(dbs)
+        assert r["status"] == "appended" and r["undo"]["action"] == "delete_rows"
+        assert r["undo"]["table_id"] == r["table_id"] and r["undo"]["loaded_at"] == r["loaded_at"]
+
+    async def test_deshacer_borra_solo_las_filas_de_esa_carga(self, dbs):
+        r = await self._dos_cargas(dbs)
+        tid = next(iter(dbs.db(ORG_A).tables))
+        assert len(dbs.db(ORG_A).rows_of(tid)) == 6
+        res = await intake.undo_commit_load(ORG_A, r["table_id"], r["undo"]["loaded_at"])
+        assert res == {"table_id": r["table_id"], "rows_deleted": 3, "total_rows": 3}
+        rows = dbs.db(ORG_A).rows_of(tid)
+        assert len(rows) == 3 and all(x["cliente"] != "Eva" for x in rows) and dbs.db(ORG_A).tables[tid]["row_count"] == 3
+        assert len(dbs.db(ORG_A).records) == 3                     # tambien las filas legacy de esa carga
+
+    async def test_deshacer_dos_veces_no_borra_nada_mas(self, dbs):
+        r = await self._dos_cargas(dbs)
+        await intake.undo_commit_load(ORG_A, r["table_id"], r["undo"]["loaded_at"])
+        again = await intake.undo_commit_load(ORG_A, r["table_id"], r["undo"]["loaded_at"])
+        assert again["rows_deleted"] == 0 and again["total_rows"] == 3
+
+    @pytest.mark.parametrize("stamp", ["ayer", "", "2026-10-19", "2026-10-19T12:00:00", "'; DROP TABLE x;--"])
+    async def test_marca_invalida_se_rechaza(self, dbs, stamp):
+        r = await self._dos_cargas(dbs)
+        with pytest.raises(intake.IntakeError) as e:
+            await intake.undo_commit_load(ORG_A, r["table_id"], stamp)
+        assert e.value.code == "invalid_load"
+        assert dbs.db(ORG_A).tables[next(iter(dbs.db(ORG_A).tables))]["row_count"] == 6
+
+    async def test_otra_organizacion_o_tabla_inexistente(self, dbs):
+        r = await self._dos_cargas(dbs)
+        for org, tid in ((ORG_B, r["table_id"]), (ORG_A, "00000000-0000-0000-0000-000000000000"), (ORG_A, "basura")):
+            with pytest.raises(intake.IntakeError) as e:
+                await intake.undo_commit_load(org, tid, r["undo"]["loaded_at"])
+            assert e.value.code == "not_found"
+        assert dbs.db(ORG_A).tables[next(iter(dbs.db(ORG_A).tables))]["row_count"] == 6
+
+    async def test_la_marca_manda_solo_se_deshace_la_carga_que_la_tiene(self, dbs):
+        r = await self._dos_cargas(dbs)
+        primera_marca = dbs.db(ORG_A).rows[0]["created_at"].isoformat()
+        assert primera_marca != r["loaded_at"]
+        res = await intake.undo_commit_load(ORG_A, r["table_id"], primera_marca)
+        assert res["rows_deleted"] == 3 and res["total_rows"] == 3
+        assert {x["created_at"].isoformat() for x in dbs.db(ORG_A).rows} == {r["loaded_at"]}     # quedo la segunda carga

@@ -89,3 +89,29 @@ async def commit(
         )
     items = [s.model_dump() for s in parsed.sheets]
     return await intake.commit_uploads(current_user.org_id, files, items)
+
+
+class UndoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    table_id: str = Field(min_length=1, max_length=64)
+    loaded_at: str = Field(min_length=10, max_length=64)
+
+
+@router.post("/undo", summary="Deshace una carga que sumo filas a una hoja existente")
+@limiter.limit(INTAKE_RATE_LIMIT, key_func=_rate_limit_key)
+async def undo(
+    request: Request,
+    body: UndoRequest,
+    current_user: Annotated[CurrentUser, Depends(_rate_limited_user)],
+):
+    import uuid as _uuid
+
+    try:
+        _uuid.UUID(body.table_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tabla no encontrada")
+    try:
+        return await intake.undo_commit_load(current_user.org_id, body.table_id, body.loaded_at)
+    except intake.IntakeError as exc:
+        code = status.HTTP_404_NOT_FOUND if exc.code == "not_found" else status.HTTP_422_UNPROCESSABLE_ENTITY
+        raise HTTPException(status_code=code, detail=exc.message)

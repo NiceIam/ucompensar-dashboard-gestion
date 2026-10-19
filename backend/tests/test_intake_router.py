@@ -170,3 +170,43 @@ class TestRolesEndpoint:
     def test_sin_sesion_401(self, client, env):
         client.cookies.clear()
         assert client.put("/api/v1/schema/tables/00000000-0000-0000-0000-000000000000/roles", json={"roles": {}}).status_code == 401
+
+
+class TestUndoEndpoint:
+    def _dos_cargas(self, client, env):
+        plan = lambda: json.dumps({"sheets": [{"file_name": "v.csv", "sheet_name": None, "action": "create", "display_name": "V"}]})
+        client.post("/api/v1/intake/commit", files=files(("v.csv", VENTAS_CSV)), data={"plan": plan()})
+        tid = str(next(iter(env.db(ORG_A).tables)))
+        plan2 = json.dumps({"sheets": [{"file_name": "v2.csv", "sheet_name": None, "action": "append", "table_id": tid}]})
+        resp = client.post("/api/v1/intake/commit", files=files(("v2.csv", VENTAS_CSV.replace("Ana", "Eva"))), data={"plan": plan2})
+        return tid, resp.json()["results"][0]
+
+    def test_deshace_la_carga(self, client, env, as_user):
+        as_user()
+        tid, r = self._dos_cargas(client, env)
+        assert r["status"] == "appended"
+        resp = client.post("/api/v1/intake/undo", json={"table_id": tid, "loaded_at": r["undo"]["loaded_at"]})
+        assert resp.status_code == 200 and resp.json() == {"table_id": tid, "rows_deleted": 3, "total_rows": 3}
+
+    @pytest.mark.parametrize("body,status", [
+        ({"table_id": "no-uuid", "loaded_at": "2026-10-19T12:00:00+00:00"}, 404),
+        ({"table_id": "00000000-0000-0000-0000-000000000000", "loaded_at": "2026-10-19T12:00:00+00:00"}, 404),
+        ({"table_id": "00000000-0000-0000-0000-000000000000", "loaded_at": "x"}, 422),
+        ({"table_id": "00000000-0000-0000-0000-000000000000"}, 422),
+        ({"table_id": "00000000-0000-0000-0000-000000000000", "loaded_at": "2026-10-19T12:00:00+00:00", "extra": 1}, 422),
+    ])
+    def test_errores(self, client, env, as_user, body, status):
+        as_user()
+        assert client.post("/api/v1/intake/undo", json=body).status_code == status
+
+    def test_otra_org_no_puede_deshacer(self, client, env, as_user):
+        as_user(ORG_A)
+        tid, r = self._dos_cargas(client, env)
+        as_user(ORG_B)
+        resp = client.post("/api/v1/intake/undo", json={"table_id": tid, "loaded_at": r["undo"]["loaded_at"]})
+        assert resp.status_code == 404
+        assert env.db(ORG_A).tables[next(iter(env.db(ORG_A).tables))]["row_count"] == 6
+
+    def test_sin_sesion_401(self, client, env):
+        client.cookies.clear()
+        assert client.post("/api/v1/intake/undo", json={"table_id": "x", "loaded_at": "2026-10-19T12:00:00+00:00"}).status_code == 401

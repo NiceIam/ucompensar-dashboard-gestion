@@ -654,6 +654,11 @@ async def load_csv_to_table(
                 )
                 inserted += 1
 
+            # Marca de esta carga: las filas insertadas en UNA transaccion comparten created_at (NOW() es el
+            # inicio de la transaccion). Sirve para deshacer solo esta carga (undo_load).
+            loaded_at = await conn.fetchval(
+                "SELECT max(created_at) FROM org_data_rows WHERE table_id = $1", table_uuid,
+            ) if inserted else None
             # Actualizar row_count
             total = await conn.fetchval(
                 "SELECT count(*) FROM org_data_rows WHERE table_id = $1",
@@ -680,7 +685,47 @@ async def load_csv_to_table(
         "table_name": table_name,
         "rows_inserted": inserted,
         "total_rows": total,
+        "loaded_at": loaded_at.isoformat() if hasattr(loaded_at, "isoformat") else None,
     }
+
+
+async def undo_load(org_id: str, table_id: str, loaded_at: str) -> dict:
+    """Deshace UNA carga: borra solo las filas insertadas con la marca `loaded_at` (la devuelve load_csv_to_table) y
+    deja el conteo y el rango de fechas de la tabla como si no hubiera pasado. No toca las demas filas."""
+    table_uuid = _parse_uuid(table_id)
+    if table_uuid is None:
+        return {"error": "Tabla no encontrada"}
+    try:
+        stamp = datetime.fromisoformat(str(loaded_at))
+    except ValueError:
+        return {"error": "No reconozco esa carga."}
+    if stamp.tzinfo is None:
+        return {"error": "No reconozco esa carga."}
+    pool = await get_org_pool(org_id)
+    async with pool.acquire() as conn:
+        table_row = await conn.fetchrow(
+            "SELECT id, table_name, columns_definition FROM org_data_tables WHERE id = $1", table_uuid,
+        )
+        if not table_row:
+            return {"error": "Tabla no encontrada"}
+        async with conn.transaction():
+            gone = await conn.fetch(
+                "DELETE FROM org_data_rows WHERE table_id = $1 AND created_at = $2 RETURNING id", table_uuid, stamp,
+            )
+            await conn.execute(
+                "DELETE FROM data_records WHERE table_name = $1 AND created_at = $2", table_row["table_name"], stamp,
+            )
+            total = await conn.fetchval("SELECT count(*) FROM org_data_rows WHERE table_id = $1", table_uuid)
+            await conn.execute("UPDATE org_data_tables SET row_count = $1 WHERE id = $2", total, table_uuid)
+            if gone:
+                cols_def = _parse_columns_definition(table_row["columns_definition"])
+                new_cols, changed = await _refresh_date_ranges(conn, table_uuid, cols_def)
+                if changed:
+                    await conn.execute(
+                        "UPDATE org_data_tables SET columns_definition = $1::jsonb WHERE id = $2",
+                        json.dumps(new_cols), table_uuid,
+                    )
+    return {"table_id": table_id, "rows_deleted": len(gone), "total_rows": total}
 
 
 # ---------------------------------------------------------------------------

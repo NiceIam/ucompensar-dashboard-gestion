@@ -689,7 +689,7 @@ def _result(base: dict, **kw) -> dict:
     out = {"key": base["key"], "file_name": base["file_name"], "sheet_name": base.get("sheet_name"),
            "status": "error", "table_id": None, "table_name": None, "display_name": None, "kind": None,
            "kind_label": None, "rows_inserted": 0, "total_rows": None, "message": None, "error": None,
-           "undo": {"action": "none", "table_id": None}}
+           "undo": {"action": "none", "table_id": None}, "loaded_at": None}
     out.update(kw)
     return out
 
@@ -761,7 +761,8 @@ async def append_sheet(org_id: str, prep: Prepared, und: su.Understanding, table
     # 3. datos
     load = await agent.load_csv_to_table(df, org_id, str(table_uuid), column_mapping=rename or None)
     return {"table_id": str(table_uuid), "table_name": view.table_name, "display_name": view.display_name,
-            "rows_inserted": load["rows_inserted"], "total_rows": load["total_rows"], "duplicate": False}
+            "rows_inserted": load["rows_inserted"], "total_rows": load["total_rows"], "duplicate": False,
+            "loaded_at": load.get("loaded_at")}
 
 
 async def commit_uploads(org_id: str, uploads: list[UploadFile], plan: list[dict]) -> dict:
@@ -839,7 +840,9 @@ async def commit_uploads(org_id: str, uploads: list[UploadFile], plan: list[dict
                 else:
                     results.append(_result(
                         base, status="appended", kind=und.kind, kind_label=kind_label,
-                        message=f"Sumé {fmt_int(res['rows_inserted'])} filas a «{res['display_name']}».", **res))
+                        message=f"Sumé {fmt_int(res['rows_inserted'])} filas a «{res['display_name']}».",
+                        undo=({"action": "delete_rows", "table_id": res["table_id"], "loaded_at": res["loaded_at"]}
+                              if res.get("loaded_at") else {"action": "none", "table_id": None}), **res))
             else:
                 raise IntakeError("invalid_action", "No entendí qué hacer con esta hoja.")
         except IntakeError as exc:
@@ -877,6 +880,13 @@ def columns_payload(cols: list, kind: str) -> list[dict]:
         out.append({"name": c["name"], "label": r["label"], "type": c.get("type"), "role": r["role"],
                     "role_label": title, "explain": explain, "confidence": round(r["confidence"], 2)})
     return out
+
+
+async def undo_commit_load(org_id: str, table_id: str, loaded_at: str) -> dict:
+    res = await agent.undo_load(org_id, table_id, loaded_at)
+    if "error" in res:
+        raise IntakeError("not_found" if "Tabla" in res["error"] else "invalid_load", res["error"])
+    return res
 
 
 async def update_table_roles(org_id: str, table_id: str, roles: dict[str, Optional[str]], kind: Optional[str] = None) -> dict:
