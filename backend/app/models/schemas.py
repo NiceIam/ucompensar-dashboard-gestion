@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.constants import BusinessSector, OrganizationSize, WidgetType
 
@@ -330,3 +330,56 @@ class PaginatedResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ---------------------------------------------------------------------------
+# Insights ("Esta semana en tu negocio")
+# ---------------------------------------------------------------------------
+
+class InsightMetric(BaseModel):
+    label: str
+    # value crudo: numero (money en pesos, percent 0-100, months/days/count) o texto cuando unit == "text"
+    value: float | int | str
+    unit: Literal["money", "count", "percent", "days", "months", "text"]
+
+
+class InsightHow(BaseModel):
+    steps: List[str]
+    tables: List[str]
+    rows_used: int
+    notes: List[str]
+
+
+class InsightItem(BaseModel):
+    id: str
+    kind: Literal["money", "risk", "opportunity", "info"]
+    severity: Literal["info", "attention", "important"]
+    title: str
+    sentence: str
+    metrics: List[InsightMetric]
+    action: Optional[str] = None
+    ask: Optional[str] = None
+    how: InsightHow
+
+
+class InsightMissing(BaseModel):
+    id: str
+    title: str
+    needs: str
+
+
+class InsightPeriod(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_: str = Field(alias="from")
+    to: str
+    days: int
+
+
+class InsightsResponse(BaseModel):
+    generated_at: str
+    recipe_pack: str
+    period: Optional[InsightPeriod] = None
+    items: List[InsightItem]
+    missing: List[InsightMissing]
+    summary_text: str

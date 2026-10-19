@@ -22,6 +22,7 @@ from app.routers import (
     dashboards,
     etl,
     files,
+    insights,
     templates,
     schema,
 )
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
     app.include_router(agents.router)
     app.include_router(dashboards.router)
     app.include_router(chat.router)
+    app.include_router(insights.router)
     app.include_router(templates.router)
     app.include_router(etl.router)
     app.include_router(analytics.router)
