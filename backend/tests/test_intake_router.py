@@ -70,7 +70,7 @@ class TestAnalyze:
         s = body["files"][0]["sheets"][0]
         assert set(s) >= {"key", "sheet_name", "status", "rows", "columns_count", "kind", "kind_label", "kind_confidence",
                           "mapping_source", "needs_review", "review_reasons", "summary", "kind_phrase", "stats", "period",
-                          "columns", "kinds", "allowed_roles", "tokens", "signature", "destination"}
+                          "columns", "tokens", "signature", "destination"}
         assert set(s["columns"][0]) == {"index", "name", "original_name", "role", "role_label", "explain", "confidence",
                                         "type", "sample", "source"}
         assert env.db(ORG_A).tables == {}
@@ -90,6 +90,21 @@ class TestAnalyze:
         assert codes[:20] == [200] * 20 and codes[20] == 429
         detail = client.post("/api/v1/intake/analyze", files=files(("v.csv", VENTAS_CSV))).json()["detail"]
         assert detail["code"] == "rate_limit_user" and "subiendo archivos muy rápido" in detail["message"]
+
+
+class TestOntology:
+    def test_vocabulario_para_los_desplegables(self, client, env, as_user):
+        as_user()
+        body = client.get("/api/v1/intake/ontology").json()
+        assert [k["kind"] for k in body["kinds"]] == ["productos", "ventas", "compras", "cuentas_por_cobrar",
+                                                      "movimientos_inventario", "clientes", "proveedores", "otro"]
+        assert [r["role"] for r in body["roles"]["compras"]] == ["fecha", "producto", "cantidad", "costo_unitario", "total",
+                                                                 "proveedor", "documento", "otro"]
+        assert body["roles"]["otro"] == [{"role": "otro", "label": "Dato adicional", "explain": "un dato extra que guardo tal cual"}]
+
+    def test_sin_sesion_401(self, client, env):
+        client.cookies.clear()
+        assert client.get("/api/v1/intake/ontology").status_code == 401
 
 
 class TestCommit:

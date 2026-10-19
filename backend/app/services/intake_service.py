@@ -430,6 +430,14 @@ async def _read_upload(upload: UploadFile) -> tuple[bytes, list[tuple[Optional[s
     return content, sheets
 
 
+def ontology_payload() -> dict:
+    """Vocabulario para los desplegables de correccion: tipos de hoja y roles por tipo, en lenguaje simple."""
+    return {
+        "kinds": [{"kind": k, "label": onto.KIND_LABEL[k], "choice_label": onto.KIND_CHOICE_LABEL[k]} for k in onto.KINDS],
+        "roles": {k: onto.allowed_roles(k) for k in onto.KINDS},
+    }
+
+
 def sheet_key(file_name: str, sheet_name: Optional[str]) -> str:
     return f"{file_name}::{sheet_name or ''}"
 
@@ -550,8 +558,6 @@ def describe_into(sheet: dict, und: su.Understanding, prep: Prepared) -> None:
         from_cache=und.from_cache, needs_review=und.needs_review, review_reasons=list(und.review_reasons),
         period={"from": span[0].isoformat(), "to": span[1].isoformat()} if span else None,
         columns=_sheet_role_columns(und, prep),
-        kinds=[{"kind": k, "label": onto.KIND_CHOICE_LABEL[k]} for k in onto.KINDS],
-        allowed_roles=onto.allowed_roles(und.kind),
         tokens=_tokens_of(und), signature=und.signature,
     )
     sheet.update(sheet_summary(und.kind, rows, len(prep.profiles), span))

@@ -62,6 +62,11 @@ class CommitPlan(BaseModel):
     sheets: list[PlanSheet] = Field(min_length=1, max_length=150)
 
 
+@router.get("/ontology", summary="Tipos de hoja y roles de columna, en lenguaje simple")
+async def ontology(current_user: CurrentUserDep):
+    return intake.ontology_payload()
+
+
 @router.post("/analyze", summary="Entiende varios archivos a la vez y propone que hacer con cada hoja")
 @limiter.limit(INTAKE_RATE_LIMIT, key_func=_rate_limit_key)
 async def analyze(
