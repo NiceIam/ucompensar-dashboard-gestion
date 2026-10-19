@@ -446,7 +446,6 @@ class ProductsData:
     unreadable_stock_rows: int
     duplicated: int                      # nombres normalizados que aparecen en mas de una fila
     thousands_lookalikes: int
-    truncated: bool
 
 
 @dataclass
@@ -546,7 +545,7 @@ def parse_products(rows: list[tuple], has_cost: bool, has_stock: bool) -> Produc
             # costo unitario: promedio ponderado por existencias (o promedio simple si no hay existencias)
             agg.cost = agg.value / agg.cost_weight if agg.cost_weight > 0 else agg.cost_sum / agg.cost_rows
     duplicated = sum(1 for c in per_key_rows.values() if c > 1)
-    return ProductsData(products, used, blank, negative, unreadable, duplicated, lookalikes, False)
+    return ProductsData(products, used, blank, negative, unreadable, duplicated, lookalikes)
 
 
 def parse_sale_rows(rows: list[tuple], has_client: bool, has_unit: bool,
@@ -826,8 +825,12 @@ def recipe_productos_estrella(ctx: Context) -> dict | None:
         verdict = (f"más que toda tu utilidad ({fmt_money(total)}), porque otros productos te hacen perder plata"
                    if total > 0 else f"pero en total tus productos pierden plata ({fmt_money(total)})")
         sentence = f"{lead} {join_es(names)}: {'juntos dejan' if n > 1 else 'deja'} {fmt_money(top_total)}, {verdict}."
-        title = (f"Tus {n} productos estrella sostienen tu utilidad" if n > 1
-                 else "Tu producto estrella sostiene tu utilidad")
+        if total > 0:
+            title = (f"Tus {n} productos estrella sostienen tu utilidad" if n > 1
+                     else "Tu producto estrella sostiene tu utilidad")
+        else:
+            title = (f"Tus {n} productos estrella dejan {fmt_money(top_total)}" if n > 1
+                     else f"Tu producto estrella deja {fmt_money(top_total)}")
     metrics.append(_metric("Utilidad total", _money_value(total), "money"))
     steps = [
         "Para cada venta calculé la utilidad: cantidad × (precio al que vendiste − costo del producto).",

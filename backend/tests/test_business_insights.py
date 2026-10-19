@@ -402,6 +402,16 @@ class TestCasoSintetico:
             "$2.525, más que toda tu utilidad ($2.425), porque otros productos te hacen perder plata.")
         assert metrics(it)["Utilidad total"] == 2_425
 
+    async def test_estrella_cuando_la_utilidad_total_es_negativa(self, backend):
+        # A deja +50 y B pierde 250: utilidad total -200, pero A sigue siendo el producto estrella
+        await load(backend, prods(("A", 100, 10), ("B", 100, 10)),
+                   sales(("2025-03-01", "A", 1, 150), ("2025-03-02", "B", 5, 50)))
+        it = item(await run(), "productos_estrella")
+        assert it["title"] == "Tu producto estrella deja $50"
+        assert it["sentence"] == ("Tu producto que más utilidad deja es A ($50): deja $50, pero en total tus "
+                                  "productos pierden plata (-$200).")
+        assert metrics(it) == {"Utilidad de los productos estrella": 50, "Utilidad total": -200}
+
     async def test_numeros_como_texto_dan_exactamente_lo_mismo(self, backend, result):
         # misma organizacion en otra org con TODOS los numeros guardados como texto (cargas antiguas)
         await load(backend, stringify(S1_PRODUCTOS), stringify(S1_VENTAS), org=ORG_B)
