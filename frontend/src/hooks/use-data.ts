@@ -9,6 +9,8 @@ export const DATA_KEYS = {
   tables: ["templates", "org-tables"] as const,
   rows: (tableId: string) => ["table-rows", tableId] as const,
   files: ["files"] as const,
+  /** Los hallazgos dependen de los datos: cualquier cambio en ellos los deja viejos. */
+  insights: ["insights"] as const,
 }
 
 export interface TableRow {
@@ -54,6 +56,7 @@ export function useInvalidateData() {
       qc.invalidateQueries({ queryKey: DATA_KEYS.tables }),
       qc.invalidateQueries({ queryKey: DATA_KEYS.files }),
       qc.invalidateQueries({ queryKey: ["table-rows"] }),
+      qc.invalidateQueries({ queryKey: DATA_KEYS.insights }),
     ])
   }
 }
@@ -90,6 +93,7 @@ export function useDeleteRow(tableId: string) {
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: DATA_KEYS.rows(tableId) })
       await qc.invalidateQueries({ queryKey: DATA_KEYS.tables })
+      await qc.invalidateQueries({ queryKey: DATA_KEYS.insights })
     },
   })
 }
