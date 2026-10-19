@@ -59,6 +59,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
+from functools import lru_cache
 from typing import Any
 
 from app.database import get_org_pool
@@ -227,8 +228,10 @@ def fold(text) -> str:
     return re.sub(r"[^0-9a-z]+", " ", strip_accents(str(text)).casefold()).strip()
 
 
+@lru_cache(maxsize=200_000)
 def product_key(name) -> str:
-    """Clave de cruce entre hojas: minusculas, sin acentos, sin espacios en los extremos y espacios colapsados."""
+    """Clave de cruce entre hojas: minusculas, sin acentos, sin espacios en los extremos y espacios colapsados.
+    (Con cache: los mismos nombres se repiten decenas de miles de veces en las ventas.)"""
     return re.sub(r"\s+", " ", strip_accents(str(name)).casefold()).strip()
 
 
@@ -459,6 +462,7 @@ class SalesAgg:
 class SaleLine:
     """Una forma de venta valida (producto o cliente, dia, cantidad, precio) repetida `n` veces."""
     name: str | None
+    client: str | None
     day: date | None
     qty: Decimal
     price: Decimal            # precio real de UNA unidad
@@ -473,7 +477,6 @@ class SalesData:
     generic_client_revenue: Decimal
     blank_client_revenue: Decimal
     total_revenue: Decimal                       # todas las ventas validas del periodo
-    client_total: Decimal                        # lo mismo, leido en la consulta por cliente
     rows_used: int                               # ventas validas con fecha legible
     invalid_rows: int                            # sin cantidad > 0 o sin precio/total legible
     undated_rows: int                            # validas pero sin fecha legible
@@ -546,20 +549,34 @@ def parse_products(rows: list[tuple], has_cost: bool, has_stock: bool) -> Produc
     return ProductsData(products, used, blank, negative, unreadable, duplicated, lookalikes, False)
 
 
-def parse_sale_rows(rows: list[tuple], has_unit: bool, has_total: bool) -> tuple[list[SaleLine], int, int]:
-    """Filas (clave, dia, cantidad[, precio][, total], veces) del motor -> (ventas validas, invalidas, "1.200").
+def parse_sale_rows(rows: list[tuple], has_client: bool, has_unit: bool,
+                    has_total: bool) -> tuple[list[SaleLine], int, int]:
+    """Filas (producto[, cliente], dia, cantidad[, precio][, total], veces) del motor -> (ventas validas, filas
+    invalidas, valores con forma "1.200").
 
     Valida = cantidad > 0 y precio real legible. Precio real de la venta = precio unitario de la fila (>= 0); si
-    falta, total / cantidad (total >= 0)."""
+    falta, total / cantidad (total >= 0). Los valores se repiten mucho (cantidades, precios, fechas): se leen una
+    sola vez cada uno (memo local) para no pagar 50.000 veces la misma conversion."""
     lines: list[SaleLine] = []
     invalid = lookalikes = 0
+    numbers: dict = {}
+    days: dict = {}
+    day_at = 2 if has_client else 1
+
+    def number(raw):
+        if raw not in numbers:
+            numbers[raw] = engine.parse_number(raw)
+        return numbers[raw]
+
     for row in rows:
         n = int(row[-1])
-        raws = row[2:-1]
-        qty = engine.parse_number(raws[0])
-        unit = engine.parse_number(raws[1]) if has_unit else None
-        total = engine.parse_number(raws[1 + has_unit]) if has_total else None
-        lookalikes += n * sum(1 for r in raws if r is not None and THOUSANDS_LOOKALIKE.match(str(r)))
+        raws = row[day_at + 1:-1]
+        qty = number(raws[0])
+        unit = number(raws[1]) if has_unit else None
+        total = number(raws[1 + has_unit]) if has_total else None
+        for raw in raws:
+            if raw is not None and THOUSANDS_LOOKALIKE.match(raw):
+                lookalikes += n
         if qty is None or qty <= 0:
             invalid += n
             continue
@@ -570,23 +587,22 @@ def parse_sale_rows(rows: list[tuple], has_unit: bool, has_total: bool) -> tuple
         else:
             invalid += n
             continue
-        day = None
-        if row[1] is not None:
+        label = row[day_at]
+        if label not in days:
             try:
-                day = date.fromisoformat(row[1])
+                days[label] = date.fromisoformat(label) if label is not None else None
             except ValueError:
-                day = None
-        lines.append(SaleLine(row[0], day, qty, price, revenue, n))
+                days[label] = None
+        lines.append(SaleLine(row[0], row[1] if has_client else None, days[label], qty, price, revenue, n))
     return lines, invalid, lookalikes
 
 
-def build_sales(prod_rows: list[tuple], client_rows: list[tuple] | None, has_unit: bool, has_total: bool,
-                max_date: date) -> SalesData:
+def build_sales(rows: list[tuple], has_client: bool, has_unit: bool, has_total: bool, max_date: date) -> SalesData:
     """Ventas validas del periodo por producto y por cliente.
 
     El periodo sale de las fechas de las ventas VALIDAS (una fila sin cantidad o precio no es una venta, aunque
     comparta hoja: p. ej. movimientos de inventario cargados en la hoja de ventas no estiran el periodo)."""
-    lines, invalid, lookalikes = parse_sale_rows(prod_rows, has_unit, has_total)
+    lines, invalid, lookalikes = parse_sale_rows(rows, has_client, has_unit, has_total)
     undated = sum(l.n for l in lines if l.day is None)
     dated = [l for l in lines if l.day is not None]
     in_range = [l for l in dated if MIN_SALE_DATE <= l.day <= max_date]
@@ -602,42 +618,35 @@ def build_sales(prod_rows: list[tuple], client_rows: list[tuple] | None, has_uni
         window_keys = {product_key(l.name) for l in in_range if l.name is not None and l.day >= window_from}
 
     products: dict[str, SalesAgg] = {}
-    total_revenue = Decimal(0)
+    acc: dict[str, list] = {}                    # cliente -> [nombre mostrado, mayor grupo, total]
+    total_revenue = generic = blank = Decimal(0)
     used = 0
     for l in in_range:
+        amount = l.revenue * l.n
         used += l.n
-        total_revenue += l.revenue * l.n
+        total_revenue += amount
         key = product_key(l.name) if l.name is not None else ""
         agg = products.get(key)
         if agg is None:
             agg = products[key] = SalesAgg(key, str(l.name) if l.name is not None else "")
         agg.units += l.qty * l.n
-        agg.revenue += l.revenue * l.n
+        agg.revenue += amount
         agg.lines.append((l.qty, l.price, l.revenue, l.n))
-
-    acc: dict[str, list] = {}                    # clave -> [nombre mostrado, mayor grupo, total]
-    generic = blank = client_total = Decimal(0)
-    if client_rows is not None and period is not None:
-        c_lines, _bad, _look = parse_sale_rows(client_rows, has_unit, has_total)
-        for l in c_lines:
-            if l.day is None or not (MIN_SALE_DATE <= l.day <= max_date):
-                continue
-            amount = l.revenue * l.n
-            client_total += amount
-            key = product_key(l.name) if l.name is not None else ""
-            if not key:
+        if has_client:
+            ckey = product_key(l.client) if l.client is not None else ""
+            if not ckey:
                 blank += amount
-            elif key in GENERIC_CLIENTS:
+            elif ckey in GENERIC_CLIENTS:
                 generic += amount
-            elif key not in acc:
-                acc[key] = [str(l.name), amount, amount]
+            elif ckey not in acc:
+                acc[ckey] = [str(l.client), amount, amount]
             else:
-                acc[key][2] += amount
-                if amount > acc[key][1]:         # se muestra el nombre del grupo con mas ventas
-                    acc[key][0], acc[key][1] = str(l.name), amount
+                acc[ckey][2] += amount
+                if amount > acc[ckey][1]:        # se muestra el nombre del grupo con mas ventas
+                    acc[ckey][0], acc[ckey][1] = str(l.client), amount
     clients = {k: (v[0], v[2]) for k, v in acc.items()}
-    return SalesData(products, clients, generic, blank, total_revenue, client_total, used, invalid, undated,
-                     out_of_range, lookalikes, period, window_days, window_keys)
+    return SalesData(products, clients, generic, blank, total_revenue, used, invalid, undated, out_of_range,
+                     lookalikes, period, window_days, window_keys)
 
 
 # ---------------------------------------------------------------------------
@@ -884,7 +893,7 @@ def recipe_reposicion(ctx: Context) -> dict:
 def recipe_clientes_concentracion(ctx: Context) -> dict | None:
     sales = ctx.sales
     ranked = sorted(sales.clients.items(), key=lambda kv: (-kv[1][1], kv[0]))
-    total = sales.client_total
+    total = sales.total_revenue
     if not ranked or total <= 0:
         return None
     first = ranked[0][1]
@@ -1122,18 +1131,14 @@ async def _read_all(pool, roles: dict[str, RoleMatch], now_local: datetime) -> d
                                                        if f in prod.fields]
         plans.append(_grouped_plan(prod.table, cols))
         kinds.append("products")
-    has_unit = has_total = False
+    has_client = has_unit = has_total = False
     if sale is not None:
-        has_unit, has_total = "precio_unitario" in sale.fields, "total" in sale.fields
+        has_client, has_unit, has_total = "cliente" in sale.fields, "precio_unitario" in sale.fields, "total" in sale.fields
         tail = [(sale.fields[f].name, None) for f in ("precio_unitario", "total") if f in sale.fields]
-        fecha, cantidad = sale.fields["fecha"].name, sale.fields["cantidad"].name
-        plans.append(_grouped_plan(sale.table, [(sale.fields["producto"].name, None), (fecha, "day"),
-                                                (cantidad, None)] + tail))
+        head = [(sale.fields["producto"].name, None)] + ([(sale.fields["cliente"].name, None)] if has_client else [])
+        plans.append(_grouped_plan(sale.table, head + [(sale.fields["fecha"].name, "day"),
+                                                       (sale.fields["cantidad"].name, None)] + tail))
         kinds.append("sales")
-        if "cliente" in sale.fields:
-            plans.append(_grouped_plan(sale.table, [(sale.fields["cliente"].name, None), (fecha, "day"),
-                                                    (cantidad, None)] + tail))
-            kinds.append("clients")
     if not plans:
         return out
     results = dict(zip(kinds, await engine.run_plans(pool, plans)))
@@ -1146,13 +1151,13 @@ async def _read_all(pool, roles: dict[str, RoleMatch], now_local: datetime) -> d
             out["problems"]["productos"] = ("Tu hoja de productos tiene demasiadas combinaciones distintas para "
                                             "calcular con exactitud.")
     if "sales" in results:
-        res, cres = results["sales"], results.get("clients")
-        if not _complete(res) or (cres is not None and not _complete(cres)):
-            out["problems"]["ventas"] = ("Tus ventas tienen demasiadas combinaciones distintas (producto, fecha, "
-                                         "cantidad y precio) para calcular con exactitud.")
+        res = results["sales"]
+        if not _complete(res):
+            out["problems"]["ventas"] = ("Tus ventas tienen demasiadas combinaciones distintas (producto, cliente, "
+                                         "fecha, cantidad y precio) para calcular con exactitud.")
         else:
             max_date = now_local.date() + timedelta(days=FUTURE_SALE_DAYS)
-            sales = build_sales(res.rows, cres.rows if cres is not None else None, has_unit, has_total, max_date)
+            sales = build_sales(res.rows, has_client, has_unit, has_total, max_date)
             out["sales"] = sales
             total_rows = sum(int(r[-1]) for r in res.rows)
             if total_rows == 0:
