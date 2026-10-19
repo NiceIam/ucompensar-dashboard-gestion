@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe("FloatingChat — responsive on real VPS", () => {
-  // Rediseño Brújula: en el celular el chat ocupa toda la pantalla (sin fondo
+  // Rediseño: en el celular el chat ocupa toda la pantalla (sin fondo
   // oscuro) y se cierra con su botón X; el botón para abrirlo vive en la barra inferior.
   test("mobile: chat cerrado por defecto, botón visible, abre a pantalla completa y cierra con X", async ({
     page,
@@ -69,7 +69,7 @@ test.describe("FloatingChat — responsive on real VPS", () => {
     expect(overflow).toBe(false)
   })
 
-  // Rediseño Brújula (decisión deliberada): en escritorio el chat sigue acoplado al
+  // Rediseño (decisión deliberada): en escritorio el chat sigue acoplado al
   // flujo de la página, pero arranca cerrado la primera vez (para no competir con el
   // contenido) y recuerda la preferencia. Se abre con el botón de la barra lateral o Ctrl+K.
   test("desktop: chat acoplado al flow, se abre desde la barra lateral, sin botón flotante", async ({

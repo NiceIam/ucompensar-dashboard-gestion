@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { MessageCircleQuestion, Sparkles, Upload } from "lucide-react"
-import { BrandMark, UniversityLogo } from "@/components/kit/logo"
+import { BrandMark, BrandName, UniversityLogo } from "@/components/kit/logo"
 import { DotCluster, DotField } from "@/components/kit/dots"
 import { BRAND } from "@/config/brand"
 
@@ -34,7 +34,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         <div className="relative flex flex-wrap items-center gap-x-5 gap-y-3">
           <span className="flex items-center gap-3">
             <BrandMark className="h-11 w-11" />
-            <span className="font-display text-2xl font-semibold">{BRAND.name}</span>
+            <BrandName size="lg" />
           </span>
           <span className="hidden h-9 w-px bg-brand-foreground/15 xl:block" aria-hidden="true" />
           <UniversityLogo height={30} />
@@ -61,9 +61,9 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </aside>
 
       <main className="paper-glow flex flex-1 flex-col items-center justify-center px-4 py-10 sm:px-8">
-        <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-          <BrandMark className="h-10 w-10" />
-          <span className="font-display text-2xl font-semibold">{BRAND.name}</span>
+        <div className="mb-8 flex items-center gap-3 lg:hidden" role="img" aria-label={BRAND.name}>
+          <BrandMark className="h-11 w-11" />
+          <BrandName size="lg" />
         </div>
         <div className="w-full max-w-[26rem] animate-rise-in">{children}</div>
         <div className="mt-12 flex flex-col items-center gap-2 lg:hidden">

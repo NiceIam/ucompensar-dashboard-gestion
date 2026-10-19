@@ -4,8 +4,12 @@
  * metadatos de la página).
  */
 export const BRAND = {
-  /** Nombre visible del producto. */
-  name: "Brújula",
+  /** Nombre visible del producto: el del proyecto de investigación oficial. */
+  name: "Proyecto PI0320251",
+  /** Código oficial del proyecto: la versión corta del nombre (wordmark, títulos de pestaña). */
+  code: "PI0320251",
+  /** Palabra que acompaña al código en el wordmark de dos niveles. */
+  kicker: "Proyecto",
   /** Frase corta que acompaña al nombre. */
   tagline: "Tu negocio, explicado.",
   /** Descripción para metadatos y la portada del login. */
@@ -17,13 +21,13 @@ export const BRAND = {
    */
   institution: "Fundación Universitaria Compensar",
   /**
-   * Código del proyecto de investigación. Solo aparece, pequeño, en
-   * Configuración › Acerca de; déjalo en `null` para ocultarlo.
+   * Código del proyecto de investigación (el mismo de `code`); déjalo en
+   * `null` para ocultar la línea de Configuración › Acerca de.
    */
   projectCode: "PI0320251" as string | null,
 } as const
 
-/** Título de pestaña: "Página · Brújula". */
+/** Título de pestaña: "Página · Proyecto PI0320251". */
 export function pageTitle(section?: string): string {
   return section ? `${section} · ${BRAND.name}` : `${BRAND.name} · ${BRAND.tagline}`
 }

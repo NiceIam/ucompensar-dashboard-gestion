@@ -56,7 +56,43 @@ export function BrandMark({
   )
 }
 
-/** Isotipo + nombre en la letra de titulares. */
+/**
+ * Nombre del producto en dos niveles: "PROYECTO" pequeño en mayúsculas
+ * espaciadas encima y el código en la letra de titulares (cifras de caja alta).
+ * Un solo bloque para que el nombre no se parta ni se trunque en 390 px.
+ */
+export function BrandName({
+  size = "md",
+  className,
+}: {
+  size?: "sm" | "md" | "lg"
+  className?: string
+}) {
+  return (
+    <span className={cn("flex flex-col leading-none", className)}>
+      <span
+        className={cn(
+          "font-semibold uppercase text-muted-foreground",
+          size === "lg" ? "text-xs tracking-[0.2em]" : "text-xs tracking-[0.18em]"
+        )}
+      >
+        {BRAND.kicker}
+      </span>
+      <span
+        className={cn(
+          "font-display font-semibold tabular",
+          size === "sm" && "mt-0.5 text-[19px]",
+          size === "md" && "mt-1 text-[23px]",
+          size === "lg" && "mt-1.5 text-[30px]"
+        )}
+      >
+        {BRAND.code}
+      </span>
+    </span>
+  )
+}
+
+/** Isotipo + nombre de dos niveles (+ frase opcional). */
 export function Wordmark({
   className,
   markClassName,
@@ -69,10 +105,10 @@ export function Wordmark({
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <BrandMark className={markClassName} />
-      <span className="flex flex-col leading-none">
-        <span className="font-display text-[22px] font-semibold">{BRAND.name}</span>
+      <span className="flex flex-col">
+        <BrandName />
         {showTagline && (
-          <span className="mt-1 text-xs font-medium text-muted-foreground">{BRAND.tagline}</span>
+          <span className="mt-1.5 text-xs font-medium text-muted-foreground">{BRAND.tagline}</span>
         )}
       </span>
     </span>

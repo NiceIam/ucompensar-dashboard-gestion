@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 
 /*
- * Motivo firma de Brújula: la retícula de puntos del logo de la Fundación
+ * Motivo firma de Proyecto PI0320251: la retícula de puntos del logo de la Fundación
  * Universitaria Compensar, usada como textura y como animación de carga.
  * Todo aquí es decorativo (aria-hidden): el significado siempre lo da el texto.
  */

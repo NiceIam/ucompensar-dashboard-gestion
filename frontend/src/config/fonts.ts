@@ -1,5 +1,5 @@
 /**
- * Tipografía de Brújula: UNA línea elige el emparejamiento.
+ * Tipografía de Proyecto PI0320251: UNA línea elige el emparejamiento.
  *
  *   A (predeterminado) → export { fontPair } from "./font-pairs/outfit-inter"
  *   B                  → export { fontPair } from "./font-pairs/sora-dm-sans"

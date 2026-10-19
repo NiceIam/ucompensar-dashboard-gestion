@@ -70,7 +70,7 @@ export default function HomePage() {
             ? "Estamos trayendo tu información…"
             : withRows.length > 0
               ? "Esto es lo que tienes hoy. Pregunta lo que quieras: las respuestas salen de tus propios datos."
-              : "Tu brújula está lista. Solo falta tu información para empezar a orientarte."}
+              : "Todo está listo. Solo falta tu información para empezar a orientarte."}
         </p>
       </header>
 

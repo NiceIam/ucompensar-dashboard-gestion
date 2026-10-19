@@ -70,9 +70,9 @@ Cada dominio tiene hooks en `src/hooks/` que siguen el mismo patrón:
 - El estado del chat vive en `ChatProvider` (`src/providers/chat-provider.tsx`): una sola conversación para toda la app, `ask(pregunta)` abre el chat desde cualquier pantalla y Ctrl/Cmd+K lo abre o cierra.
 - Los errores del chat pasan por `src/lib/chat-errors.ts` (429 de límite/cuota con el texto restaurado al cuadro) y el resto por el traductor central `src/lib/errors.ts`.
 
-### Sistema de diseño (Brújula)
+### Sistema de diseño (Proyecto PI0320251)
 
-- Identidad en `src/config/brand.ts` (nombre, frase, institución, código del proyecto). Cambiar el nombre ahí lo cambia en toda la UI.
+- Identidad en `src/config/brand.ts` (nombre "Proyecto PI0320251", código, frase, institución). Cambiar el nombre ahí lo cambia en toda la UI. El wordmark es de dos niveles (`BrandName` en `kit/logo.tsx`): "PROYECTO" pequeño en mayúsculas espaciadas y "PI0320251" en Outfit. El isotipo (aguja de brújula sobre baldosa naranja) se conserva como símbolo. Clave interna de localStorage `brujula.chat.open` se deja igual a propósito (cambiarla borraría la preferencia guardada).
 - Colores de la Fundación Universitaria Compensar: **blanco y naranja**. Tokens HSL en `globals.css` con roles semánticos y tres variantes por estado (`success`/`warning`/`danger`/`info`/`highlight`: sólido, `-soft` fondo, `-strong` texto AA).
   - `highlight` = naranja PURO del logo `#ED6824`: solo decorativo/grande (iconos, puntos, resaltados, 1.ª serie de gráficos). Blanco encima da 3,18:1: nunca texto blanco pequeño sobre él.
   - `primary` = naranja INTERACTIVO `#C44A0E` (botones, enlaces, chips activos; blanco encima 4,85:1). Hover con `bg-primary-hover` (`#AE420B`), nunca `bg-primary/90` (aclarar baja el contraste).

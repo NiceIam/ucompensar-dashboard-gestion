@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { useEffect, useState, type ReactNode } from "react"
 import { ChevronRight, MessageCircle, Moon, Sparkles, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
-import { BrandMark, UniversityLogo, Wordmark } from "@/components/kit/logo"
+import { BrandMark, BrandName, UniversityLogo, Wordmark } from "@/components/kit/logo"
 import { UserMenu } from "@/components/shell/user-menu"
 import { NAV_ITEMS, breadcrumbsFor, isActive } from "@/components/shell/nav"
 import { useChat } from "@/providers/chat-provider"
@@ -36,7 +36,7 @@ function Sidebar() {
     <aside className="hidden w-[264px] shrink-0 flex-col border-r bg-sidebar lg:flex">
       <div className="flex h-[72px] items-center px-5">
         <Link href="/" className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`${BRAND.name}: ir al inicio`}>
-          <Wordmark showTagline />
+          <Wordmark />
         </Link>
       </div>
 
@@ -115,7 +115,7 @@ function TopBar() {
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:px-6 lg:h-[72px] lg:px-8">
       <Link href="/" className="flex min-h-11 items-center gap-2 rounded-xl lg:hidden" aria-label={`${BRAND.name}: ir al inicio`}>
         <BrandMark className="h-8 w-8" />
-        <span className="font-display text-xl font-semibold">{BRAND.name}</span>
+        <BrandName size="sm" />
       </Link>
 
       <nav aria-label="Ruta" className="hidden min-w-0 lg:block">

@@ -2,7 +2,7 @@ import Link from "next/link"
 import { FolderOpen, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Illustration } from "@/components/kit/illustrations"
-import { BrandMark } from "@/components/kit/logo"
+import { BrandMark, BrandName } from "@/components/kit/logo"
 import { BRAND } from "@/config/brand"
 
 export const metadata = { title: "Página no encontrada" }
@@ -12,7 +12,7 @@ export default function NotFound() {
     <main className="paper-glow flex min-h-dvh flex-col items-center justify-center px-4 py-12 text-center">
       <Link href="/" className="mb-10 flex min-h-11 items-center gap-2.5" aria-label={`${BRAND.name}: ir al inicio`}>
         <BrandMark className="h-9 w-9" />
-        <span className="font-display text-xl font-semibold">{BRAND.name}</span>
+        <BrandName size="sm" className="items-start text-left" />
       </Link>
       <Illustration name="compass" className="h-40 sm:h-48" />
       <p className="mt-6 text-[13px] font-semibold uppercase tracking-[0.08em] text-highlight-strong">Error 404</p>

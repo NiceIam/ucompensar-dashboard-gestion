@@ -151,11 +151,11 @@ export default function SettingsPage() {
         <ThemeSwitcher showLabels className="flex-wrap" />
       </SettingsCard>
 
-      <SettingsCard icon={Info} title={`Acerca de ${BRAND.name}`} description={BRAND.description}>
+      <SettingsCard icon={Info} title="Acerca del proyecto" description={BRAND.description}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <p className="text-[15px]">
-              {BRAND.name} es un proyecto de la {BRAND.institution}.
+              Esta plataforma hace parte del {BRAND.name}, de la {BRAND.institution}.
             </p>
             {BRAND.projectCode && <p className="text-xs text-muted-foreground">Proyecto de investigación {BRAND.projectCode}</p>}
           </div>
