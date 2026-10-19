@@ -35,7 +35,7 @@ function getIcon(name: string) {
   if (lower.includes("servic")) {
     return Briefcase
   }
-  if (lower.includes("restaur") || lower.includes("food") || lower.includes("comida")) {
+  if (lower.includes("restaur") || lower.includes("food") || lower.includes("comida") || lower.includes("caf")) {
     return UtensilsCrossed
   }
   if (lower.includes("comercio") || lower.includes("tienda")) {
@@ -61,11 +61,14 @@ export function BusinessTypeSelector({
   const [types, setTypes] = useState<BusinessType[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
 
     async function load() {
+      setLoading(true)
+      setFetchError(null)
       try {
         const res = await fetch(`${API_URL}/api/v1/templates/business-types`)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -75,7 +78,7 @@ export function BusinessTypeSelector({
         }
       } catch {
         if (!cancelled) {
-          setFetchError("No se pudieron cargar los tipos de negocio.")
+          setFetchError("No pudimos cargar los tipos de negocio. Revisa tu conexión e inténtalo de nuevo.")
         }
       } finally {
         if (!cancelled) {
@@ -88,11 +91,11 @@ export function BusinessTypeSelector({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [attempt])
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="auto-grid gap-3 [--auto-grid-min:10.5rem]">
         {[1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-32 w-full rounded-xl" />
         ))}
@@ -102,13 +105,22 @@ export function BusinessTypeSelector({
 
   if (fetchError) {
     return (
-      <p className="text-sm text-destructive">{fetchError}</p>
+      <div className="flex flex-col items-start gap-3 rounded-xl border border-destructive/30 bg-danger-soft p-4 text-sm text-danger-strong" role="alert">
+        <p>{fetchError}</p>
+        <button
+          type="button"
+          onClick={() => setAttempt((a) => a + 1)}
+          className="inline-flex min-h-10 items-center rounded-lg border border-current/30 px-3 font-semibold hover:bg-card/50"
+        >
+          Intentar de nuevo
+        </button>
+      </div>
     )
   }
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="space-y-2" role="radiogroup" aria-label="Tipo de negocio">
+      <div className="auto-grid gap-3 [--auto-grid-min:10.5rem]">
         {types.map((type) => {
           const Icon = getIcon(type.name)
           const isSelected = value === type.id
@@ -118,12 +130,13 @@ export function BusinessTypeSelector({
               key={type.id}
               type="button"
               onClick={() => onChange(type.id)}
-              aria-pressed={isSelected}
+              role="radio"
+              aria-checked={isSelected}
               className={cn(
                 "group relative flex flex-col items-start gap-2 rounded-xl border-2 p-4 text-left transition-all",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 isSelected
-                  ? "border-primary bg-primary/5 shadow-sm"
+                  ? "border-primary bg-primary-soft/60 shadow-card"
                   : "border-border bg-card hover:border-primary/50 hover:bg-muted/50",
               )}
             >
@@ -158,7 +171,7 @@ export function BusinessTypeSelector({
                 <p
                   className={cn(
                     "text-sm font-semibold leading-tight",
-                    isSelected ? "text-primary" : "text-foreground",
+                    isSelected ? "text-primary-strong" : "text-foreground",
                   )}
                 >
                   {type.display_name}

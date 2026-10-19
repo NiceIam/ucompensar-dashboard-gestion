@@ -1,288 +1,174 @@
 "use client"
 
-import { useEffect } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
+import { useEffect, useState, type ReactNode } from "react"
 import { toast } from "sonner"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Building2, Info, LogOut, Palette, UserRound, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Field } from "@/components/kit/field"
+import { UniversityLogo } from "@/components/kit/logo"
+import { PageHeader } from "@/components/kit/page-header"
+import { StatusBadge } from "@/components/kit/status-badge"
+import { ThemeSwitcher } from "@/components/kit/theme-toggle"
+import { useAuth } from "@/hooks/use-auth"
+import { usePageTitle } from "@/hooks/use-page-title"
+import { useProfile, useUpdateProfile } from "@/hooks/use-profile"
 import { useAuthContext } from "@/providers/auth-provider"
-import { api } from "@/lib/api"
-import { User, Building2, CreditCard } from "lucide-react"
+import { humanizeError } from "@/lib/errors"
+import { formatDate } from "@/lib/format"
+import { BRAND } from "@/config/brand"
 
-const profileSchema = z.object({
-  fullName: z.string().min(2, "Nombre muy corto"),
-})
+const SECTOR_LABELS: Record<string, string> = {
+  comercio: "Comercio",
+  terciario: "Servicios",
+  salud: "Salud",
+  educacion: "Educación",
+  TIC: "Tecnología e informática",
+  cuaternario: "Conocimiento (educación, salud o TIC)",
+}
 
-const orgSchema = z.object({
-  orgName: z.string().min(2, "El nombre de la empresa es requerido"),
-  sector: z.string().min(1, "Selecciona un sector"),
-  size: z.string().min(1, "Selecciona un tamaño"),
-})
+const PLAN_LABELS: Record<string, string> = {
+  free: "Plan gratuito",
+  pro: "Plan Pro",
+}
 
-type ProfileValues = z.infer<typeof profileSchema>
-type OrgValues = z.infer<typeof orgSchema>
+function SettingsCard({
+  icon: Icon,
+  title,
+  description,
+  children,
+  badge,
+}: {
+  icon: LucideIcon
+  title: string
+  description?: string
+  children: ReactNode
+  badge?: ReactNode
+}) {
+  return (
+    <section className="surface p-5 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-strong">
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </span>
+        {/* min-w: si no cabe junto a la insignia, la insignia baja de línea (no el título en columna) */}
+        <div className="min-w-[11rem] flex-1">
+          <h2 className="font-display text-xl font-semibold leading-tight">{title}</h2>
+          {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+        </div>
+        {badge}
+      </div>
+      {children}
+    </section>
+  )
+}
 
-const SECTORS = [
-  { value: "comercio", label: "Comercio" },
-  { value: "servicios", label: "Servicios" },
-  { value: "educacion", label: "Educación" },
-  { value: "salud", label: "Salud" },
-  { value: "tic", label: "Tecnología e información" },
-  { value: "manufactura", label: "Manufactura" },
-  { value: "otro", label: "Otro" },
-]
-
-const SIZES = [
-  { value: "1-10", label: "1-10 empleados (Microempresa)" },
-  { value: "11-50", label: "11-50 empleados (Pequeña)" },
-  { value: "51-200", label: "51-200 empleados (Mediana)" },
-  { value: "200+", label: "Más de 200 empleados (Grande)" },
-]
+function ReadOnlyRow({ label, value, loading }: { label: string; value?: ReactNode; loading?: boolean }) {
+  return (
+    <div className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-[15px] font-medium sm:text-right">{loading ? <Skeleton className="h-5 w-40" /> : value || "—"}</dd>
+    </div>
+  )
+}
 
 export default function SettingsPage() {
+  usePageTitle("Configuración")
   const { user } = useAuthContext()
-
-  const profileForm = useForm<ProfileValues>({
-    resolver: zodResolver(profileSchema),
-    defaultValues: {
-      fullName: "",
-    },
-  })
-
-  const orgForm = useForm<OrgValues>({
-    resolver: zodResolver(orgSchema),
-    defaultValues: {
-      orgName: "",
-      sector: "",
-      size: "",
-    },
-  })
+  const { signOut, loading: signingOut } = useAuth()
+  const profile = useProfile()
+  const update = useUpdateProfile()
+  const [name, setName] = useState("")
+  const [nameError, setNameError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (user?.full_name) {
-      profileForm.setValue("fullName", user.full_name)
-    }
-  }, [user, profileForm])
+    if (user?.full_name) setName(user.full_name)
+  }, [user?.full_name])
 
-  async function handleUpdateProfile(values: ProfileValues) {
+  async function saveName(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (trimmed.length < 2) {
+      setNameError("Escribe tu nombre (al menos 2 letras).")
+      return
+    }
+    setNameError(null)
     try {
-      await api.put("/api/v1/auth/me", { full_name: values.fullName })
-      toast.success("Perfil actualizado correctamente")
-    } catch {
-      toast.error("Error al actualizar el perfil")
+      await update.mutateAsync({ full_name: trimmed })
+      toast.success("Listo, guardamos tu nombre")
+    } catch (err) {
+      const h = humanizeError(err, "save")
+      setNameError(`${h.title}. ${h.description}`)
     }
   }
 
-  async function handleUpdateOrg(values: OrgValues) {
-    void values
-    // Will hit the FastAPI org endpoint once backend is ready
-    toast.success("Información de empresa actualizada")
-  }
+  const p = profile.data
+  const plan = p?.org_plan ? PLAN_LABELS[p.org_plan] ?? p.org_plan : undefined
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Configuración</h1>
-        <p className="text-muted-foreground mt-1">
-          Administra tu cuenta y la información de tu empresa.
+    <div className="max-w-3xl space-y-8">
+      <PageHeader eyebrow="Configuración" title="Tu cuenta" description="Tus datos personales, los de tu empresa y cómo quieres ver la aplicación." />
+
+      <SettingsCard icon={UserRound} title="Tu perfil" description="Así te saludamos y te identificamos.">
+        <form onSubmit={saveName} className="space-y-5">
+          <Field label="Tu nombre" error={nameError ?? undefined}>
+            {({ id, describedBy, invalid }) => (
+              <Input id={id} value={name} onChange={(e) => setName(e.target.value)} aria-describedby={describedBy} aria-invalid={invalid} maxLength={120} autoComplete="name" />
+            )}
+          </Field>
+          <Field label="Correo electrónico" hint="Con este correo entras a tu cuenta. Por ahora no se puede cambiar desde aquí.">
+            {({ id, describedBy }) => <Input id={id} value={user?.email ?? ""} readOnly aria-describedby={describedBy} className="bg-muted/60 text-muted-foreground" />}
+          </Field>
+          <Button type="submit" loading={update.isPending} loadingText="Guardando…" disabled={name.trim() === (user?.full_name ?? "").trim()}>
+            Guardar cambios
+          </Button>
+        </form>
+      </SettingsCard>
+
+      <SettingsCard
+        icon={Building2}
+        title="Tu empresa"
+        description="Los datos con los que creaste tu cuenta."
+        badge={<StatusBadge tone="neutral">Edición próximamente</StatusBadge>}
+      >
+        {profile.isError ? (
+          <p className="text-sm text-muted-foreground">No pudimos cargar los datos de tu empresa ahora mismo. Intenta más tarde.</p>
+        ) : (
+          <dl className="divide-y">
+            <ReadOnlyRow label="Nombre" value={p?.org_name} loading={profile.isLoading} />
+            <ReadOnlyRow label="Sector" value={p?.org_sector ? SECTOR_LABELS[p.org_sector] ?? p.org_sector : undefined} loading={profile.isLoading} />
+            <ReadOnlyRow label="Plan" value={plan} loading={profile.isLoading} />
+            <ReadOnlyRow label="Cuenta creada" value={p?.created_at ? formatDate(p.created_at, "long") : undefined} loading={profile.isLoading} />
+          </dl>
+        )}
+        <p className="mt-4 text-[13px] text-muted-foreground">
+          Pronto podrás cambiar estos datos aquí. Si necesitas hacerlo antes, pídeselo a quien administra la plataforma.
         </p>
-      </div>
+      </SettingsCard>
 
-      {/* Profile section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-base">Perfil personal</CardTitle>
+      <SettingsCard icon={Palette} title="Apariencia" description="Elige claro, oscuro o lo que use tu dispositivo.">
+        <ThemeSwitcher showLabels className="flex-wrap" />
+      </SettingsCard>
+
+      <SettingsCard icon={Info} title="Acerca del proyecto" description={BRAND.description}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <p className="text-[15px]">
+              Esta plataforma hace parte del {BRAND.name}, de la {BRAND.institution}.
+            </p>
+            {BRAND.projectCode && <p className="text-xs text-muted-foreground">Proyecto de investigación {BRAND.projectCode}</p>}
           </div>
-          <CardDescription>Tu información de usuario</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Correo electrónico</Label>
-              <Input
-                value={user?.email ?? ""}
-                disabled
-                className="text-muted-foreground"
-              />
-              <p className="text-xs text-muted-foreground">
-                El correo no puede modificarse
-              </p>
-            </div>
+          <UniversityLogo height={30} />
+        </div>
+      </SettingsCard>
 
-            <Separator />
-
-            <Form {...profileForm}>
-              <form
-                onSubmit={profileForm.handleSubmit(handleUpdateProfile)}
-                className="space-y-4"
-              >
-                <FormField
-                  control={profileForm.control}
-                  name="fullName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nombre completo</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button type="submit" size="sm">
-                  Guardar perfil
-                </Button>
-              </form>
-            </Form>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Organization section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-base">Información de empresa</CardTitle>
-          </div>
-          <CardDescription>Datos de tu organización</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...orgForm}>
-            <form
-              onSubmit={orgForm.handleSubmit(handleUpdateOrg)}
-              className="space-y-4"
-            >
-              <FormField
-                control={orgForm.control}
-                name="orgName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre de la empresa</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Mi Empresa S.A.S." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={orgForm.control}
-                  name="sector"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Sector</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Seleccionar" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {SECTORS.map((s) => (
-                            <SelectItem key={s.value} value={s.value}>
-                              {s.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={orgForm.control}
-                  name="size"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tamaño</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Seleccionar" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {SIZES.map((s) => (
-                            <SelectItem key={s.value} value={s.value}>
-                              {s.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <Button type="submit" size="sm">
-                Guardar empresa
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-
-      {/* Plan section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-base">Plan actual</CardTitle>
-          </div>
-          <CardDescription>Información de tu suscripción</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">Plan Gratuito</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Hasta 10.000 registros · 3 tableros · Análisis IA básico
-              </p>
-            </div>
-            <Badge variant="secondary">Activo</Badge>
-          </div>
-        </CardContent>
-      </Card>
+      <SettingsCard icon={LogOut} title="Sesión" description="Cierra tu sesión en este dispositivo.">
+        <Button variant="outline" onClick={() => void signOut()} loading={signingOut} className="text-danger-strong hover:text-danger-strong">
+          <LogOut aria-hidden="true" />
+          Cerrar sesión
+        </Button>
+      </SettingsCard>
     </div>
   )
 }

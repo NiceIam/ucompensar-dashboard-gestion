@@ -2,91 +2,89 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { ArrowRight, Check, ChevronLeft, Circle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Alert } from "@/components/ui/alert"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BusinessTypeSelector } from "@/components/auth/business-type-selector"
+import { PasswordInput } from "@/components/kit/field"
+import { Notice } from "@/components/kit/notice"
+import { Steps } from "@/components/kit/steps"
 import { useAuth } from "@/hooks/use-auth"
-import { ChevronLeft } from "lucide-react"
-import Image from "next/image"
+import { usePageTitle } from "@/hooks/use-page-title"
 import { cn } from "@/lib/utils"
 
 const registerSchema = z.object({
-  full_name: z.string().min(2, "Nombre muy corto"),
-  email: z.string().email("Correo electrónico inválido"),
+  full_name: z.string().trim().min(2, "Escribe tu nombre (al menos 2 letras)."),
+  email: z.string().trim().min(1, "Escribe tu correo.").email("Revisa tu correo: parece que le falta algo (por ejemplo, la @)."),
   password: z
     .string()
-    .min(8, "La contraseña debe tener al menos 8 caracteres")
-    .regex(/\d/, "Debe contener al menos un número"),
-  org_name: z.string().min(2, "El nombre de la empresa es requerido"),
-  org_sector: z.enum(
-    ["terciario", "cuaternario", "TIC", "salud", "educacion", "comercio"],
-    { error: "Selecciona un sector válido" },
-  ),
-  org_size: z.enum(["micro", "pequeña", "mediana"], {
-    error: "Selecciona el tamaño de tu empresa",
+    .min(8, "Usa al menos 8 caracteres.")
+    .regex(/\d/, "Incluye al menos un número."),
+  org_name: z.string().trim().min(2, "Escribe el nombre de tu empresa o negocio."),
+  org_sector: z.enum(["terciario", "cuaternario", "TIC", "salud", "educacion", "comercio"], {
+    error: "Elige el sector que más se parezca.",
   }),
-  business_type_id: z.string().min(1, "Selecciona el tipo de negocio"),
+  org_size: z.enum(["micro", "pequeña", "mediana"], {
+    error: "Elige cuántas personas trabajan contigo.",
+  }),
+  business_type_id: z.string().min(1, "Elige el tipo de negocio que más se parezca al tuyo."),
 })
 
 type RegisterFormValues = z.infer<typeof registerSchema>
 
 const SECTORS = [
+  { value: "comercio", label: "Comercio" },
   { value: "terciario", label: "Servicios" },
-  { value: "cuaternario", label: "Educación / Salud / TIC" },
-  { value: "TIC", label: "Tecnología e Informática" },
   { value: "salud", label: "Salud" },
   { value: "educacion", label: "Educación" },
-  { value: "comercio", label: "Comercio" },
+  { value: "TIC", label: "Tecnología e informática" },
+  { value: "cuaternario", label: "Conocimiento (educación, salud o TIC)" },
 ] as const
 
 const SIZES = [
-  { value: "micro", label: "Micro (1-10 empleados)" },
-  { value: "pequeña", label: "Pequeña (11-50 empleados)" },
-  { value: "mediana", label: "Mediana (51-200 empleados)" },
+  { value: "micro", label: "De 1 a 10 personas" },
+  { value: "pequeña", label: "De 11 a 50 personas" },
+  { value: "mediana", label: "De 51 a 200 personas" },
 ] as const
 
 const STEPS = [
-  { number: 1, label: "Cuenta" },
-  { number: 2, label: "Tipo de negocio" },
-  { number: 3, label: "Confirmar" },
+  { id: "account", label: "Tu cuenta" },
+  { id: "business", label: "Tu negocio" },
+  { id: "confirm", label: "Confirmar" },
 ]
 
-// Fields validated per step
 const STEP_FIELDS: Record<number, (keyof RegisterFormValues)[]> = {
-  1: ["full_name", "email", "password", "org_name", "org_sector", "org_size"],
-  2: ["business_type_id"],
+  0: ["full_name", "email", "password"],
+  1: ["org_name", "org_sector", "org_size", "business_type_id"],
+}
+
+function PasswordHints({ value }: { value: string }) {
+  const rules = [
+    { ok: value.length >= 8, text: "8 caracteres o más" },
+    { ok: /\d/.test(value), text: "Al menos un número" },
+  ]
+  return (
+    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[13px]" aria-label="Requisitos de la contraseña">
+      {rules.map((r) => (
+        <li key={r.text} className={cn("inline-flex items-center gap-1.5", r.ok ? "text-success-strong" : "text-muted-foreground")}>
+          {r.ok ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Circle className="h-3 w-3" aria-hidden="true" />}
+          {r.text}
+          <span className="sr-only">{r.ok ? "(cumplido)" : "(pendiente)"}</span>
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 export default function RegisterPage() {
-  const { signUp, loading, error } = useAuth()
-  const [currentStep, setCurrentStep] = useState(1)
+  usePageTitle("Crear cuenta")
+  const { signUp, loading, errorInfo, clearError } = useAuth()
+  const [step, setStep] = useState(0)
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -100,337 +98,226 @@ export default function RegisterPage() {
       business_type_id: "",
     },
   })
+  const password = useWatch({ control: form.control, name: "password" }) ?? ""
 
-  async function goToNextStep() {
-    const fields = STEP_FIELDS[currentStep]
-    const valid = await form.trigger(fields)
-    if (valid) {
-      setCurrentStep((s) => s + 1)
-    }
+  async function next() {
+    const valid = await form.trigger(STEP_FIELDS[step])
+    if (valid) setStep((s) => s + 1)
   }
 
   async function onSubmit(values: RegisterFormValues) {
-    await signUp(values)
+    await signUp({ ...values, full_name: values.full_name.trim(), email: values.email.trim(), org_name: values.org_name.trim() })
   }
 
+  const v = form.getValues()
+
   return (
-    <Card className="shadow-lg">
-      <CardHeader className="space-y-4 text-center">
-        <div className="flex justify-center">
-          <Image
-            src="/logo-ucompensar.png"
-            alt="Compensar Fundación Universitaria"
-            width={200}
-            height={50}
-            className="h-10 w-auto"
-            priority
-          />
-        </div>
-        <div>
-          <CardTitle className="text-2xl">Crear cuenta</CardTitle>
-          <CardDescription className="mt-1">
-            Comienza a gestionar los datos de tu empresa con IA
-          </CardDescription>
-        </div>
+    <div className="space-y-7">
+      <div className="space-y-2">
+        <h1 className="font-display text-[34px] font-semibold leading-tight">Crea tu cuenta</h1>
+        <p className="text-[15px] text-muted-foreground">Tres pasos cortos y empiezas a entender tus números.</p>
+      </div>
 
-        {/* Step indicator */}
-        <div className="flex items-center justify-center gap-0 pt-1">
-          {STEPS.map((step, index) => (
-            <div key={step.number} className="flex items-center">
-              {/* Step circle */}
-              <div className="flex flex-col items-center gap-1">
-                <span
-                  className={cn(
-                    "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors",
-                    currentStep === step.number
-                      ? "bg-primary text-primary-foreground"
-                      : currentStep > step.number
-                        ? "bg-primary/20 text-primary"
-                        : "bg-muted text-muted-foreground",
+      <Steps steps={STEPS} current={step} />
+
+      {errorInfo && (
+        <Notice
+          tone="danger"
+          title={errorInfo.title}
+          onDismiss={clearError}
+          action={
+            errorInfo.action === "login" ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href="/login">Iniciar sesión</Link>
+              </Button>
+            ) : undefined
+          }
+        >
+          {errorInfo.description}
+        </Notice>
+      )}
+
+      <Form {...form}>
+        <form
+          onSubmit={(e) => {
+            if (step < 2) {
+              e.preventDefault()
+              void next()
+              return
+            }
+            void form.handleSubmit(onSubmit)(e)
+          }}
+          className="space-y-5"
+          noValidate
+        >
+          {step === 0 && (
+            <>
+              <FormField
+                control={form.control}
+                name="full_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tu nombre</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ej.: Ana Pérez" autoComplete="name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Correo electrónico</FormLabel>
+                    <FormControl>
+                      <Input placeholder="ana@minegocio.com" type="email" autoComplete="email" inputMode="email" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contraseña</FormLabel>
+                    <FormControl>
+                      <PasswordInput placeholder="Mínimo 8 caracteres" autoComplete="new-password" {...field} />
+                    </FormControl>
+                    <PasswordHints value={password} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
+          )}
+
+          {step === 1 && (
+            <>
+              <FormField
+                control={form.control}
+                name="org_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre de tu empresa o negocio</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ej.: Café El Faro" autoComplete="organization" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid gap-5 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="org_sector"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sector</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Elige uno" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SECTORS.map((s) => (
+                            <SelectItem key={s.value} value={s.value}>
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                >
-                  {currentStep > step.number ? "✓" : step.number}
-                </span>
-                <span
-                  className={cn(
-                    "hidden text-[10px] font-medium sm:block",
-                    currentStep >= step.number
-                      ? "text-primary"
-                      : "text-muted-foreground",
+                />
+                <FormField
+                  control={form.control}
+                  name="org_size"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>¿Cuántas personas son?</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Elige uno" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SIZES.map((s) => (
+                            <SelectItem key={s.value} value={s.value}>
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                >
-                  {step.label}
-                </span>
+                />
               </div>
+              <FormField
+                control={form.control}
+                name="business_type_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>¿A qué se parece más tu negocio?</FormLabel>
+                    <p className="text-[13px] text-muted-foreground">Así te preparamos hojas listas para llenar. Podrás subir cualquier archivo igual.</p>
+                    <FormControl>
+                      <BusinessTypeSelector value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
+          )}
 
-              {/* Connector line */}
-              {index < STEPS.length - 1 && (
-                <div
-                  className={cn(
-                    "mx-2 mb-4 h-px w-10 transition-colors sm:w-14",
-                    currentStep > step.number
-                      ? "bg-primary/40"
-                      : "bg-border",
-                  )}
-                />
-              )}
+          {step === 2 && (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">Revisa que todo esté bien</p>
+              <dl className="divide-y rounded-2xl border bg-card text-sm">
+                {[
+                  ["Nombre", v.full_name],
+                  ["Correo", v.email],
+                  ["Empresa", v.org_name],
+                  ["Sector", SECTORS.find((s) => s.value === v.org_sector)?.label ?? "—"],
+                  ["Tamaño", SIZES.find((s) => s.value === v.org_size)?.label ?? "—"],
+                ].map(([k, val]) => (
+                  <div key={k} className="flex justify-between gap-4 px-4 py-3">
+                    <dt className="text-muted-foreground">{k}</dt>
+                    <dd className="truncate text-right font-medium">{val}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
-          ))}
-        </div>
-      </CardHeader>
+          )}
 
-      <CardContent>
-        {error && (
-          <Alert className="mb-4 border-destructive/50 text-destructive">
-            {error}
-          </Alert>
-        )}
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Step 1: Personal & company data */}
-            {currentStep === 1 && (
-              <>
-                <FormField
-                  control={form.control}
-                  name="full_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nombre completo</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Juan Pérez" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Correo electrónico</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="juan@miempresa.com"
-                          type="email"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contraseña</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Mínimo 8 caracteres"
-                          type="password"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="org_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nombre de la empresa</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Mi Empresa S.A.S." {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="org_sector"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Sector</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Seleccionar" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {SECTORS.map((s) => (
-                              <SelectItem key={s.value} value={s.value}>
-                                {s.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="org_size"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tamaño</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Seleccionar" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {SIZES.map((s) => (
-                              <SelectItem key={s.value} value={s.value}>
-                                {s.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <Button
-                  type="button"
-                  className="w-full"
-                  onClick={goToNextStep}
-                >
-                  Continuar
-                </Button>
-              </>
+          <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row">
+            {step > 0 && (
+              <Button type="button" variant="outline" size="lg" className="sm:flex-1" onClick={() => setStep((s) => s - 1)} disabled={loading}>
+                <ChevronLeft aria-hidden="true" />
+                Atrás
+              </Button>
             )}
+            <Button type="submit" size="lg" className="sm:flex-1" loading={loading} loadingText="Creando tu cuenta…">
+              {step < 2 ? "Continuar" : "Crear cuenta"}
+              <ArrowRight aria-hidden="true" />
+            </Button>
+          </div>
+        </form>
+      </Form>
 
-            {/* Step 2: Business type selection */}
-            {currentStep === 2 && (
-              <>
-                <div className="space-y-1.5">
-                  <p className="text-sm font-medium leading-none">
-                    ¿Cuál es el tipo de negocio de tu empresa?
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Usaremos esto para crear las tablas y dashboards correctos automáticamente.
-                  </p>
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="business_type_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <BusinessTypeSelector
-                          value={field.value}
-                          onChange={field.onChange}
-                          error={form.formState.errors.business_type_id?.message}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex gap-3 pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1 gap-1.5"
-                    onClick={() => setCurrentStep(1)}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Atrás
-                  </Button>
-                  <Button
-                    type="button"
-                    className="flex-1"
-                    onClick={goToNextStep}
-                  >
-                    Continuar
-                  </Button>
-                </div>
-              </>
-            )}
-
-            {/* Step 3: Confirmation */}
-            {currentStep === 3 && (
-              <>
-                <div className="space-y-1.5">
-                  <p className="text-sm font-medium leading-none">
-                    Confirma tus datos
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Revisa la información antes de crear tu cuenta.
-                  </p>
-                </div>
-
-                <div className="rounded-lg border bg-muted/30 p-4 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Nombre</span>
-                    <span className="font-medium">{form.getValues("full_name")}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Correo</span>
-                    <span className="font-medium">{form.getValues("email")}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Empresa</span>
-                    <span className="font-medium">{form.getValues("org_name")}</span>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1 gap-1.5"
-                    onClick={() => setCurrentStep(2)}
-                    disabled={loading}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Atrás
-                  </Button>
-                  <Button
-                    type="submit"
-                    className="flex-1"
-                    disabled={loading}
-                  >
-                    {loading ? "Creando cuenta..." : "Crear cuenta"}
-                  </Button>
-                </div>
-              </>
-            )}
-          </form>
-        </Form>
-      </CardContent>
-
-      <CardFooter className="justify-center text-sm text-muted-foreground">
-        ¿Ya tienes cuenta?&nbsp;
-        <Link href="/login" className="text-primary hover:underline font-medium">
+      <p className="text-center text-sm text-muted-foreground">
+        ¿Ya tienes cuenta?{" "}
+        <Link href="/login" className="font-semibold text-primary underline-offset-4 hover:underline">
           Inicia sesión
         </Link>
-      </CardFooter>
-    </Card>
+      </p>
+    </div>
   )
 }

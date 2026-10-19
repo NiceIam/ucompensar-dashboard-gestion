@@ -86,29 +86,29 @@ function FormLabel({ className, ...props }: React.ComponentProps<"label">) {
   return (
     <Label
       data-slot="form-label"
-      className={cn(error && "text-destructive", className)}
+      className={cn("text-sm font-semibold", error && "text-danger-strong", className)}
       htmlFor={formItemId}
       {...props}
     />
   )
 }
 
-function FormControl({ ...props }: React.HTMLAttributes<HTMLDivElement>) {
+/**
+ * Pasa id, aria-describedby y aria-invalid AL CONTROL (input, select, etc.), no a
+ * un <div> envolvente: así la etiqueta queda asociada al campo (lectores de
+ * pantalla, clic en la etiqueta enfoca el campo) y el error se anuncia.
+ */
+function FormControl({ children, ...props }: { children: React.ReactElement } & React.HTMLAttributes<HTMLElement>) {
   const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
+  const child = React.Children.only(children) as React.ReactElement<Record<string, unknown>>
 
-  return (
-    <div
-      id={formItemId}
-      aria-describedby={
-        !error
-          ? `${formDescriptionId}`
-          : `${formDescriptionId} ${formMessageId}`
-      }
-      aria-invalid={!!error}
-      data-slot="form-control"
-      {...props}
-    />
-  )
+  return React.cloneElement(child, {
+    id: formItemId,
+    "aria-describedby": !error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`,
+    "aria-invalid": !!error,
+    "data-slot": "form-control",
+    ...props,
+  })
 }
 
 function FormDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
@@ -118,7 +118,7 @@ function FormDescription({ className, ...props }: React.HTMLAttributes<HTMLParag
     <p
       id={formDescriptionId}
       data-slot="form-description"
-      className={cn("text-[0.8rem] text-muted-foreground", className)}
+      className={cn("text-[13px] text-muted-foreground", className)}
       {...props}
     />
   )
@@ -136,7 +136,7 @@ function FormMessage({ className, children, ...props }: React.HTMLAttributes<HTM
     <p
       id={formMessageId}
       data-slot="form-message"
-      className={cn("text-[0.8rem] font-medium text-destructive", className)}
+      className={cn("text-[13px] font-medium text-danger-strong", className)}
       {...props}
     >
       {body}

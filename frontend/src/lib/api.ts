@@ -1,3 +1,5 @@
+import { ApiError } from "@/lib/errors"
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 function redirectToLogin(): void {
@@ -10,8 +12,10 @@ function redirectToLogin(): void {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const error = await res.text().catch(() => "Error desconocido")
-    throw new Error(error || `HTTP ${res.status}`)
+    // ApiError conserva el texto crudo en `message` (lo leen los parsers de límites
+    // del chat) y agrega el código HTTP para traducirlo con humanizeError().
+    const raw = await res.text().catch(() => "")
+    throw new ApiError(res.status, raw)
   }
   return res.json() as Promise<T>
 }
@@ -129,8 +133,8 @@ export const api = {
   async downloadBlob(path: string, filename: string): Promise<void> {
     const res = await authedFetch(path, { method: "GET" })
     if (!res.ok) {
-      const error = await res.text().catch(() => "Error desconocido")
-      throw new Error(error || `HTTP ${res.status}`)
+      const raw = await res.text().catch(() => "")
+      throw new ApiError(res.status, raw)
     }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)

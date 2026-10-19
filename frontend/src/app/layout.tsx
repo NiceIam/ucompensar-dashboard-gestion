@@ -1,27 +1,32 @@
 import type { Metadata, Viewport } from "next"
-import localFont from "next/font/local"
 import "./globals.css"
 import { QueryProvider } from "@/providers/query-provider"
 import { AuthProvider } from "@/providers/auth-provider"
+import { ThemeProvider } from "@/providers/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
-
-const geist = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-sans",
-  weight: "100 900",
-})
+import { BRAND, pageTitle } from "@/config/brand"
+// Emparejamiento tipográfico: se cambia en UNA línea de src/config/fonts.ts.
+import { fontPair } from "@/config/fonts"
 
 export const metadata: Metadata = {
-  title: "Dashboard de Gestión Estratégica | Ucompensar",
-  description:
-    "Plataforma SaaS para PYMES — análisis de datos con inteligencia artificial",
+  title: {
+    default: pageTitle(),
+    template: `%s · ${BRAND.name}`,
+  },
+  description: BRAND.description,
+  applicationName: BRAND.name,
 }
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
+    { media: "(prefers-color-scheme: dark)", color: "#161311" },
+  ],
 }
 
 export default function RootLayout({
@@ -30,16 +35,18 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es" className={geist.variable}>
-      <body className="antialiased">
-        <QueryProvider>
-          <AuthProvider>
-            <TooltipProvider>
-              {children}
-              <Toaster richColors closeButton />
-            </TooltipProvider>
-          </AuthProvider>
-        </QueryProvider>
+    <html lang="es-CO" className={fontPair.className} suppressHydrationWarning>
+      <body style={fontPair.style}>
+        <ThemeProvider>
+          <QueryProvider>
+            <AuthProvider>
+              <TooltipProvider delayDuration={250}>
+                {children}
+                <Toaster closeButton />
+              </TooltipProvider>
+            </AuthProvider>
+          </QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

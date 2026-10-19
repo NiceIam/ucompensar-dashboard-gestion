@@ -4,131 +4,91 @@ import Link from "next/link"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+import { ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
-import { Alert } from "@/components/ui/alert"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { PasswordInput } from "@/components/kit/field"
+import { Notice } from "@/components/kit/notice"
 import { useAuth } from "@/hooks/use-auth"
-import Image from "next/image"
+import { usePageTitle } from "@/hooks/use-page-title"
 
 const loginSchema = z.object({
-  email: z.string().email("Correo electrónico inválido"),
-  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  email: z.string().trim().min(1, "Escribe tu correo.").email("Revisa tu correo: parece que le falta algo (por ejemplo, la @)."),
+  password: z.string().min(1, "Escribe tu contraseña."),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
-  const { signIn, loading, error } = useAuth()
+  usePageTitle("Ingresar")
+  const { signIn, loading, errorInfo, clearError } = useAuth()
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
   })
 
   async function onSubmit(values: LoginFormValues) {
-    await signIn(values.email, values.password)
+    await signIn(values.email.trim(), values.password)
   }
 
   return (
-    <Card className="shadow-lg">
-      <CardHeader className="space-y-4 text-center">
-        <div className="flex justify-center">
-          <Image
-            src="/logo-ucompensar.png"
-            alt="Compensar Fundación Universitaria"
-            width={200}
-            height={50}
-            className="h-10 w-auto"
-            priority
+    <div className="space-y-8">
+      <div className="space-y-2">
+        <h1 className="font-display text-[34px] font-semibold leading-tight">Qué bueno verte</h1>
+        <p className="text-[15px] text-muted-foreground">Entra para ver cómo va tu negocio y preguntarle a tus datos.</p>
+      </div>
+
+      {errorInfo && (
+        <Notice tone="danger" title={errorInfo.title} onDismiss={clearError}>
+          {errorInfo.description}
+        </Notice>
+      )}
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" noValidate>
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Correo electrónico</FormLabel>
+                <FormControl>
+                  <Input placeholder="empresa@ejemplo.com" type="email" autoComplete="email" inputMode="email" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-        </div>
-        <div>
-          <CardTitle className="text-2xl">Bienvenido</CardTitle>
-          <CardDescription className="mt-1">
-            Plataforma de gestión estratégica de datos con IA
-          </CardDescription>
-        </div>
-      </CardHeader>
 
-      <CardContent>
-        {error && (
-          <Alert className="mb-4 border-destructive/50 text-destructive">
-            {error}
-          </Alert>
-        )}
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Contraseña</FormLabel>
+                <FormControl>
+                  <PasswordInput placeholder="••••••••" autoComplete="current-password" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Correo electrónico</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="empresa@ejemplo.com"
-                      type="email"
-                      autoComplete="email"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <Button type="submit" size="lg" className="w-full" loading={loading} loadingText="Ingresando…">
+            Ingresar
+            <ArrowRight aria-hidden="true" />
+          </Button>
+        </form>
+      </Form>
 
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contraseña</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="••••••••"
-                      type="password"
-                      autoComplete="current-password"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Ingresando..." : "Ingresar"}
-            </Button>
-          </form>
-        </Form>
-      </CardContent>
-
-      <CardFooter className="justify-center text-sm text-muted-foreground">
-        ¿No tienes cuenta?&nbsp;
-        <Link href="/register" className="text-primary hover:underline font-medium">
+      <p className="text-center text-sm text-muted-foreground">
+        ¿Aún no tienes cuenta?{" "}
+        <Link href="/register" className="font-semibold text-primary underline-offset-4 hover:underline">
           Regístrate aquí
         </Link>
-      </CardFooter>
-    </Card>
+      </p>
+    </div>
   )
 }

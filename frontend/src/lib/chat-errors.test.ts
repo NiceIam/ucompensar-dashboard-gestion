@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
-import { getChatErrorMessage, isChatLimitError } from "./chat-errors"
+import { describeChatError, getChatErrorMessage, isChatLimitError } from "./chat-errors"
 
 const FALLBACK = "Error al enviar el mensaje"
 const apiError = (body: unknown) => new Error(typeof body === "string" ? body : JSON.stringify(body))
@@ -31,19 +31,21 @@ describe("getChatErrorMessage", () => {
     const quotaError = (retryAt: Date) =>
       apiError({ detail: { code: "quota_org_daily", retry_after_seconds: 1, retry_at: retryAt.toISOString() } })
     const hhmm = (d: Date) => d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })
+    // Cambio deliberado del rediseño: "p. m." ya trae punto final; antes el mensaje terminaba en "p. m..".
+    const end = (d: Date) => (hhmm(d).endsWith(".") ? hhmm(d) : `${hhmm(d)}.`)
 
     test("si se libera hoy muestra solo la hora aproximada (HH:MM)", () => {
       const at = new Date(2026, 4, 1, 15, 30)
       const msg = getChatErrorMessage(quotaError(at), FALLBACK)
 
       expect(msg).toBe(
-        `La organización alcanzó el límite diario de mensajes del asistente; se libera aproximadamente a las ${hhmm(at)}.`
+        `La organización alcanzó el límite diario de mensajes del asistente; se libera aproximadamente a las ${end(at)}`
       )
     })
 
     test("si se libera mañana lo dice", () => {
       const at = new Date(2026, 4, 2, 10, 30)
-      expect(getChatErrorMessage(quotaError(at), FALLBACK)).toContain(`se libera aproximadamente mañana a las ${hhmm(at)}.`)
+      expect(getChatErrorMessage(quotaError(at), FALLBACK)).toContain(`se libera aproximadamente mañana a las ${end(at)}`)
     })
 
     test("si es más lejos incluye la fecha", () => {
@@ -51,6 +53,12 @@ describe("getChatErrorMessage", () => {
       const msg = getChatErrorMessage(quotaError(at), FALLBACK)
       expect(msg).toMatch(/aproximadamente el 5 de mayo a las /)
     })
+  })
+
+  test("nunca termina con doble punto", () => {
+    const msg = getChatErrorMessage(apiError({ detail: { code: "quota_org_daily", retry_after_seconds: 3600 } }), FALLBACK)
+    expect(msg.endsWith("..")).toBe(false)
+    expect(msg.endsWith(".")).toBe(true)
   })
 
   test("tope diario sin retry_at usa retry_after_seconds, y sin ninguno degrada con gracia", () => {
@@ -70,15 +78,40 @@ describe("getChatErrorMessage", () => {
     )
   })
 
-  test("otros errores conservan su mensaje original", () => {
-    expect(getChatErrorMessage(apiError({ detail: "Token invalido" }), FALLBACK)).toBe('{"detail":"Token invalido"}')
-    expect(getChatErrorMessage(new Error("Failed to fetch"), FALLBACK)).toBe("Failed to fetch")
-    expect(getChatErrorMessage(apiError("texto plano"), FALLBACK)).toBe("texto plano")
+  // Cambio deliberado del rediseño: antes estos errores mostraban el texto crudo del
+  // servidor (por ejemplo '{"detail":"Token invalido"}'); ahora pasan por el traductor
+  // central y nunca llega JSON a la pantalla.
+  test("otros errores se traducen a lenguaje humano (nunca JSON crudo)", () => {
+    const tokenMsg = getChatErrorMessage(apiError({ detail: "Token invalido" }), FALLBACK)
+    expect(tokenMsg).not.toContain("{")
+    expect(tokenMsg).toContain("Token invalido")
+    expect(getChatErrorMessage(new Error("Failed to fetch"), FALLBACK)).toBe(
+      "No pudimos conectarnos. Revisa tu conexión a internet e inténtalo de nuevo en un momento."
+    )
+    expect(getChatErrorMessage(apiError("texto plano"), FALLBACK)).toBe(
+      "El asistente no pudo responder. Texto plano."
+    )
   })
 
   test("valores que no son Error usan el fallback", () => {
     expect(getChatErrorMessage("boom", FALLBACK)).toBe(FALLBACK)
     expect(getChatErrorMessage(undefined, FALLBACK)).toBe(FALLBACK)
+  })
+})
+
+describe("describeChatError", () => {
+  test("los límites no se reintentan y conservan el mensaje del 429", () => {
+    const info = describeChatError(apiError({ detail: { code: "rate_limit_user", retry_after_seconds: 5 } }))
+    expect(info.rateLimited).toBe(true)
+    expect(info.retryable).toBe(false)
+    expect(info.description).toContain("en 5 segundos")
+  })
+
+  test("un fallo de red se puede reintentar", () => {
+    const info = describeChatError(new TypeError("Failed to fetch"))
+    expect(info.rateLimited).toBe(false)
+    expect(info.retryable).toBe(true)
+    expect(info.title).toBe("No pudimos conectarnos")
   })
 })
 

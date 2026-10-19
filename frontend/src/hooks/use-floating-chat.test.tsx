@@ -54,7 +54,9 @@ describe("useFloatingChat.sendMessage ante límites del backend", () => {
     expect(result.current.error).toContain("límite diario")
   })
 
-  test("otros errores NO son rateLimited y conservan su mensaje original", async () => {
+  // Cambio deliberado del rediseño: antes se mostraba "Failed to fetch" tal cual;
+  // ahora el error pasa por el traductor central y se ofrece reintentar.
+  test("otros errores NO son rateLimited, se traducen y se pueden reintentar", async () => {
     post.mockRejectedValue(new Error("Failed to fetch"))
     const { result } = await setup()
 
@@ -64,7 +66,38 @@ describe("useFloatingChat.sendMessage ante límites del backend", () => {
     })
 
     expect(outcome).toEqual({ rateLimited: false })
-    expect(result.current.error).toBe("Failed to fetch")
+    expect(result.current.error).toBe(
+      "No pudimos conectarnos. Revisa tu conexión a internet e inténtalo de nuevo en un momento."
+    )
+    expect(result.current.errorInfo?.retryable).toBe(true)
+    expect(result.current.lastFailed).toBe("hola")
+
+    post.mockResolvedValue({ message_id: "m2", role: "assistant", content: "ya", created_at: "2026-01-01T00:00:00Z" })
+    await act(async () => {
+      await result.current.retryLast()
+    })
+    expect(result.current.error).toBeNull()
+    expect(result.current.lastFailed).toBeNull()
+    expect(result.current.messages.map((m) => m.content)).toEqual(["hola", "ya"])
+  })
+
+  test("los límites no ofrecen reintento automático", async () => {
+    post.mockRejectedValue(apiError({ detail: { code: "rate_limit_user", retry_after_seconds: 9 } }))
+    const { result } = await setup()
+    await act(async () => {
+      await result.current.sendMessage("hola")
+    })
+    expect(result.current.errorInfo?.rateLimited).toBe(true)
+    expect(result.current.lastFailed).toBeNull()
+  })
+
+  test("el historial usa message_id del backend como id", async () => {
+    get.mockResolvedValue({
+      messages: [{ message_id: "abc", role: "assistant", content: "hola", created_at: "2026-01-01T00:00:00Z" }],
+      total: 1,
+    })
+    const { result } = await setup()
+    expect(result.current.messages[0].id).toBe("abc")
   })
 
   test("envío exitoso: rateLimited false y mensajes agregados", async () => {

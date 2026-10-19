@@ -2,84 +2,175 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-}
-
+/*
+ * Sistema de diseño de Proyecto PI0320251, con la identidad de la Fundación
+ * Universitaria Compensar: blanco y naranja (#ED6824, medido del logo).
+ *
+ * Los colores viven como canales HSL (para poder usar opacidad: bg-primary/10).
+ * Reglas del naranja:
+ *  - `highlight` es el naranja PURO de la marca: decorativo, grande, de marca
+ *    (iconos, puntos, resaltados, primera serie de gráficos). Blanco sobre él
+ *    da 3,18:1, así que nunca lleva texto blanco pequeño encima.
+ *  - `primary` es el naranja INTERACTIVO (botones, enlaces, chips activos):
+ *    misma familia, más profundo, para que el texto blanco cumpla AA (4,85:1).
+ * Cada estado tiene tres variantes: sólido (iconos, barras), suave (fondos)
+ * y fuerte (texto sobre el fondo suave, contraste AA verificado >= 4.5:1).
+ * Valores de referencia en hex en el comentario de cada línea.
+ */
 @layer base {
   :root {
-    /* Ucompensar brand: #F37021 (naranja) + #1A1A1A (negro) */
-    --background: 0 0% 100%;
-    --foreground: 0 0% 10%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 10%;
+    --background: 0 0% 100%; /* #FFFFFF blanco */
+    --foreground: 22.5 14.8% 10.6%; /* #1F1A17 tinta casi negra, cálida */
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 22.5 14.8% 10.6%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 10%;
-    --primary: 24 90% 54%;
+    --popover-foreground: 22.5 14.8% 10.6%;
+
+    --primary: 19.8 86.7% 41.2%; /* #C44A0E naranja interactivo (blanco encima 4,85:1) */
     --primary-foreground: 0 0% 100%;
-    --secondary: 24 15% 96%;
-    --secondary-foreground: 0 0% 10%;
-    --muted: 24 10% 96%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 24 20% 95%;
-    --accent-foreground: 0 0% 10%;
-    --destructive: 0 84% 60%;
+    --primary-hover: 20.2 88.1% 36.3%; /* #AE420B (blanco encima 5,86:1) */
+    --primary-soft: 24.5 84.6% 94.9%; /* #FDF0E7 */
+    --primary-strong: 19.9 89.5% 33.7%; /* #A33C09 texto naranja sobre blanco o suave */
+
+    --secondary: 30 28.6% 94.5%; /* #F5F1ED gris cálido */
+    --secondary-foreground: 22.5 14.8% 10.6%;
+    --muted: 30 27.3% 95.7%; /* #F7F4F1 */
+    --muted-foreground: 26.2 8.2% 38.4%; /* #6A615A */
+    --accent: 30 28.6% 94.5%; /* #F5F1ED (hover) */
+    --accent-foreground: 22.5 14.8% 10.6%;
+
+    --highlight: 20.3 84.8% 53.5%; /* #ED6824 naranja de marca (logo) */
+    --highlight-foreground: 22.5 14.8% 10.6%; /* tinta sobre el naranja: 5,42:1 */
+    --highlight-soft: 24 92.6% 94.7%; /* #FEEFE5 */
+    --highlight-strong: 20.2 88.1% 36.3%; /* #AE420B */
+
+    --destructive: 352.2 64% 46.9%; /* #C42B3F carmesí (lejos del naranja) */
     --destructive-foreground: 0 0% 100%;
-    --border: 24 10% 90%;
-    --input: 24 10% 90%;
-    --ring: 24 90% 54%;
-    --radius: 0.5rem;
-    --chart-1: 24 90% 54%;
-    --chart-2: 270 30% 55%;
-    --chart-3: 174 50% 42%;
-    --chart-4: 270 45% 30%;
-    --chart-5: 36 85% 58%;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 0 0% 20%;
-    --sidebar-primary: 24 90% 54%;
+    --danger-soft: 352.9 81% 95.9%; /* #FDECEE */
+    --danger-strong: 351.4 69.5% 37.3%; /* #A11D30 */
+    --success: 136.3 50% 36.1%; /* #2E8A47 */
+    --success-soft: 138.5 39.4% 93.5%; /* #E8F5EC */
+    --success-strong: 138.6 56.9% 25.5%; /* #1C6633 */
+    --warning: 44 90.4% 44.7%; /* #D9A20B ámbar amarillo, distinto del naranja */
+    --warning-soft: 46.7 94.7% 92.5%; /* #FEF6DA */
+    --warning-strong: 44.3 100% 21.8%; /* #6F5200 */
+    --info: 218.6 62.1% 48.6%; /* #2F66C9 */
+    --info-soft: 217.9 82.6% 95.5%; /* #EAF1FD */
+    --info-strong: 218.6 64.9% 38%; /* #224FA0 */
+
+    --border: 30 24% 90.2%; /* #ECE6E0 */
+    --input: 28.2 19.5% 82.9%; /* #DCD3CB */
+    --ring: 19.8 86.7% 41.2%; /* #C44A0E */
+    --radius: 0.875rem;
+
+    /* Paleta categórica de gráficos: naranja de marca primero y orden fijo,
+       validada con el validador de la skill dataviz (CVD adyacente ΔE >= 8,
+       visión normal ΔE >= 15, contraste >= 3:1) en claro y en oscuro. */
+    --chart-1: 20.3 84.8% 53.5%; /* #ED6824 naranja */
+    --chart-2: 223.3 77.5% 43.5%; /* #1949C5 azul */
+    --chart-3: 177.8 87.3% 30.8%; /* #0A938E verde azulado */
+    --chart-4: 320.8 80.1% 37.5%; /* #AC1377 ciruela */
+    --chart-5: 45.2 94.4% 35.3%; /* #AF8505 oro */
+    --chart-6: 197.8 95% 39%; /* #058AC2 celeste */
+    --chart-7: 113.8 96% 29.6%; /* #129403 verde */
+    --chart-8: 261.5 57.8% 53.5%; /* #7544CD violeta */
+    --chart-grid: 30 23.8% 91.8%; /* #EFEAE5 */
+    --chart-axis: 26.3 7.8% 40.4%; /* #6F665F */
+
+    --shadow: 23.5 25.8% 17.5%; /* #382A21 sombra cálida */
+
+    /* Paneles de marca (asistente, portada de acceso): melocotón muy suave en claro. */
+    --brand-panel: 24.7 100% 96.7%; /* #FFF5EE */
+    --brand-panel-foreground: 22.5 14.8% 10.6%;
+
+    --sidebar-background: 30 33.3% 97.6%; /* #FBF9F7 blanco roto */
+    --sidebar-foreground: 22.5 14.8% 10.6%;
+    --sidebar-primary: 19.8 86.7% 41.2%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 24 20% 95%;
-    --sidebar-accent-foreground: 0 0% 10%;
-    --sidebar-border: 24 10% 90%;
-    --sidebar-ring: 24 90% 54%;
+    --sidebar-accent: 30 29.4% 93.3%; /* #F3EEE9 */
+    --sidebar-accent-foreground: 22.5 14.8% 10.6%;
+    --sidebar-border: 30 24% 90.2%;
+    --sidebar-ring: 19.8 86.7% 41.2%;
+
+    --shadow-card: 0 1px 2px hsl(var(--shadow) / 0.04), 0 4px 14px -6px hsl(var(--shadow) / 0.07);
+    --shadow-raised: 0 2px 4px hsl(var(--shadow) / 0.05), 0 14px 30px -12px hsl(var(--shadow) / 0.16);
+    --shadow-float: 0 4px 8px hsl(var(--shadow) / 0.06), 0 24px 48px -16px hsl(var(--shadow) / 0.24);
+
+    --bottom-nav-height: 0px;
   }
 
   .dark {
-    /* Ucompensar dark mode — naranja se mantiene como acento */
-    --background: 0 0% 7%;
-    --foreground: 0 0% 95%;
-    --card: 0 0% 9%;
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 9%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 24 90% 54%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 24 10% 15%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 65%;
-    --accent: 24 15% 15%;
-    --accent-foreground: 0 0% 95%;
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 0 0% 95%;
-    --border: 0 0% 18%;
-    --input: 0 0% 18%;
-    --ring: 24 90% 54%;
-    --chart-1: 24 85% 58%;
-    --chart-2: 270 35% 65%;
-    --chart-3: 174 45% 50%;
-    --chart-4: 270 40% 45%;
-    --chart-5: 36 80% 62%;
-    --sidebar-background: 0 0% 7%;
-    --sidebar-foreground: 0 0% 90%;
-    --sidebar-primary: 24 90% 54%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 24 15% 15%;
-    --sidebar-accent-foreground: 0 0% 90%;
-    --sidebar-border: 0 0% 15%;
-    --sidebar-ring: 24 90% 54%;
+    --background: 24 12.8% 7.6%; /* #161311 carbón cálido profundo */
+    --foreground: 30 29.4% 93.3%; /* #F3EEE9 */
+    --card: 25.7 13.2% 10.4%; /* #1E1A17 */
+    --card-foreground: 30 29.4% 93.3%;
+    --popover: 26.7 13.8% 12.7%; /* #25201C */
+    --popover-foreground: 30 29.4% 93.3%;
+
+    --primary: 20.7 85.1% 55.3%; /* #EE6F2C (tinta encima 6,15:1) */
+    --primary-foreground: 24 40.5% 7.3%; /* #1A110B */
+    --primary-hover: 22.7 90.1% 60.4%; /* #F5843F (tinta encima 7,31:1) */
+    --primary-soft: 21.7 45% 15.7%; /* #3A2316 */
+    --primary-strong: 21.1 100% 76.1%; /* #FFB085 */
+
+    --secondary: 24 13.5% 14.5%; /* #2A2420 */
+    --secondary-foreground: 30 29.4% 93.3%;
+    --muted: 22.5 12.9% 12.2%; /* #231E1B */
+    --muted-foreground: 28.4 10.4% 64.1%; /* #ADA39A */
+    --accent: 24 13.2% 14.9%; /* #2B2521 */
+    --accent-foreground: 30 29.4% 93.3%;
+
+    --highlight: 20.7 85.1% 55.3%; /* #EE6F2C */
+    --highlight-foreground: 24 40.5% 7.3%;
+    --highlight-soft: 21.7 45% 15.7%; /* #3A2316 */
+    --highlight-strong: 21.7 100% 75.1%; /* #FFAE80 */
+
+    --destructive: 352.8 81.6% 68%; /* #F06B7B */
+    --destructive-foreground: 351.4 51.2% 8%; /* #1F0A0D */
+    --danger-soft: 351.4 40.2% 17.1%; /* #3D1A1F */
+    --danger-strong: 353.1 100% 84.7%; /* #FFB1BA */
+    --success: 137.3 44.9% 51.6%; /* #4CBB6C */
+    --success-soft: 140 39.1% 13.5%; /* #15301E */
+    --success-strong: 136.2 52.9% 72.5%; /* #94DEA8 */
+    --warning: 44.6 78.2% 53.1%; /* #E5B52A */
+    --warning-soft: 44.6 60% 12.7%; /* #342A0D */
+    --warning-strong: 43.6 83.4% 71.6%; /* #F3D27A */
+    --info: 218.2 82.3% 71.2%; /* #79A5F2 */
+    --info-soft: 220.6 35.6% 17.1%; /* #1C263B (azul sobrio: no compite con el carbón cálido) */
+    --info-strong: 218.8 82.9% 83.9%; /* #B4CCF8 */
+
+    --border: 25 13.6% 17.3%; /* #322B26 */
+    --input: 26.2 13.6% 23.1%; /* #433A33 */
+    --ring: 20.7 85.1% 55.3%;
+
+    --chart-1: 21.2 81.4% 51.6%; /* #E8661F naranja */
+    --chart-2: 222.1 90% 60.6%; /* #4076F5 azul */
+    --chart-3: 177.9 100% 32.9%; /* #00A8A2 verde azulado */
+    --chart-4: 323 60.8% 47.1%; /* #C12F89 ciruela */
+    --chart-5: 45.4 94.7% 36.7%; /* #B68B05 oro */
+    --chart-6: 197.8 91.8% 43.1%; /* #0997D3 celeste */
+    --chart-7: 115.6 68% 39.2%; /* #2AA820 verde */
+    --chart-8: 259.9 81.3% 66.5%; /* #9264EF violeta */
+    --chart-grid: 24 12.5% 15.7%; /* #2D2723 */
+    --chart-axis: 26.7 8.7% 59.6%; /* #A1978F */
+
+    --shadow: 0 0% 0%;
+
+    --brand-panel: 24 17.9% 11%; /* #211B17 */
+    --brand-panel-foreground: 30 29.4% 93.3%;
+
+    --sidebar-background: 20 13% 9%; /* #1A1614 */
+    --sidebar-foreground: 30 29.4% 93.3%;
+    --sidebar-primary: 20.7 85.1% 55.3%;
+    --sidebar-primary-foreground: 24 40.5% 7.3%;
+    --sidebar-accent: 24 15.2% 12.9%; /* #26201C */
+    --sidebar-accent-foreground: 30 29.4% 93.3%;
+    --sidebar-border: 24 12.8% 15.3%; /* #2C2622 */
+    --sidebar-ring: 20.7 85.1% 55.3%;
+
+    --shadow-card: 0 1px 2px hsl(var(--shadow) / 0.3), 0 0 0 1px hsl(0 0% 100% / 0.02);
+    --shadow-raised: 0 2px 4px hsl(var(--shadow) / 0.35), 0 16px 32px -12px hsl(var(--shadow) / 0.6);
+    --shadow-float: 0 4px 8px hsl(var(--shadow) / 0.4), 0 24px 48px -16px hsl(var(--shadow) / 0.7);
   }
 }
 
@@ -87,7 +178,143 @@
   * {
     @apply border-border;
   }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  /*
+   * Texto: espaciado normal (o apenas abierto, según la familia: --tracking-body
+   * lo define el emparejamiento en src/config/font-pairs) e interlineado cómodo.
+   * Cifras SIEMPRE de caja alta (lining), nunca de estilo antiguo.
+   */
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground antialiased;
+    font-feature-settings: var(--font-features, normal);
+    font-variant-numeric: lining-nums;
+    letter-spacing: var(--tracking-body, 0em);
+    line-height: 1.55;
+  }
+
+  /*
+   * Letra de titulares y cifras. El espaciado se cierra SOLO en tamaños grandes
+   * y en proporción al tamaño: 0 hasta 20 px, ≈ -0.011em a 36 px, ≈ -0.017em a 60 px.
+   */
+  .font-display {
+    font-variant-numeric: lining-nums;
+    letter-spacing: min(0em, calc((20px - 1em) * 0.025));
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: hsl(var(--highlight) / 0.28);
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer components {
+  /* Superficie de tarjeta: fondo, aro fino y sombra en capas casi imperceptible. */
+  .surface {
+    @apply rounded-2xl border bg-card text-card-foreground;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Un susurro de calor arriba a la derecha: el fondo sigue leyéndose blanco. */
+  .paper-glow {
+    background-image: radial-gradient(1000px 420px at 100% -12%, hsl(var(--highlight) / 0.06), transparent 62%);
+  }
+
+  /*
+   * Retícula de puntos: el recurso gráfico del logo de la universidad usado
+   * como textura. Siempre decorativa y sutil; se ajusta con --dots-alpha,
+   * --dots-size (radio) y --dots-gap (separación).
+   */
+  .bg-dots {
+    background-image: radial-gradient(
+      circle at center,
+      hsl(var(--highlight) / var(--dots-alpha, 0.22)) var(--dots-size, 1.4px),
+      transparent calc(var(--dots-size, 1.4px) + 0.6px)
+    );
+    background-size: var(--dots-gap, 18px) var(--dots-gap, 18px);
+  }
+
+  /* Cifras en columnas alineadas y de caja alta (tablas, ejes, cifras grandes). */
+  .tabular {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+}
+
+@layer utilities {
+  /* Rejilla que se adapta al ancho DISPONIBLE (no al de la pantalla): sirve igual con el chat abierto. */
+  .auto-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--auto-grid-min, 17rem)), 1fr));
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Movimiento: todo se apaga si la persona pidió reducirlo. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Impresión / guardar como PDF (/resumen): sin barra lateral ni chat (se ocultan
+ * con `print:hidden` en el esqueleto), el contenido fluye en varias páginas en vez
+ * de quedar recortado a la altura de la pantalla, las tarjetas no se parten y el
+ * cálculo de cada hallazgo sale abierto.
+ */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  [data-shell="root"],
+  [data-shell="body"],
+  [data-shell="column"],
+  [data-shell="main"] {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    background-image: none !important;
+  }
+  [data-print-open][hidden] {
+    display: block !important;
+  }
+  * {
+    animation: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

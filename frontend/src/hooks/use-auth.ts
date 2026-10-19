@@ -3,6 +3,8 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
+import { ApiError, humanizeError, type HumanError } from "@/lib/errors"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
@@ -16,15 +18,21 @@ interface SignUpData {
   business_type_id: string
 }
 
+async function failIfNotOk(res: Response): Promise<void> {
+  if (res.ok) return
+  const raw = await res.text().catch(() => "")
+  throw new ApiError(res.status, raw)
+}
+
 export function useAuth() {
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errorInfo, setErrorInfo] = useState<HumanError | null>(null)
   const router = useRouter()
   const queryClient = useQueryClient()
 
   async function signIn(email: string, password: string): Promise<void> {
     setLoading(true)
-    setError(null)
+    setErrorInfo(null)
     try {
       // credentials:"include" makes the browser store the HttpOnly cookies set by the backend.
       const res = await fetch(`${API_URL}/api/v1/auth/login`, {
@@ -33,13 +41,7 @@ export function useAuth() {
         credentials: "include",
         body: JSON.stringify({ email, password }),
       })
-
-      if (!res.ok) {
-        if (res.status >= 500) {
-          throw new Error("Servidor no disponible. Intenta más tarde.")
-        }
-        throw new Error("Email o contraseña incorrectos")
-      }
+      await failIfNotOk(res)
 
       // Tokens now live in HttpOnly cookies — nothing to store client-side.
       // Invalidate /me so AuthProvider refetches with the new session cookie.
@@ -48,9 +50,12 @@ export function useAuth() {
       router.push("/")
       router.refresh()
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Email o contraseña incorrectos"
-      setError(message)
+      // 4xx en el login = credenciales; el resto (red, 5xx, 429) se explica tal cual.
+      const human =
+        err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 429
+          ? humanizeError(new ApiError(401, ""), "login")
+          : humanizeError(err, "login")
+      setErrorInfo(human)
     } finally {
       setLoading(false)
     }
@@ -58,7 +63,7 @@ export function useAuth() {
 
   async function signUp(data: SignUpData): Promise<void> {
     setLoading(true)
-    setError(null)
+    setErrorInfo(null)
     try {
       // credentials:"include" stores HttpOnly cookies returned by /register.
       const res = await fetch(`${API_URL}/api/v1/auth/register`, {
@@ -74,36 +79,34 @@ export function useAuth() {
           size: data.org_size,
         }),
       })
+      await failIfNotOk(res)
+    } catch (err) {
+      setErrorInfo(humanizeError(err, "register"))
+      setLoading(false)
+      return
+    }
 
-      if (!res.ok) {
-        const errorBody = await res.text().catch(() => "Error desconocido")
-        throw new Error(errorBody || `HTTP ${res.status}`)
-      }
-
-      // Initialize org schema — cookie is already set, no manual token needed.
+    // La cuenta ya existe. Preparar las hojas del tipo de negocio es un extra:
+    // si falla, se avisa con calma y se entra igual (se pueden subir archivos sin plantillas).
+    try {
       const initRes = await fetch(`${API_URL}/api/v1/templates/initialize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ business_type_id: data.business_type_id }),
       })
-      if (!initRes.ok) {
-        const initError = await initRes.text().catch(() => "Error al inicializar")
-        throw new Error(initError || `HTTP ${initRes.status}`)
-      }
-
-      // Invalidate /me so AuthProvider refetches with the new session cookie.
-      await queryClient.invalidateQueries({ queryKey: ["auth", "me"] })
-
-      router.push("/")
-      router.refresh()
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Error al registrarse"
-      setError(message)
-    } finally {
-      setLoading(false)
+      await failIfNotOk(initRes)
+    } catch {
+      toast.warning("Tu cuenta quedó creada", {
+        description: "No pudimos preparar las hojas de tu tipo de negocio, pero puedes subir tus archivos igual.",
+      })
     }
+
+    // Invalidate /me so AuthProvider refetches with the new session cookie.
+    await queryClient.invalidateQueries({ queryKey: ["auth", "me"] })
+    router.push("/")
+    router.refresh()
+    setLoading(false)
   }
 
   async function signOut(): Promise<void> {
@@ -127,5 +130,15 @@ export function useAuth() {
     setLoading(false)
   }
 
-  return { signIn, signUp, signOut, loading, error }
+  return {
+    signIn,
+    signUp,
+    signOut,
+    loading,
+    /** Error traducido (título + qué hacer). */
+    errorInfo,
+    /** Compatibilidad: el mismo error en una línea. */
+    error: errorInfo ? `${errorInfo.title}. ${errorInfo.description}` : null,
+    clearError: () => setErrorInfo(null),
+  }
 }

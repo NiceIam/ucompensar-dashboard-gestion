@@ -33,8 +33,9 @@ El backend debe estar corriendo en `http://localhost:8000` para que el frontend 
 
 ### Estructura de Carpetas Clave
 
-- `src/app/(auth)/` — Login y registro (layout con fondo naranja degradado)
-- `src/app/(dashboard)/` — App principal: resumen (`/`), datos (`/data`), tableros (`/dashboards`), configuración (`/settings`)
+- `src/app/(auth)/` — Login y registro (portada en dos paneles: marca y formulario)
+- `src/app/(dashboard)/` — App principal: inicio (`/`), resumen de la semana (`/resumen`), datos y cargue (`/data`), tableros (`/dashboards`), configuración (`/settings`)
+- `src/lib/upload/` — Flujo de cargue: validación local, lectores CSV/JSON/XLSX sin dependencias, evaluación (¿revisar o guardar directo?), primer vistazo y máquina de estados
 - `src/hooks/` — Custom hooks que wrappean TanStack Query por dominio: `use-auth`, `use-files`, `use-dashboards`, `use-agents`, `use-etl`, `use-templates`, `use-floating-chat`
 - `src/lib/api.ts` — Cliente HTTP centralizado con `credentials:'include'` en todos los fetch; los tokens viven en cookies HttpOnly seteadas por el backend (`access_token` path=/, `refresh_token` path=/api/v1/auth/refresh). El frontend nunca toca tokens directamente.
 - `src/types/api.ts` — Tipos TypeScript para toda la API (User, Dashboard, WidgetConfig, ChatMessage, etc.)
@@ -66,9 +67,42 @@ Cada dominio tiene hooks en `src/hooks/` que siguen el mismo patrón:
 - Soporta envío de archivos via FormData a `/api/v1/chat/upload`
 - Contexto por página: cambia el placeholder según la ruta actual
 
-### Paleta de Colores (Ucompensar)
+- El estado del chat vive en `ChatProvider` (`src/providers/chat-provider.tsx`): una sola conversación para toda la app, `ask(pregunta)` abre el chat desde cualquier pantalla y Ctrl/Cmd+K lo abre o cierra.
+- Los errores del chat pasan por `src/lib/chat-errors.ts` (429 de límite/cuota con el texto restaurado al cuadro) y el resto por el traductor central `src/lib/errors.ts`.
 
-El color primario es **naranja `#F37021`** (HSL `24 90% 54%`), definido como variables CSS en `globals.css`. Los colores de gráficas usan 5 slots (`--chart-1` a `--chart-5`). Soporta dark mode via clase `.dark`.
+### Sistema de diseño (Proyecto PI0320251)
+
+- Identidad en `src/config/brand.ts` (nombre "Proyecto PI0320251", código, frase, institución). Cambiar el nombre ahí lo cambia en toda la UI. El wordmark es de dos niveles (`BrandName` en `kit/logo.tsx`): "PROYECTO" pequeño en mayúsculas espaciadas y "PI0320251" en Outfit. El isotipo (aguja de brújula sobre baldosa naranja) se conserva como símbolo. Clave interna de localStorage `brujula.chat.open` se deja igual a propósito (cambiarla borraría la preferencia guardada).
+- Colores de la Fundación Universitaria Compensar: **blanco y naranja**. Tokens HSL en `globals.css` con roles semánticos y tres variantes por estado (`success`/`warning`/`danger`/`info`/`highlight`: sólido, `-soft` fondo, `-strong` texto AA).
+  - `highlight` = naranja PURO del logo `#ED6824`: solo decorativo/grande (iconos, puntos, resaltados, 1.ª serie de gráficos). Blanco encima da 3,18:1: nunca texto blanco pequeño sobre él.
+  - `primary` = naranja INTERACTIVO `#C44A0E` (botones, enlaces, chips activos; blanco encima 4,85:1). Hover con `bg-primary-hover` (`#AE420B`), nunca `bg-primary/90` (aclarar baja el contraste).
+  - Fondo blanco `#FFFFFF`, superficies secundarias gris cálido (`#F7F4F1`, barra lateral `#FBF9F7`), tinta `#1F1A17`. Paneles de marca (`bg-brand`) melocotón muy suave `#FFF5EE`.
+  - Estados lejos del naranja: éxito verde, advertencia ámbar amarillo `#D9A20B` (con icono), error carmesí `#C42B3F`, info azul. El naranja nunca va solo: siempre con icono y texto.
+  - Modo oscuro (clase `.dark`, `next-themes`): carbón cálido `#161311`, texto `#F3EEE9`, primario `#EE6F2C` con texto tinta (6,15:1).
+- Motivo firma: la retícula de puntos del logo (`src/components/kit/dots.tsx`): `DotField` (textura de fondo, clase `.bg-dots`), `DotCluster` (racimo decorativo), `DotRule` (separador) y `DotsLoader` ("puntos que se encienden", para cargas). El isotipo es la brújula (`BrandMark`) en baldosa naranja.
+- Logo oficial de la universidad con `UniversityLogo` (`kit/logo.tsx`, archivo `public/logo-ucompensar.png`): login, pie de la barra lateral y Configuración › Acerca de. No se recolorea ni se recorta; en oscuro va sobre una placa blanca.
+- Gráficos: 8 colores categóricos en orden fijo (`--chart-1..8`: naranja, azul, verde azulado, ciruela, oro, celeste, verde, violeta), validados con el validador de la skill `dataviz` en claro y oscuro (CVD adyacente ΔE ≥ 8, visión normal ≥ 15, contraste ≥ 3:1); usar `SimpleChart` (`src/components/charts/simple-chart.tsx`).
+- Tipografía: **Outfit** (`font-display`: titulares y cifras grandes; geométrica y redonda como la letra del logo) + **Inter** (`font-sans`: toda la interfaz, la más legible en tamaño pequeño) vía `next/font/google` (variables, subconjunto `latin`, `display: swap`, respaldo a fuentes del sistema).
+  - Cambiar de par es UNA línea en `src/config/fonts.ts`:
+    - A (predeterminado): `export { fontPair } from "./font-pairs/outfit-inter"`
+    - B: `export { fontPair } from "./font-pairs/sora-dm-sans"` (ojo: DM Sans no trae cifras tabulares; las tablas no alinean)
+    - C: `export { fontPair } from "./font-pairs/urbanist-inter"` (ojo: Urbanist no trae cifras tabulares; los KPI no alinean)
+  - Cada par define en `src/config/font-pairs/*.ts` su espaciado de texto (`--tracking-body`) y rasgos OpenType (`--font-features`).
+  - Reglas: cifras siempre lining (nunca de estilo antiguo); `tabular` (tabular-nums) en tablas, ejes y KPIs; texto con espaciado normal e interlineado 1,55; el espaciado negativo de `.font-display` solo aparece en tamaños grandes (> 20 px) y crece con el tamaño. No usar `tracking-tight` en textos pequeños.
+- Componentes propios en `src/components/kit/` (encabezado, cifra, frase de dato, avisos, pasos, estados vacíos, zona de arrastre…). Textos de cara al usuario: español, tuteo, sin jerga técnica; todo error pasa por `humanizeError`.
+- Rejillas con `auto-grid` (se adaptan al ancho disponible, también con el chat abierto).
+- Tablas con scroll horizontal: el contenedor con `overflow-x-auto` debe ser `relative`. Si no, los textos `sr-only` (posición absoluta) de la tabla escapan del recorte y ensanchan toda la página.
+- KPIs del tablero: la unidad la decide `src/lib/kpi.ts`. El signo $ solo aparece con una pista monetaria DEL DATO (`unit` explícita, icono de dinero o columna de origen de dinero), nunca por la etiqueta ("Total Ventas" con icono `Database` es un conteo de filas).
+- Columnas de índice (`Index`, `#`, `N°`, `Unnamed: 0`, `*_id`) son `id`: nunca se usan como medida en preguntas sugeridas ni en el primer vistazo.
+
+### Esta semana en tu negocio (hallazgos de plata)
+
+- `GET /api/v1/insights` (sin IA, cálculos exactos del servidor). Tipos en `src/types/insights.ts`, lógica pura en `src/lib/insights.ts` (formato por `unit`, orden por severidad, periodo, texto y enlace de WhatsApp) y hook `useInsights()` (`src/hooks/use-insights.ts`; clave `["insights"]`, se invalida junto con los datos en `use-data.ts`).
+- `percent` llega en escala 0-100. El dinero se muestra "$47,6 M" desde un millón y "$360.000" por debajo (sin espacio tras el $, igual que las frases del servidor).
+- `InsightCard` (`kit/insight-card.tsx`): severidad = tono + icono + palabra (Importante / Ojo / Dato), nunca solo color. Siempre trae «Ver cómo lo calculé» (pasos, hojas y filas usadas; los avisos `how.notes` se ven en la tarjeta, sin abrir nada). Responde al ANCHO DE LA TARJETA con container queries (`[@container(min-width:26rem)]:`), no al de la pantalla, porque con el chat abierto la tarjeta es angosta aunque la pantalla no lo sea.
+- Inicio: `InsightsSection` (top 3, maneja cargando / error / solo faltantes / vacío sin tumbar el resto) y `AskBox compact`. `/resumen`: todos los hallazgos, «Lo que te falta para ver más», compartir (WhatsApp, copiar, imprimir) y vista previa del mensaje.
+- Navegación: «Resumen de la semana» está en el menú lateral y en la barra inferior del celular; Configuración sale de esa barra (queda en el menú de la cuenta) vía `NavItem.mobile = false`.
+- Impresión (`@media print` en `globals.css` + clases `print:`): sin barra lateral, barra superior ni chat; el cálculo de cada hallazgo sale abierto (`data-print-open`); las tarjetas no se parten entre páginas; siempre en tema claro (`usePrintInLight` en `app-shell.tsx`).
 
 ### Widget / Dashboard System
 

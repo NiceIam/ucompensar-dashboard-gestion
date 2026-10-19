@@ -24,7 +24,7 @@ test.describe('Register Page', () => {
   test('loads step 1 with account fields', async ({ page }) => {
     await page.goto('/register')
 
-    await expect(page.getByText('Nombre completo')).toBeVisible()
+    await expect(page.getByText('Tu nombre')).toBeVisible()
     await expect(page.getByText('Correo electrónico')).toBeVisible()
     await expect(page.getByText('Contraseña')).toBeVisible()
   })
