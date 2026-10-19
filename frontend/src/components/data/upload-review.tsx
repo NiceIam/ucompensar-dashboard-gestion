@@ -110,7 +110,7 @@ export function SampleTable({
   const hidden = header.length - cols.length
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-xl border bg-card">
+      <div className="relative overflow-x-auto rounded-xl border bg-card">
         <table className="w-full min-w-max text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead>

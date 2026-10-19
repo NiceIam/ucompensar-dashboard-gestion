@@ -134,7 +134,7 @@ export function SimpleChart({
       )}
 
       {asTable ? (
-        <div className="max-h-[320px] overflow-auto rounded-xl border" style={{ minHeight: Math.min(height, 200) }}>
+        <div className="relative max-h-[320px] overflow-auto rounded-xl border" style={{ minHeight: Math.min(height, 200) }}>
           <table className="w-full text-sm">
             <caption className="sr-only">{label}</caption>
             <thead className="sticky top-0 bg-muted/80 backdrop-blur">

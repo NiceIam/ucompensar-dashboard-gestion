@@ -63,7 +63,7 @@ export function DataTable<T extends Record<string, unknown>>({
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="rounded-lg border overflow-x-auto">
+      <div className="relative rounded-lg border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>

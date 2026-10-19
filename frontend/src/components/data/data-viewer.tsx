@@ -69,7 +69,7 @@ export function DataViewer({ table, onClose }: { table: OrgTable; onClose: () =>
   }
 
   return (
-    <section aria-labelledby="viewer-title" className="surface overflow-hidden">
+    <section aria-labelledby="viewer-title" className="surface min-w-0 overflow-hidden">
       <header className="flex items-center gap-3 border-b px-5 py-4">
         <TableIcon name={`${table.table_name} ${table.display_name}`} className="h-10 w-10" />
         <div className="min-w-0 flex-1">
@@ -93,7 +93,9 @@ export function DataViewer({ table, onClose }: { table: OrgTable; onClose: () =>
           description="Sube un archivo con estas columnas y aparecerán aquí."
         />
       ) : (
-        <div className={cn("overflow-x-auto transition-opacity", isFetching && !isLoading && "opacity-60")}>
+        // `relative` hace de esta caja el bloque contenedor de los textos sr-only de la tabla:
+        // sin él, el «Acciones» absoluto escapaba del recorte y ensanchaba toda la página.
+        <div className={cn("relative max-w-full overflow-x-auto transition-opacity", isFetching && !isLoading && "opacity-60")}>
           <table className="w-full min-w-max text-sm">
             <caption className="sr-only">Filas de {table.display_name}</caption>
             <thead>

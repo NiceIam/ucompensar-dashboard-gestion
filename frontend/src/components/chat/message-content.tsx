@@ -104,7 +104,7 @@ function renderTextBlock(text: string, keyPrefix: string): ReactNode {
         j++
       }
       blocks.push(
-        <div key={`${keyPrefix}-tbl${i}`} className="my-2 overflow-x-auto rounded-xl border">
+        <div key={`${keyPrefix}-tbl${i}`} className="relative my-2 overflow-x-auto rounded-xl border">
           <table className="w-full text-[13px]">
             <thead className="bg-muted/60">
               <tr>

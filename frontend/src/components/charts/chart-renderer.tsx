@@ -106,7 +106,7 @@ export function ChartRenderer({ widget, className }: ChartRendererProps) {
     if (chart_type === "table") {
       const keys = Object.keys(data[0] ?? {})
       return (
-        <div className="max-h-80 overflow-auto rounded-xl border">
+        <div className="relative max-h-80 overflow-auto rounded-xl border">
           <table className="w-full text-sm">
             <caption className="sr-only">{title}</caption>
             <thead className="sticky top-0 bg-muted/90 backdrop-blur">

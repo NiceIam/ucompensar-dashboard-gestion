@@ -162,7 +162,7 @@ export function AdvancedSettings({ tables }: { tables: OrgTable[] }) {
                       {t.display_name}
                       <span className="font-mono text-xs font-normal text-muted-foreground">{t.table_name}</span>
                     </summary>
-                    <div className="overflow-x-auto border-t">
+                    <div className="relative overflow-x-auto border-t">
                       <table className="w-full text-sm">
                         <thead className="bg-muted/50 text-left">
                           <tr>
