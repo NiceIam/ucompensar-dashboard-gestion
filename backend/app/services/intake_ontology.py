@@ -133,7 +133,7 @@ KIND_GROUPS: dict[str, tuple[tuple[str, ...], ...]] = {
     "productos": (("producto_nombre",), ("costo_unitario", "stock", "precio_venta")),
     "ventas": (("fecha",), ("producto",), ("cantidad",), ("total", "precio_unitario")),
     "compras": (("fecha",), ("producto",), ("cantidad",), ("costo_unitario", "total"), ("proveedor",)),
-    "cuentas_por_cobrar": (("cliente",), ("valor",), ("fecha_vencimiento", "estado", "fecha_emision")),
+    "cuentas_por_cobrar": (("cliente",), ("valor",), ("fecha_vencimiento", "estado")),
     "movimientos_inventario": (("fecha",), ("producto",), ("tipo_movimiento",), ("cantidad",)),
     "clientes": (("nombre",), ("contacto", "telefono", "email")),
     "proveedores": (("nombre",), ("contacto", "telefono", "email")),

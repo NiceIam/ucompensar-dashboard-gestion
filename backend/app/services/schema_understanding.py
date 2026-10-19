@@ -43,7 +43,8 @@ _ABBREV = {
     "pu": "precio unitario", "pvp": "pvp", "tel": "telefono", "cel": "celular", "ref": "referencia",
     "cod": "codigo", "nro": "numero", "num": "numero", "no": "numero", "vta": "venta", "vtas": "venta",
     "cpa": "compra", "cpas": "compra", "prov": "proveedor", "dcto": "descuento", "tot": "total",
-    "mov": "movimiento", "fact": "factura", "pago": "pago",
+    "mov": "movimiento", "fact": "factura", "fra": "factura", "pago": "pago", "venc": "vencimiento",
+    "exp": "expedicion", "f": "fecha",
 }
 # Traducciones directas (el ingles aporta palabras sueltas; las frases se arman con ellas).
 _EN = {"price": "precio", "cost": "costo", "customer": "cliente", "client": "cliente", "product": "producto",
@@ -92,7 +93,8 @@ SYNONYMS: dict[tuple[str, str], tuple[tuple[str, float], ...]] = {
         "precio venta|pvp|precio publico|precio lista|valor venta",
         "precio|precio unitario|valor unitario|precio al publico|precio final"),
     ("productos", "stock"): _syn(
-        "stock|existencia|existencia actual|stock actual|cantidad disponible|unidades disponibles|inventario",
+        "stock|existencia|existencia actual|stock actual|cantidad disponible|unidades disponibles|inventario|"
+        "on hand|qty on hand|quantity on hand|in stock|units in stock|stock level|stock quantity",
         "disponible|saldo|en bodega|cantidad stock|cantidad inventario|inventario actual|stock disponible",
         "bodega|cantidad|unidades|unidad"),
     ("productos", "proveedor"): _syn("proveedor|nombre proveedor", "distribuidor|marca fabricante|fabricante"),
@@ -106,7 +108,7 @@ SYNONYMS: dict[tuple[str, str], tuple[tuple[str, float], ...]] = {
                                  "cantidad producto|total unidades", "unidad"),
     ("ventas", "precio_unitario"): _syn(
         "precio unitario|valor unitario|precio unidad|valor unidad|precio",
-        "precio venta|valor unit|precio por unidad|precio individual", "unitario"),
+        "precio venta|valor unit|precio por unidad|precio individual|p unitario", "unitario"),
     ("ventas", "total"): _syn("total|valor total|total venta|venta total|importe|total linea|monto|ingreso",
                               "valor venta|total factura|monto total|valor neto", "subtotal|valor|venta"),
     ("ventas", "cliente"): _syn("cliente|nombre cliente|comprador|razon social|nombre del cliente",
@@ -338,6 +340,9 @@ def _assign(kind: str, profiles: list[ColumnProfile]) -> dict[str, tuple[int, fl
     return out
 
 
+_LIST_MARKER = {"clientes": "cliente", "proveedores": "proveedor"}
+
+
 def _score_kind(kind: str, profiles: list[ColumnProfile], name_hints: set[str]) -> _KindScore:
     assignment = _assign(kind, profiles)
     groups = onto.KIND_GROUPS[kind]
@@ -346,6 +351,12 @@ def _score_kind(kind: str, profiles: list[ColumnProfile], name_hints: set[str]) 
         found = [assignment[r][1] for r in g if r in assignment]
         if found:
             ok_scores.append(max(found))
+    # Una lista de clientes/proveedores se reconoce por una columna que lo dice ("Cliente", "Nombre proveedor") aunque
+    # no traiga telefono ni correo (solo NIT y direccion, por ejemplo).
+    marker = _LIST_MARKER.get(kind)
+    if marker and len(ok_scores) == len(groups) - 1 and "nombre" in assignment and assignment["nombre"][1] >= 0.85             and marker in _tokens(profiles[assignment["nombre"][0]].original)             and not any(header_score(p.original, SYNONYMS[("ventas", r)]) >= 0.7 for p in profiles
+                        for r in ("fecha", "cantidad", "total")):
+        ok_scores.append(0.7)
     coverage = len(ok_scores) / len(groups)
     strength = sum(ok_scores) / len(ok_scores) if ok_scores else 0.0
     score = coverage * strength

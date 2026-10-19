@@ -92,6 +92,29 @@ class TestIngles:
         assert roles(u) == ["fecha", "producto", "cantidad", "precio_unitario", "total"]
 
 
+class TestRegresionesPostgres:
+    """Casos que aparecieron al correr el flujo real con la ferreteria de ejemplo."""
+
+    def test_existencias_en_ingles_qty_on_hand(self):
+        u = understand({"name": ["Gasas"], "category": ["Curacion"], "cost": [900], "price": [1500],
+                        "qty on hand": [10], "supplier": ["Distri"], "sku": ["G-1"]})
+        assert u.kind == "productos" and u.clear
+        assert roles(u) == ["producto_nombre", "categoria", "costo_unitario", "precio_venta", "stock", "proveedor",
+                            "producto_codigo"]
+
+    def test_lista_de_clientes_con_nit_y_direccion_sin_telefono_ni_correo(self):
+        u = understand({"Cliente": ["Ferreteria Sol"], "Nit": [900123456], "Direccion": ["Calle 1"], "Ciudad": ["Cali"]})
+        assert u.kind == "clientes" and roles(u)[0] == "nombre"
+
+    def test_una_venta_con_columna_cliente_sigue_siendo_venta_y_no_lista_de_clientes(self):
+        u = understand({"Fecha": ["2026-05-02"], "Cliente": ["Ana"], "Total": [900]})
+        assert u.kind != "clientes"
+
+    def test_lista_de_empleados_con_columna_nombre_no_es_lista_de_clientes(self):
+        u = understand({"Nombre": ["Ana"], "Cargo": ["Cajera"], "Nit": [1]})
+        assert u.kind == "otro"
+
+
 class TestGenericos:
     def test_columnas_c1_c2_no_dicen_nada(self):
         u = understand({"C1": ["2026-05-02", "2026-05-03"], "C2": ["Gasas", "Jeringas"], "C3": [3, 2],
