@@ -519,6 +519,42 @@ class TestUmbrales:
         assert item(await run(), "sin_movimiento")["severity"] == severity
 
 
+class TestLimitesDePeriodo:
+    @pytest.mark.parametrize("last,short", [("2025-04-29", False), ("2025-04-28", True)])
+    async def test_periodo_corto_es_menor_a_60_dias(self, backend, last, short):
+        # 2025-03-01 .. 2025-04-29 son exactamente 60 dias (ambos extremos incluidos)
+        await load(backend, prods(("P", 100, 10)), sales(("2025-03-01", "P", 1, 150), (last, "P", 1, 150)))
+        result = await run()
+        notes = " ".join(item(result, "capital_inventario")["how"]["notes"])
+        assert ("El periodo de ventas es corto" in notes) == short
+
+    @pytest.mark.parametrize("now_day,stale", [("2025-05-09", False), ("2025-05-10", True)])
+    async def test_datos_viejos_se_avisan_desde_mas_de_60_dias(self, backend, now_day, stale):
+        await load(backend, prods(("P", 100, 10)), sales(("2025-03-01", "P", 1, 150), ("2025-03-10", "P", 1, 150)))
+        y, m, d = map(int, now_day.split("-"))
+        result = await run(now=datetime(y, m, d, 15, 0, tzinfo=timezone.utc))
+        notes = " ".join(item(result, "capital_inventario")["how"]["notes"])
+        assert ("Tu última venta registrada es del 10 de marzo de 2025" in notes) == stale
+
+    @pytest.mark.parametrize("last,whole_period", [("2025-03-31", False), ("2025-03-30", True)])
+    async def test_ventana_de_90_dias_vs_periodo_completo(self, backend, last, whole_period):
+        # 2025-01-01 .. 2025-03-31 son exactamente 90 dias: la ventana ES todo el periodo pero no hay nada que avisar
+        await load(backend, prods(("P", 100, 10), ("Q", 100, 10)),
+                   sales(("2025-01-01", "P", 1, 150), (last, "Q", 1, 150)))
+        notes = " ".join(item(await run(), "sin_movimiento")["how"]["notes"])
+        if whole_period:
+            assert "Tus ventas cubren solo 89 días: usé todo el periodo en lugar de 90 días." in notes
+        else:
+            assert "Tus ventas cubren solo" not in notes
+
+    async def test_el_dinero_se_redondea_comercialmente(self, backend):
+        # 100,5 de mercancia: $101 (la mitad se aleja de cero), no $100 (redondeo al par)
+        await load(backend, prods(("A", 100.5, 1)), sales(("2025-03-01", "A", 1, 200)))
+        capital = item(await run(), "capital_inventario")
+        assert metrics(capital)["Mercancía a costo"] == 101
+        assert capital["title"] == "Tienes $101 en mercancía"
+
+
 # ===========================================================================
 # Que falta (missing) y rol que no aparece
 # ===========================================================================
