@@ -29,7 +29,15 @@ export interface ChartConfig {
 export interface KpiConfig {
   label: string
   value: number
+  /** Pista de icono del backend ("Database", "TrendingUp", "DollarSign"…). */
   icon: string
+  /**
+   * Unidad explícita (opcional, aún no la manda el backend). Si llega, manda
+   * sobre cualquier heurística: "money" se muestra en pesos, "count" como cantidad.
+   */
+  unit?: "money" | "count" | "number"
+  /** Columna de origen del cálculo (opcional). Si es de dinero (total, precio, valor…), se muestra en pesos. */
+  column?: string
 }
 
 export interface ExecuteResult {

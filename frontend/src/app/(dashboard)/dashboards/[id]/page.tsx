@@ -8,11 +8,13 @@ import {
   ArrowLeft,
   CircleDollarSign,
   Code2,
+  Database,
   Hash,
   MoreHorizontal,
   RefreshCw,
   ShoppingCart,
   Sparkles,
+  TrendingUp,
   Users,
   type LucideIcon,
 } from "lucide-react"
@@ -31,25 +33,22 @@ import { ChartSkeleton, MetricRowSkeleton } from "@/components/kit/skeletons"
 import { useDashboardExecute, useDashboardMeta, useDownloadDashboardScript } from "@/hooks/use-dashboards"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useChat } from "@/providers/chat-provider"
-import { isMoneyLike } from "@/lib/data-vocabulary"
 import { humanizeError } from "@/lib/errors"
-import { formatCompact, formatMoney, formatNumber } from "@/lib/format"
+import { formatKpiValue, kpiUnit, type KpiLike, type KpiUnit } from "@/lib/kpi"
 import type { WidgetConfig } from "@/types/api"
 
-/** Icono del KPI según la pista del backend ("dollar", "cart", "users"…). */
-function kpiIcon(hint: string | undefined, label: string): LucideIcon {
-  const h = `${hint ?? ""} ${label}`.toLowerCase()
-  if (/dollar|money|cash|peso|venta|ingreso|valor|total/.test(h)) return CircleDollarSign
-  if (/cart|pedido|orden|compra/.test(h)) return ShoppingCart
-  if (/user|cliente|persona/.test(h)) return Users
+/** Icono del KPI: primero la pista del backend; el de dinero solo si la cifra es en pesos. */
+function kpiIcon(kpi: KpiLike, unit: KpiUnit): LucideIcon {
+  if (unit === "money") return CircleDollarSign
+  const hint = (kpi.icon ?? "").toLowerCase()
+  if (/database|rows|table/.test(hint)) return Database
+  if (/trending|activity/.test(hint)) return TrendingUp
+  if (/cart|pedido|orden/.test(hint)) return ShoppingCart
+  if (/user|cliente/.test(hint)) return Users
+  const label = kpi.label.toLowerCase()
+  if (/pedido|orden|compra/.test(label)) return ShoppingCart
+  if (/cliente|persona|usuario/.test(label)) return Users
   return Hash
-}
-
-function kpiValue(value: number, hint: string | undefined, label: string): string {
-  if (!Number.isFinite(value)) return "—"
-  const money = /dollar|money|cash|peso|receipt/.test(hint ?? "") || isMoneyLike(label)
-  if (money) return Math.abs(value) >= 1_000_000 ? formatMoney(value, { compact: true }) : formatMoney(value)
-  return Math.abs(value) >= 100_000 ? formatCompact(value) : formatNumber(value)
 }
 
 function useSecondsAgo(timestamp: number | undefined) {
@@ -172,8 +171,8 @@ export default function DashboardDetailPage() {
                 <MetricTile
                   key={`${kpi.label}-${i}`}
                   label={kpi.label}
-                  value={kpiValue(Number(kpi.value), kpi.icon, kpi.label)}
-                  icon={kpiIcon(kpi.icon, kpi.label)}
+                  value={formatKpiValue(kpi)}
+                  icon={kpiIcon(kpi, kpiUnit(kpi))}
                   // El naranja solo en la primera cifra: guía la atención sin saturar.
                   tone={i === 0 ? "primary" : "neutral"}
                 />
