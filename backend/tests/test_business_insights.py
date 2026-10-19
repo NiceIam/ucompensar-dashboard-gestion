@@ -803,11 +803,25 @@ class TestRobustez:
         assert "\n" not in text and "\t" not in text and "\x07" not in text and len(text) < 160
 
     async def test_columna_de_cantidad_tipo_si_no_degrada_sin_500(self, backend):
-        # un tipo raro en el catalogo hace que el motor rechace el plan: la receta pasa a missing
-        await load(backend, S1_PRODUCTOS, S1_VENTAS, vcols={**SALE_COLS, "cantidad": "boolean"})
+        # un tipo raro en el catalogo (cantidad "si/no"): el motor agrupa los 1 como "sí", que no es un numero:
+        # no hay ventas validas y la receta degrada en vez de dar cifras inventadas
+        await load(backend, S1_PRODUCTOS, sales(("2025-03-01", "Alfa", 1, 150), ("2025-03-02", "Beta", 1, 300)),
+                   vcols={**SALE_COLS, "cantidad": "boolean"})
         result = await run()
         assert result["items"] == []
-        assert "No pude leer las columnas de tu hoja de ventas" in missing(result, "capital_inventario")["needs"]
+        assert missing(result, "capital_inventario")["needs"] == "Tus ventas no tienen cantidades y valores que pueda leer."
+
+    async def test_movimientos_de_inventario_en_la_hoja_de_ventas_no_estiran_el_periodo(self, backend):
+        # la carga real fusiona a veces inventario_movimientos dentro de ventas: filas con cantidad pero sin precio
+        ventas = S1_VENTAS + [{"fecha": "2025-02-01", "producto": "Alfa", "cantidad": 100, "tipo_movimiento": "entrada"},
+                              {"fecha": "2025-04-01", "producto": "Beta", "cantidad": 5, "tipo_movimiento": "salida"}]
+        await load(backend, S1_PRODUCTOS, ventas, vcols={**SALE_COLS, "tipo_movimiento": "text"})
+        result = await run()
+        assert result["period"] == {"from": "2025-03-01", "to": "2025-03-10", "days": 10}
+        notes = item(result, "capital_inventario")["how"]["notes"]
+        assert "2 ventas sin cantidad o valor legible no se contaron." in notes
+        assert metrics(item(result, "capital_inventario")) == {
+            "Mercancía a costo": 56_600, "Vendido en el periodo": 8_425, "Meses de inventario": 3.1}
 
     async def test_demasiadas_combinaciones_no_da_una_cifra_parcial(self, backend):
         await load(backend, S1_PRODUCTOS, S1_VENTAS)

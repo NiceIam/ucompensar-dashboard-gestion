@@ -59,7 +59,8 @@ def round_half_up(x: Fraction) -> int:
     return magnitude if x >= 0 else -magnitude
 
 
-def compute(prods: list[dict], sales: list[dict], *, has_unit=True, has_total=True, has_client=True) -> dict:
+def compute(prods: list[dict], sales: list[dict], *, has_unit=True, has_total=True, has_client=True,
+            max_date: date = date(2026, 10, 20) + timedelta(days=366)) -> dict:
     # --- productos: una fila por (producto normalizado) con existencias y costo unitario ponderado
     p = pd.DataFrame(
         [{"key": key_of(r["nombre"]), "name": r["nombre"], "cost": num(r.get("costo")), "stock": num(r.get("stock"))}
@@ -92,16 +93,11 @@ def compute(prods: list[dict], sales: list[dict], *, has_unit=True, has_total=Tr
                      "has_stock": has_stock}
     merchandise = sum((v["value"] for v in prod.values()), Fraction(0))
 
-    # --- ventas validas
+    # --- ventas validas: cantidad > 0, precio real legible y fecha legible entre 2000 y hoy + 366 dias
     dates = [parse_date(r.get("fecha")) for r in sales]
-    ok_dates = [d for d in dates if d is not None and date(2000, 1, 1) <= d]
-    if not ok_dates:
-        return {"period": None, "merchandise": merchandise}
-    d0, d1 = min(ok_dates), max(ok_dates)
-    days = (d1 - d0).days + 1
     lines = []
     for r, d in zip(sales, dates):
-        if d is None or d < date(2000, 1, 1):
+        if d is None or d < date(2000, 1, 1) or d > max_date:
             continue
         q = num(r.get("cantidad"))
         if q is None or q <= 0:
@@ -118,6 +114,10 @@ def compute(prods: list[dict], sales: list[dict], *, has_unit=True, has_total=Tr
         lines.append({"key": key_of(r["producto"]) if r.get("producto") is not None else "", "date": d, "qty": q,
                       "price": price, "line": line, "client": client,
                       "label": r.get("cliente")})
+    if not lines:
+        return {"period": None, "merchandise": merchandise}
+    d0, d1 = min(l["date"] for l in lines), max(l["date"] for l in lines)
+    days = (d1 - d0).days + 1
     s = pd.DataFrame(lines)
     revenue = sum((x for x in s["line"]), Fraction(0)) if len(s) else Fraction(0)
 
@@ -168,10 +168,8 @@ def compute(prods: list[dict], sales: list[dict], *, has_unit=True, has_total=Tr
     out["client_first"] = ranked[0] / total_clients if ranked and total_clients > 0 else None
 
     window_from = d1 - timedelta(days=min(90, days) - 1)
-    # "se movio" = alguna fila de ventas con fecha legible en la ventana y cantidad > 0 (aunque su precio no se lea)
-    moved = {key_of(r["producto"]) for r, d in zip(sales, dates)
-             if d is not None and window_from <= d <= d1 and r.get("producto") is not None
-             and (q := num(r.get("cantidad"))) is not None and q > 0}
+    # "se movio" = alguna venta VALIDA (cantidad > 0 y precio legible) con fecha en la ventana
+    moved = {r["key"] for r in lines if window_from <= r["date"] <= d1}
     parked = [(k, v) for k, v in prod.items() if v["has_stock"] and v["stock"] > 0 and k not in moved]
     out["parked_money"] = sum((v["value"] for _k, v in parked), Fraction(0))
     out["parked_n"] = len(parked)
