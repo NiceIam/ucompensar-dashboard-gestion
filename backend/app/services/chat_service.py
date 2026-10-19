@@ -496,6 +496,11 @@ async def send_file_message(
                 file_id,
             )
 
+        # Si la organizacion aun no tiene tableros, se sugieren (no lanza ni espera mas que su tope de tiempo).
+        if result.get("rows_inserted"):
+            from app.services.dashboard_suggest_service import auto_suggest_after_upload
+            await auto_suggest_after_upload(org_id)
+
         # Construir respuesta descriptiva
         actions_text = "\n".join(f"- {a['detail']}" for a in result["actions"])
         analysis = result["analysis"]

@@ -101,8 +101,12 @@ def env(settings_stub, gemini):
         patch("app.services.dashboard_render_service.get_org_pool", dbs.get_org_pool),
         patch("app.services.dashboard_render_service.get_settings", return_value=settings_stub),
         patch("app.services.dashboard_builder_service.get_settings", return_value=settings_stub),
+        patch("app.services.dashboard_suggest_service.get_org_pool", dbs.get_org_pool),
+        patch("app.services.dashboard_suggest_service.get_settings", return_value=settings_stub),
         patch("app.services.data_query_engine.run_plans", fake_run_plans(plans)),
     ]
+    from app.services import dashboard_suggest_service as suggest_service
+    suggest_service.reset_caches()
     try:
         for p in stack:
             p.start()

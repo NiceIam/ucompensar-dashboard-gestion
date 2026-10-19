@@ -49,6 +49,12 @@ async def analyze_file(
     return JSONResponse(content=analysis)
 
 
+async def _suggest_dashboards_after_upload(org_id: str) -> None:
+    """Si la organizacion aun no tiene tableros, se sugieren (no lanza ni espera mas que su tope de tiempo)."""
+    from app.services.dashboard_suggest_service import auto_suggest_after_upload
+    await auto_suggest_after_upload(org_id)
+
+
 @router.post(
     "/smart-upload",
     summary="Upload inteligente — analiza, decide y carga (soporta Excel con varias hojas)",
@@ -64,6 +70,8 @@ async def smart_upload(
     if len(sheets) == 1:
         _sheet_name, df = sheets[0]
         result = await agent.smart_upload(df, current_user.org_id, filename)
+        if result.get("rows_inserted"):
+            await _suggest_dashboards_after_upload(current_user.org_id)
         return JSONResponse(content=result)
 
     # Excel con varias pestañas: procesar cada una por separado y agregar resultados.
@@ -95,6 +103,9 @@ async def smart_upload(
                 "error": str(exc),
                 "rows_inserted": 0,
             })
+
+    if total_rows_inserted:
+        await _suggest_dashboards_after_upload(current_user.org_id)
 
     return JSONResponse(content={
         "status": "multi_sheet_processed",

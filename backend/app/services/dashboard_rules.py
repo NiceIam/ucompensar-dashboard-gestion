@@ -73,7 +73,6 @@ def _measure(table):
 
 def _categories(table, stats: dict | None) -> list:
     """Columnas buenas para agrupar, de mejor a peor. `stats`: {columna: valores distintos} (opcional)."""
-    limit = max(25, table.rows * 0.5)
     scored = []
     for i, c in enumerate(table.columns):
         if c.kind == engine.KIND_BOOL:
@@ -85,21 +84,33 @@ def _categories(table, stats: dict | None) -> list:
         if score <= 0:
             continue
         distinct = (stats or {}).get(c.name)
-        if distinct is not None and not 2 <= distinct <= limit:
+        # Sirve para agrupar si tiene 2 o mas valores y NO es casi un valor por fila (nombres, codigos...).
+        if distinct is not None and not (distinct >= 2 and (distinct <= 25 or distinct <= table.rows * 0.8)):
             continue
         scored.append((-score, i, c, distinct))
     scored.sort(key=lambda t: (t[0], t[1]))
     return [(c, distinct) for _, _, c, distinct in scored]
 
 
+_UNIT_PRICE_WORDS = frozenset({"precio", "precios", "costo", "costos", "tarifa", "tarifas"})
+
+
+def _aggregate(measure) -> str:
+    """Un precio unitario no se suma: se promedia. Lo demas (total, ventas, stock...) se suma."""
+    if measure is None:
+        return "count"
+    fn = "avg" if any(t in _UNIT_PRICE_WORDS for t in cs._tokens(measure.name)) else "sum"
+    return f"{fn}({measure.name})"
+
+
 def _plan_table(table, stats: dict | None, max_widgets: int):
     measure = _measure(table)
     dates = [c for c in table.columns if c.kind == engine.KIND_DATE]
     cats = _categories(table, stats)
-    value = f"sum({measure.name})" if measure else "count"
+    value = _aggregate(measure)
     widgets = []
     if measure:
-        widgets.append({"table": table.name, "chart_type": "kpi", "y": f"sum({measure.name})"})
+        widgets.append({"table": table.name, "chart_type": "kpi", "y": value})
     widgets.append({"table": table.name, "chart_type": "kpi", "y": "count"})
     if dates:
         widgets.append({
@@ -108,12 +119,13 @@ def _plan_table(table, stats: dict | None, max_widgets: int):
     if cats:
         widgets.append({"table": table.name, "chart_type": "bar", "x": cats[0][0].name, "y": value, "top": 10})
     if len(cats) > 1:
-        second, distinct = cats[1]
-        small = distinct is not None and distinct <= _PIE_MAX_DISTINCT
-        widgets.append({
-            "table": table.name, "chart_type": "pie" if small else "bar", "x": second.name,
-            "y": "count", **({} if small else {"top": 10}),
-        })
+        # Una torta solo con pocas categorias (se sabe por las estadisticas); si no, barras de la siguiente.
+        rest = cats[1:]
+        pie = next(((c, d) for c, d in rest if d is not None and d <= _PIE_MAX_DISTINCT), None)
+        if pie:
+            widgets.append({"table": table.name, "chart_type": "pie", "x": pie[0].name, "y": "count"})
+        else:
+            widgets.append({"table": table.name, "chart_type": "bar", "x": rest[0][0].name, "y": "count", "top": 10})
     elif not cats and not dates and not measure:
         # Hoja solo de texto: lo unico que se puede mostrar es una distribucion por la primera columna de texto.
         first = next((c for c in table.columns if c.kind == engine.KIND_TEXT and not cs.is_id_name(c.name)), None)

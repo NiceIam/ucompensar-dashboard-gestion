@@ -1,6 +1,7 @@
 from typing import List
 
 from fastapi import APIRouter, status
+from pydantic import BaseModel
 
 from app.auth import CurrentUserDep
 from app.models.schemas import (
@@ -35,6 +36,21 @@ router = APIRouter(prefix="/api/v1/dashboards", tags=["Dashboards"])
 )
 async def create(body: DashboardCreate, current_user: CurrentUserDep) -> DashboardResponse:
     return await create_dashboard(current_user.org_id, current_user.user_id, body)
+
+
+class SuggestRequest(BaseModel):
+    # auto=True: solo si la organizacion no tiene tableros y esos datos no se sugirieron antes (lo usa Tableros
+    # cuando esta vacio). auto=False: el boton "Sugerir tableros".
+    auto: bool = False
+
+
+@router.post(
+    "/suggest",
+    summary="Sugiere y crea 1-3 tableros con tus datos (una llamada pequeña a la IA o una regla sin IA)",
+)
+async def suggest(current_user: CurrentUserDep, body: SuggestRequest | None = None):
+    from app.services.dashboard_suggest_service import suggest as suggest_dashboards
+    return await suggest_dashboards(current_user.org_id, auto=bool(body and body.auto))
 
 
 @router.get("", response_model=List[DashboardResponse], summary="Lista dashboards de la organización")

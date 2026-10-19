@@ -35,6 +35,7 @@ from typing import Callable, Optional
 from app.services import dashboard_builder_service as _bld
 from app.services import dashboard_render_service as _rnd
 from app.services import dashboard_service as _dsv
+from app.services import dashboard_suggest_service as _sug
 
 
 class FakeDBError(Exception):
@@ -429,6 +430,23 @@ class FakeConn:
                 "created_at": now, "updated_at": now,
             })
             return []
+
+        if q == _norm(_sug.SIG_USED_SQL):
+            hits = [
+                d for d in sorted(db.dashboards.values(), key=lambda d: d["created_at"])
+                if any(isinstance(w["data_source_query"], dict) and w["data_source_query"].get("sig") == args[0]
+                       for w in db.widgets_of(d["id"]))
+            ]
+            return [{"id": d["id"], "name": d["name"], "deleted_at": d["deleted_at"]} for d in hits]
+
+        if q == _norm(_sug.LLM_SIGS_SQL):
+            since = datetime.now(timezone.utc) - timedelta(hours=24)
+            sigs = {
+                w["data_source_query"].get("sig") for w in db.widgets
+                if isinstance(w["data_source_query"], dict) and w["data_source_query"].get("by") == "ai"
+                and w["created_at"] > since
+            }
+            return [{"count": len(sigs)}]
 
         if q == _norm(_dsv.LIST_SQL):
             out = []

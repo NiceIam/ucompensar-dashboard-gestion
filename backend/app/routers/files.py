@@ -68,6 +68,11 @@ async def upload_file(
             )
         result = {"status": "uploaded_without_mapping", "rows_inserted": 0}
 
+    if result.get("rows_inserted"):
+        # Si la organizacion aun no tiene tableros, se sugieren (no lanza ni espera mas que su tope de tiempo).
+        from app.services.dashboard_suggest_service import auto_suggest_after_upload
+        await auto_suggest_after_upload(current_user.org_id)
+
     created_at = datetime.now(timezone.utc)
 
     return {
