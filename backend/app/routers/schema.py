@@ -32,6 +32,12 @@ class CreateTableRequest(BaseModel):
     columns: list[dict]
 
 
+class UpdateRolesRequest(BaseModel):
+    """Correccion del duenio: tipo de la hoja y/o el rol de algunas columnas (null = 'dato adicional')."""
+    kind: Optional[str] = Field(default=None, max_length=40)
+    roles: dict[str, Optional[str]] = Field(default_factory=dict, max_length=200)
+
+
 class ModifyTableRequest(BaseModel):
     add_columns: list[dict] = Field(default_factory=list)
     new_display_name: Optional[str] = None
@@ -63,7 +69,7 @@ async def smart_upload(
     # Caso simple: CSV/JSON o Excel de una sola hoja — mismo shape de respuesta de siempre.
     if len(sheets) == 1:
         _sheet_name, df = sheets[0]
-        result = await agent.smart_upload(df, current_user.org_id, filename)
+        result = await agent.smart_upload(df, current_user.org_id, filename, sheet_name=_sheet_name)
         return JSONResponse(content=result)
 
     # Excel con varias pestañas: procesar cada una por separado y agregar resultados.
@@ -83,7 +89,7 @@ async def smart_upload(
             continue
 
         try:
-            result = await agent.smart_upload(df, current_user.org_id, f"{filename} :: {label}")
+            result = await agent.smart_upload(df, current_user.org_id, filename, sheet_name=sheet_name or label)
             result["sheet_name"] = sheet_name
             sheet_results.append(result)
             total_rows_inserted += result.get("rows_inserted", 0) or 0
@@ -123,6 +129,18 @@ async def modify_table(table_id: str, body: ModifyTableRequest, current_user: Cu
     if "error" in result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=result["error"])
     return result
+
+
+@router.put("/tables/{table_id}/roles", summary="Corrige el tipo de hoja o el rol de sus columnas")
+async def update_table_roles(table_id: str, body: UpdateRolesRequest, current_user: CurrentUserDep = None):
+    from app.services import intake_service as intake
+
+    _table_uuid(table_id)
+    try:
+        return await intake.update_table_roles(current_user.org_id, table_id, body.roles, body.kind)
+    except intake.IntakeError as exc:
+        code = status.HTTP_404_NOT_FOUND if exc.code == "not_found" else status.HTTP_422_UNPROCESSABLE_ENTITY
+        raise HTTPException(status_code=code, detail=exc.message)
 
 
 @router.delete("/tables/{table_id}", summary="Elimina tabla y sus datos")
