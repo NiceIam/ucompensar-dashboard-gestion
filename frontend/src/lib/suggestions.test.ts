@@ -27,11 +27,20 @@ describe("vocabulario de datos", () => {
     expect(columnKind({ name: "nit", type: "text" })).toBe("id")
     expect(columnKind({ name: "pagado", type: "boolean" })).toBe("boolean")
     expect(columnKind({ name: "region", type: "varchar" })).toBe("text")
+    // El nombre limpio perdió la pista, pero la etiqueta original la conserva.
+    expect(columnKind({ name: "col_1", label: "#", type: "integer" })).toBe("id")
+    expect(columnKind({ name: "index", label: "Index", type: "integer" })).toBe("id")
   })
 
   test("detección de códigos y dinero", () => {
     expect(isIdLike("numero_factura")).toBe(true)
     expect(isIdLike("valor_total")).toBe(false)
+    // Índices de hojas exportadas, sin importar mayúsculas (salieron como "medida" en el demo real).
+    for (const name of ["Index", "index", "INDEX", "id", "ID", "cliente_id", "clienteId", "#", "N°", "Nº", "Índice", "Unnamed: 0", "idx"]) {
+      expect(isIdLike(name), name).toBe(true)
+    }
+    // Un índice como métrica de negocio sigue siendo medida.
+    expect(isIdLike("indice_satisfaccion")).toBe(false)
     expect(isMoneyLike("precioVenta")).toBe(true)
     expect(isMoneyLike("cantidad")).toBe(false)
   })
@@ -59,6 +68,24 @@ describe("preguntas sugeridas", () => {
       { name: "total", type: "number" },
     ],
   }
+
+  test("una columna de índice nunca se usa como medida", () => {
+    const conIndice = {
+      name: "Ventas",
+      rowCount: 300,
+      columns: [
+        { name: "Index", type: "integer" },
+        { name: "fecha", type: "date" },
+        { name: "region", type: "text" },
+        { name: "cantidad", type: "integer" },
+      ],
+    }
+    const qs = questionsForTable(conIndice)
+    expect(qs.join(" ")).not.toMatch(/index/i)
+    expect(qs[0]).toBe("¿Cómo cambia la cantidad mes a mes?")
+    const soloIndice = { ...conIndice, columns: [{ name: "Index", type: "integer" }, { name: "#", type: "integer" }, { name: "fecha", type: "date" }] }
+    expect(questionsForTable(soloIndice).join(" ")).not.toMatch(/index|«#»/i)
+  })
 
   test("fecha + número -> evolución mes a mes con el artículo correcto", () => {
     expect(questionsForTable(ventas)[0]).toBe("¿Cómo cambia el total mes a mes?")

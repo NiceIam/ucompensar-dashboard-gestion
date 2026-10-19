@@ -111,7 +111,12 @@ const ID_WORDS = new Set([
   "id", "uuid", "codigo", "cod", "nit", "cedula", "cc", "documento", "doc", "telefono", "tel",
   "celular", "movil", "email", "correo", "mail", "numero", "nro", "num", "no", "sku", "ean",
   "referencia", "ref", "consecutivo", "radicado", "placa", "serial", "url", "link",
+  // Índices que dejan las hojas exportadas (pandas, Excel): nunca son una medida.
+  "index", "idx", "unnamed", "rownum", "rowid",
 ])
+
+/** Nombres que, SOLOS, son el consecutivo de la fila ("#", "N°", "Índice"). */
+const ROW_INDEX_NAME = /^(#+|n\s*[°º]|nro\.?|[ií]ndice)$/i
 
 const MONEY_WORDS = new Set([
   "precio", "precios", "valor", "valores", "costo", "costos", "monto", "montos", "ingreso", "ingresos",
@@ -122,6 +127,7 @@ const MONEY_WORDS = new Set([
 
 /** true si el nombre sugiere un identificador (no se suma ni sirve para agrupar). */
 export function isIdLike(name: string): boolean {
+  if (ROW_INDEX_NAME.test(name.trim())) return true
   const tokens = nameTokens(name)
   if (tokens.length === 0) return false
   return tokens.some((t) => ID_WORDS.has(t)) && !tokens.some((t) => MONEY_WORDS.has(t) && t !== "iva")
@@ -135,13 +141,15 @@ export function isMoneyLike(name: string): boolean {
 /** Tipo técnico + nombre -> clase de columna en lenguaje de negocio. */
 export function columnKind(col: ColumnLike): ColumnKind {
   const type = (col.type ?? "text").toLowerCase()
+  // El nombre limpio puede perder la pista ("#" -> "col_1"): se mira también la etiqueta original.
+  const idLike = isIdLike(col.name) || (col.label ? isIdLike(col.label) : false)
   if (/^(date|datetime|timestamp|time)/.test(type)) return "date"
   if (/^(bool)/.test(type)) return "boolean"
   if (/^(int|integer|bigint|smallint|float|double|decimal|numeric|number|real)/.test(type)) {
-    if (isIdLike(col.name)) return "id"
+    if (idLike) return "id"
     return isMoneyLike(col.name) ? "money" : "number"
   }
-  if (isIdLike(col.name)) return "id"
+  if (idLike) return "id"
   return "text"
 }
 
