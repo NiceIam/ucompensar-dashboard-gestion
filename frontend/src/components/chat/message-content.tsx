@@ -3,7 +3,9 @@
 import type { ReactNode } from "react"
 import { SimpleChart, type ChartForm } from "@/components/charts/simple-chart"
 import { DashboardCard } from "@/components/chat/dashboard-card"
-import { MESSAGE_BLOCK, parseDashboardBlock } from "@/lib/dashboard-block"
+import { DashboardEditCard } from "@/components/chat/dashboard-edit-card"
+import { MESSAGE_BLOCK, MESSAGE_BLOCK_GLOBAL, parseDashboardBlock } from "@/lib/dashboard-block"
+import { parseDashboardEditBlock } from "@/lib/dashboard-edit-block"
 import { monthName } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -194,6 +196,11 @@ export function MessageContent({ text }: { text: string }) {
   return (
     <>
       {parts.map((part, i) => {
+        // ```dashboard_edit va ANTES que ```dashboard: el segundo es prefijo del primero.
+        if (part.startsWith("```dashboard_edit") && MESSAGE_BLOCK.test(part)) {
+          const edit = parseDashboardEditBlock(part.replace(/^```dashboard_edit\s*\n/, "").replace(/\n```$/, ""))
+          return edit ? <DashboardEditCard key={i} edit={edit} /> : null
+        }
         if (part.startsWith("```dashboard") && MESSAGE_BLOCK.test(part)) {
           const board = parseDashboardBlock(part.replace(/^```dashboard\s*\n/, "").replace(/\n```$/, ""))
           return board ? <DashboardCard key={i} dashboard={board} /> : null
@@ -216,7 +223,7 @@ export function MessageContent({ text }: { text: string }) {
 /** Texto plano del mensaje, sin bloques de gráfico ni de tablero (para copiar). */
 export function plainText(text: string): string {
   return text
-    .replace(/```(?:chart|dashboard)\s*\n[\s\S]*?\n```/g, "")
+    .replace(MESSAGE_BLOCK_GLOBAL, "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .trim()
 }

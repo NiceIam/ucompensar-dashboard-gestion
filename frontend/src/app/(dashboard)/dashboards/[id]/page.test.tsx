@@ -94,4 +94,9 @@ describe("detalle del tablero", () => {
     render(<DashboardDetailPage />)
     expect(screen.getByRole("button", { name: /Intentar de nuevo/ })).toBeInTheDocument()
   })
+
+  test("ofrece pedirle al asistente que edite este tablero", () => {
+    show({ charts: [], kpis: [] })
+    expect(screen.getByRole("button", { name: "Pídele al asistente que lo edite" })).toBeEnabled()
+  })
 })

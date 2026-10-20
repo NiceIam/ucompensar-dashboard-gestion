@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useFloatingChat, type FloatingChatState } from "@/hooks/use-floating-chat"
+import { invalidateDashboard } from "@/hooks/use-dashboards"
 
 /** Pregunta que otra parte de la app le pasa al chat (inicio, cierre del cargue...). */
 export interface PendingQuestion {
@@ -57,7 +58,11 @@ function isDesktop(): boolean {
 export function ChatProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   // Si el chat crea un tablero, la lista de tableros se refresca sin esperar a que caduque su caché.
-  const chat = useFloatingChat({ onDashboardCreated: () => void queryClient.invalidateQueries({ queryKey: ["dashboards"] }) })
+  // Si lo EDITA, además se refresca el detalle de ese tablero (si está abierto, se ve el cambio sin recargar).
+  const chat = useFloatingChat({
+    onDashboardCreated: () => void queryClient.invalidateQueries({ queryKey: ["dashboards"] }),
+    onDashboardsEdited: (ids) => ids.forEach((id) => invalidateDashboard(queryClient, id)),
+  })
   const [isOpen, setIsOpen] = useState(false)
   const [pending, setPending] = useState<PendingQuestion | null>(null)
   const counter = useRef(0)
@@ -88,8 +93,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const ask = useCallback(
     (question: string, options?: { send?: boolean }) => {
-      const text = question.trim()
-      if (!text) return
+      // Escrita sin enviar, conserva el espacio final: la persona sigue escribiendo justo ahí («…»: agrégale…).
+      const text = options?.send === false ? question.trimStart() : question.trim()
+      if (!text.trim()) return
       counter.current += 1
       setPending({ id: counter.current, text, send: options?.send ?? true })
       setOpen(true)

@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ChartRenderer } from "@/components/charts/chart-renderer"
+import { EditWithAssistantButton } from "@/components/dashboards/edit-with-assistant-button"
 import { EmptyState, ErrorState } from "@/components/kit/empty-state"
 import { MetricTile } from "@/components/kit/metric-tile"
 import { Notice } from "@/components/kit/notice"
@@ -124,6 +125,7 @@ export default function DashboardDetailPage() {
               {ago && !isFetching && <span className="text-muted-foreground"> · Actualizado {ago}.</span>}
               {isFetching && !isLoading && <span className="text-muted-foreground"> · Actualizando…</span>}
             </p>
+            <EditWithAssistantButton name={meta?.name ?? ""} />
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>

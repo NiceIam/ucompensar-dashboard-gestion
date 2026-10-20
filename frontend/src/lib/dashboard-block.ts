@@ -5,6 +5,10 @@
  * contenido se valida aquí antes de usarlo. El `id` debe ser un UUID (nunca se arma un enlace con otra cosa) y
  * el nombre solo se pinta como texto de React.
  */
+import { dashboardEditBlocks } from "@/lib/dashboard-edit-block"
+import { isUuid } from "@/lib/uuid"
+
+export { isUuid }
 
 export interface ChatDashboard {
   id: string
@@ -13,12 +17,6 @@ export interface ChatDashboard {
   widgets: number | null
   /** true: el pedido coincidía con un tablero que ya tenías; no se creó otro. */
   existing: boolean
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
-export function isUuid(value: unknown): value is string {
-  return typeof value === "string" && UUID.test(value)
 }
 
 /** Enlace interno al tablero, o null si el id no es un UUID válido. */
@@ -45,15 +43,21 @@ export function parseDashboardBlock(json: string): ChatDashboard | null {
   }
 }
 
-/** Bloques ```chart y ```dashboard del contenido (para partir el texto del mensaje). */
-export const MESSAGE_BLOCK = /(```(?:chart|dashboard)\s*\n[\s\S]*?\n```)/
+/** Bloques ```chart, ```dashboard y ```dashboard_edit del contenido (para partir el texto del mensaje). */
+export const MESSAGE_BLOCK = /(```(?:chart|dashboard_edit|dashboard)\s*\n[\s\S]*?\n```)/
 
-/** true si el mensaje trae al menos un bloque de tablero válido (el chat refresca la lista de tableros). */
+/** Los mismos bloques, para quitarlos del texto (al copiar el mensaje). */
+export const MESSAGE_BLOCK_GLOBAL = /```(?:chart|dashboard_edit|dashboard)\s*\n[\s\S]*?\n```/g
+
+/**
+ * true si el mensaje trae al menos un bloque de tablero válido, creado (```dashboard) o editado
+ * (```dashboard_edit): el chat refresca entonces la lista de tableros.
+ */
 export function hasDashboardBlock(content: string): boolean {
   const re = /```dashboard\s*\n([\s\S]*?)\n```/g
   let match: RegExpExecArray | null
   while ((match = re.exec(content)) !== null) {
     if (parseDashboardBlock(match[1])) return true
   }
-  return false
+  return dashboardEditBlocks(content).length > 0
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import type { Dashboard } from "@/types/api"
 
@@ -132,5 +132,41 @@ export function useDeleteDashboard() {
       queryClient.removeQueries({ queryKey: ["dashboard-meta", id] })
       queryClient.removeQueries({ queryKey: ["dashboard-execute", id] })
     },
+  })
+}
+
+/** Refresca lo que depende de un tablero tras editarlo o deshacer una edición: su detalle, sus gráficos y la lista. */
+export function invalidateDashboard(queryClient: QueryClient, id: string): void {
+  void queryClient.invalidateQueries({ queryKey: ["dashboards"] })
+  void queryClient.invalidateQueries({ queryKey: ["dashboard-meta", id] })
+  void queryClient.invalidateQueries({ queryKey: ["dashboard-execute", id] })
+}
+
+export interface UndoEditInput {
+  id: string
+  /** Lo que `Deshacer` restaura: viene del bloque de edición del asistente. */
+  version: string
+  /** true: también se pierden las ediciones más recientes (la persona ya lo confirmó). */
+  includeNewer?: boolean
+}
+
+export interface UndoEditResult {
+  id: string
+  name: string
+  widgets: number
+  discarded_newer: number
+}
+
+/**
+ * Deshace una edición hecha por el asistente. El 404 (ya no se puede) y el 409 `newer_edits` los maneja la
+ * tarjeta: llegan como `ApiError`.
+ */
+export function useUndoDashboardEdit() {
+  const queryClient = useQueryClient()
+
+  return useMutation<UndoEditResult, Error, UndoEditInput>({
+    mutationFn: ({ id, version, includeNewer }): Promise<UndoEditResult> =>
+      api.post(`/api/v1/dashboards/${id}/undo-edit`, { version, include_newer: Boolean(includeNewer) }),
+    onSuccess: (_result, { id }) => invalidateDashboard(queryClient, id),
   })
 }
