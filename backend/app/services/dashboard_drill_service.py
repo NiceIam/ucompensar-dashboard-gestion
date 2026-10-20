@@ -317,25 +317,29 @@ async def _drill_other(pool, entry, table, spec, key, agg, points, base_filters,
     if spec.kind != "pie":
         raise DrillError("Solo la porción «Otros» de un pastel agrupa varias categorías.")
     keep = points - 1
-    plan = engine.build_plan(table, filters=base_filters, group_by=[spec.x], aggregates=[spec.y],
+    aggs = list(dict.fromkeys([spec.y, "count"]))
+    plan = engine.build_plan(table, filters=base_filters, group_by=[spec.x], aggregates=aggs,
                              limit=keep + DRILL_MAX_ROWS, max_rows=keep + DRILL_MAX_ROWS)
+    count_at = plan.labels.index("count")
     grand_plan = engine.build_plan(table, filters=base_filters, aggregates=[spec.y, "count"] if spec.y != "count" else ["count"],
                                    max_rows=1)
     result, grand = await _run(pool, [plan, grand_plan])
     grand_row = dict(zip(grand_plan.labels, grand.rows[0])) if grand.rows else {}
     top, rest = result.rows[:keep], result.rows[keep:]
+    value_at = plan.labels.index(agg.label)
     groups = max(0, result.total - keep)
-    total_value = _num((grand_row.get(agg.label) or 0) - sum((v or 0) for _, v in top))
-    share_ok = additive and total_value and total_value > 0 and all((v or 0) >= 0 for _, v in rest)
+    total_value = _num((grand_row.get(agg.label) or 0) - sum((row[value_at] or 0) for row in top))
+    records = int(grand_row.get("count") or 0) - sum(int(row[count_at] or 0) for row in top)
+    share_ok = additive and total_value and total_value > 0 and all((row[value_at] or 0) >= 0 for row in rest)
     rows = [
-        {"name": engine.cell(label, 60) if label is not None else "(sin dato)", "value": _num(v),
-         "share": round(_num(v) / total_value, 4) if share_ok and _num(v) is not None else None}
-        for label, v in rest[:DRILL_MAX_ROWS] if v is not None
+        {"name": engine.cell(row[0], 60) if row[0] is not None else "(sin dato)", "value": _num(row[value_at]),
+         "share": round(_num(row[value_at]) / total_value, 4) if share_ok and _num(row[value_at]) is not None else None}
+        for row in rest[:DRILL_MAX_ROWS] if row[value_at] is not None
     ]
     title = labels.slice_title(measure["label"], key, None, other=groups)
     out = {
         "title": title, "widget": {"id": entry["id"], "title": cs.chart_title(key, agg, table)}, **labels_out,
-        "measure": measure, "total": total_value, "records": int(grand_row.get("count") or 0), "additive": additive,
+        "measure": measure, "total": total_value, "records": records, "additive": additive,
         "by": {"by": key.col.name, "label": labels.dim_label(key.col), "kind": "category"}, "dimensions": [],
         "rows": rows, "groups": groups, "shown": len(rows), "truncated": groups > len(rows),
         "message": f"Mostrando {len(rows)} de {groups}" if groups > len(rows) else None, "order": "value",

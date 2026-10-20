@@ -283,6 +283,10 @@ class TestDetalleDeUnaCategoria:
         assert out["total"] == 13_282_800 and out["groups"] == 42 and out["shown"] == 42 and out["truncated"] is False
         assert out["title"] == "Ventas de los 42 productos restantes"
         assert sum(r["value"] for r in out["rows"]) == 13_282_800
+        # registros: SOLO las ventas de esos 42 productos (731 menos las de los 9 productos visibles), calculado con csv
+        top9 = sorted(csv_sum(demo_rows(), "producto").items(), key=lambda kv: -kv[1])[:9]
+        visible = {name for name, _ in top9}
+        assert out["records"] == sum(1 for r in demo_rows() if r["producto"] not in visible) < 731
         assert out["rows"][0]["value"] <= 1_036_500          # el 10.o producto, por debajo de los 9 visibles
 
     async def test_otros_solo_existe_en_las_tortas(self, demo_board):
