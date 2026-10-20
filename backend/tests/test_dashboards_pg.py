@@ -192,7 +192,7 @@ class TestSQLReal:
         assert item.widget_count == 3 and item.source == "assistant"
         assert item.preview["type"] == "line"
         assert item.preview["points"] == [3315500, 3174500, 2994700, 750000]
-        assert item.highlights == ["Suma de total por mes de fecha", "Suma de total por metodo_pago"]
+        assert item.highlights == ["Total por mes", "Total por método de pago"]
 
     async def test_el_widget_viejo_o_hostil_escrito_por_rest_con_jsonb_raro_no_rompe_la_lista(self, pg, patched):
         from app.services.dashboard_service import list_dashboards

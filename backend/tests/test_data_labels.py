@@ -88,6 +88,13 @@ class TestTitulos:
         assert cs.chart_title(key_of(col("mp", K, "metodo_pago")), agg_of("sum", total), t) == "Ventas por forma de pago"
         assert cs.chart_title(key_of(col("c", K, "cliente")), agg_of("avg", total), t) == "Venta promedio por cliente"
 
+    def test_la_dimension_sin_rol_tambien_se_humaniza(self):
+        total = col("vr.total", N)
+        assert cs.chart_title(key_of(col("met.pago", K)), agg_of("sum", total)) == "Valor total por método de pago"
+        assert cs.chart_title(key_of(col("cli_nom", K)), agg_of("sum", total)) == "Valor total por cliente nom"
+        assert labels.key_label(key_of(col("prov.", K))) == "Proveedor"
+        assert labels.dim_label(col("sucursal_ppal", K, label="Sucursal Ppal")) == "Sucursal ppal"
+
     def test_los_conteos_dicen_de_que(self):
         assert cs.chart_title(key_of(col("proveedor")), agg_of("count")) == "Número de registros por proveedor"
         assert cs.chart_title(key_of(col("p", K, "producto")), agg_of("count"), table("ventas")) == "Número de ventas por producto"

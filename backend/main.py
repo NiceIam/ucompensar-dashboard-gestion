@@ -42,6 +42,8 @@ def _on_rate_limit_exceeded(request: Request, exc: RateLimitExceeded):
         what = "Estás consultando tus hallazgos muy seguido."
     elif path.startswith("/api/v1/intake"):
         what = "Estás subiendo archivos muy rápido."
+    elif path.startswith("/api/v1/dashboards"):
+        what = "Estás consultando tus tableros muy seguido."
     else:
         return _rate_limit_exceeded_handler(request, exc)
     retry_after = max(1, int(exc.limit.limit.get_expiry()))  # ventana completa: cota superior del tiempo de espera
