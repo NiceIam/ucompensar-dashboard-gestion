@@ -862,7 +862,23 @@ class TestGating:
         assert _wants_edit("renombralo a Ventas 2026", [user, block]) is True
         assert _wants_edit("agregale un gráfico de ventas por método de pago", []) is False
         assert _wants_edit("agregame un gráfico de ventas por método de pago", [user, block]) is False   # sin pronombre
-        assert _wants_edit("agregale un gráfico", [user, block, {"role": "user", "content": "hola"}, {"role": "assistant", "content": "hola"}]) is False
+        filler = [{"role": "user", "content": "hola"}, {"role": "assistant", "content": "hola"}] * 4
+        assert _wants_edit("agregale un gráfico", [user, block, *filler]) is False        # el tablero ya quedo lejos
+        assert _wants_edit("agregale un gráfico", [user, block, *filler[:6]]) is True       # aun dentro de los 8 mensajes
+
+    @pytest.mark.parametrize("message", [
+        "cambia el gráfico de barras por una torta", "quita la cifra", "elimina el segundo gráfico",
+        "reemplaza el de barras por uno de líneas", "cambia el nombre a Ventas 2026", "modifica la torta",
+    ])
+    def test_con_un_tablero_reciente_una_referencia_a_un_grafico_existente_basta(self, message):
+        block = {"role": "assistant", "content": "[tablero editado: Ventas]"}
+        assert _wants_edit(message, [{"role": "user", "content": "x"}, block]) is True
+        assert _wants_edit(message, []) is False                                          # sin tablero a la vista, no
+
+    @pytest.mark.parametrize("message", ["cambia un gráfico por otro", "agrégame un gráfico de ventas", "quita ruido"])
+    def test_un_grafico_indefinido_no_habilita_la_edicion_aunque_haya_un_tablero(self, message):
+        block = {"role": "assistant", "content": "[tablero creado: Ventas]"}
+        assert _wants_edit(message, [{"role": "user", "content": "x"}, block]) is False
 
     def test_responder_la_pregunta_del_asistente_mantiene_el_modo(self):
         history = [

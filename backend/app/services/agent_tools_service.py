@@ -634,7 +634,17 @@ _CREATE_BOARD = re.compile(
 )
 
 
-def _recent_board(history: list[dict], span: int = 2) -> bool:
+# Referencia a algo que YA existe ("el grafico de barras", "la torta", "el segundo grafico", "el de barras", "el
+# nombre"): con un tablero reciente en la conversacion basta. "un grafico" (indefinido) NO cuenta.
+_EXISTING_REF = re.compile(
+    r"\b(?:el|la|los|las|ese|esa|este|esta|del|al|segundo|segunda|tercer\w*|primer\w*|ultim\w*)\s+(?:de\s+)?"
+    r"(?:\w+\s+){0,2}?(?:grafico|grafica|graficos|graficas|torta|tortas|barras|linea|lineas|cifra|cifras|indicador)\b"
+    r"|\bel de (?:barras|linea|lineas|torta|cifra)\b|\bnombre\b"
+)
+_RECENT_SPAN = 8       # mensajes de historial que mira send_message (los ultimos 8)
+
+
+def _recent_board(history: list[dict], span: int = _RECENT_SPAN) -> bool:
     """Si en los ultimos mensajes aparecio un tablero (creado o editado por el asistente)."""
     for m in history[-span:]:
         content = str(m.get("content") or "")
@@ -644,14 +654,14 @@ def _recent_board(history: list[dict], span: int = 2) -> bool:
 
 
 def _edit_request(message: str, history: list[dict]) -> bool:
-    """Un mensaje que pide cambiar un tablero que ya existe: verbo de edicion Y (un tablero nombrado, o un
-    pronombre pegado al verbo cuando acaba de aparecer un tablero en la conversacion)."""
+    """Un mensaje que pide cambiar un tablero que ya existe: verbo de edicion Y (un tablero nombrado, o -si hubo un
+    tablero en la conversacion reciente- un pronombre pegado al verbo o una referencia a un grafico existente)."""
     text = _fold(message)
     if _CREATE_BOARD.search(text) or not _EDIT_VERB.search(text):
         return False
     if _BOARD_WORD.search(text):
         return True
-    return bool(_EDIT_CLITIC.search(text)) and _recent_board(history)
+    return bool(_EDIT_CLITIC.search(text) or _EXISTING_REF.search(text)) and _recent_board(history)
 
 
 def _wants_edit(user_message: str, chat_history: list[dict] | None = None) -> bool:
