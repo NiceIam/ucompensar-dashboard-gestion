@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -12,6 +14,7 @@ import { PasswordInput } from "@/components/kit/field"
 import { Notice } from "@/components/kit/notice"
 import { useAuth } from "@/hooks/use-auth"
 import { usePageTitle } from "@/hooks/use-page-title"
+import { useAuthContext } from "@/providers/auth-provider"
 
 const loginSchema = z.object({
   email: z.string().trim().min(1, "Escribe tu correo.").email("Revisa tu correo: parece que le falta algo (por ejemplo, la @)."),
@@ -23,6 +26,14 @@ type LoginFormValues = z.infer<typeof loginSchema>
 export default function LoginPage() {
   usePageTitle("Ingresar")
   const { signIn, loading, errorInfo, clearError } = useAuth()
+
+  // Quien ya tiene una sesion VALIDA (segun /auth/me) no necesita ver el login. Una cookie vieja o invalida no
+  // cuenta: /auth/me responde 401, no hay usuario y el formulario se muestra normalmente.
+  const { user, loading: sessionLoading } = useAuthContext()
+  const router = useRouter()
+  useEffect(() => {
+    if (!sessionLoading && user) router.replace("/")
+  }, [sessionLoading, user, router])
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),

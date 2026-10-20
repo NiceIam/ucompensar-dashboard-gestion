@@ -16,11 +16,12 @@ export function middleware(request: NextRequest): NextResponse {
   // aqui, aunque el usuario si este autenticado -- por eso ya no se bloquea
   // el acceso solo por su ausencia; el respaldo real es el chequeo del lado
   // del cliente contra /api/v1/auth/me en (dashboard)/layout.tsx.
-  if (token && isPublicRoute) {
-    const url = request.nextUrl.clone()
-    url.pathname = "/"
-    return NextResponse.redirect(url)
-  }
+  // OJO: aqui NO se redirige de /login a "/" por ver una cookie. El middleware no puede saber si la cookie es
+  // valida (puede estar vencida, revocada o ser de otra base de datos), y si no lo es se forma un bucle:
+  // "/" -> /auth/me 401 -> /login -> "/" ... sin que la persona vea jamas el login. Quien ya tiene una sesion
+  // VALIDA se redirige desde la propia pagina de inicio de sesion (usa /auth/me como fuente de verdad).
+  void token
+  void isPublicRoute
 
   return NextResponse.next()
 }
