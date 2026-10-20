@@ -1919,7 +1919,7 @@ class TestRondaFinalDirecta:
         assert gemini.send.call_count == 3                       # ninguna llamada extra al modelo
         assert "fallback_reason" not in result
         assert result["final_round_direct"] is True
-        assert set(result) == {"text", "charts", "dashboards", "actions", "usage", "final_round_direct"}
+        assert set(result) == {"text", "charts", "dashboards", "dashboard_edits", "actions", "usage", "final_round_direct"}
         assert result["charts"] == [] and result["actions"] == []
         assert result["usage"]["tool_rounds"] == 2
         assert result["usage"]["tools"] == ["query_table", "describe_table", "query_table"]

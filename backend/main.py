@@ -19,6 +19,7 @@ from app.routers import (
     auth_router,
     agents,
     chat,
+    dashboard_edits,
     dashboards,
     etl,
     files,
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(files.router)
     app.include_router(agents.router)
     app.include_router(dashboards.router)
+    app.include_router(dashboard_edits.router)
     app.include_router(chat.router)
     app.include_router(insights.router)
     app.include_router(intake.router)

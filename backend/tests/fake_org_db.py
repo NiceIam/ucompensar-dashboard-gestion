@@ -33,6 +33,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
 from app.services import dashboard_builder_service as _bld
+from app.services import dashboard_edit_service as _edt
 from app.services import dashboard_render_service as _rnd
 from app.services import dashboard_service as _dsv
 from app.services import dashboard_suggest_service as _sug
@@ -513,6 +514,118 @@ class FakeConn:
                 "created_at": now, "updated_at": now, "deleted_at": None,
             }
             return [dict(db.dashboards[did])]
+
+        # -- edicion de tableros (dashboard_edit_service) ---------------------------------------------
+        if q == _norm(_edt.LOCK_SQL):
+            if db.tx_depth == 0:
+                raise FakeDBError("pg_advisory_xact_lock fuera de una transaccion no protege nada")
+            if not (args and isinstance(args[0], str) and args[0].startswith("dashboard_edit:")):
+                raise FakeDBError("la clave del lock debe ser dashboard_edit:<id>")
+            return [{"pg_advisory_xact_lock": None}]
+
+        if q == _norm(_edt.BOARDS_SQL):
+            out = []
+            for d in sorted(live, key=lambda d: (d["updated_at"], d["created_at"]), reverse=True)[: args[0]]:
+                ws = sorted(db.widgets_of(d["id"]), key=lambda w: (w["position_y"], w["position_x"], w["created_at"]))
+                out.append({"id": d["id"], "name": d["name"], "updated_at": d["updated_at"], "widget_count": len(ws),
+                            "titles": [w["title"] for w in ws[:12]], "kinds": [w["widget_type"] for w in ws[:12]]})
+            return out
+
+        if q == _norm(_edt.BOARD_SQL):
+            return [{"id": d["id"], "name": d["name"], "description": d["description"]} for d in live if d["id"] == args[0]]
+
+        if q == _norm(_edt.OTHER_NAMES_SQL):
+            return [{"name": d["name"]} for d in live if d["id"] != args[0]]
+
+        if q == _norm(_edt.WIDGETS_SQL):
+            ws = sorted(db.widgets_of(args[0]), key=lambda w: (w["position_y"], w["position_x"], w["created_at"]))
+            return [widget_row(w) for w in ws]
+
+        if q == _norm(_edt.DELETE_WIDGET_SQL):
+            db.widgets = [w for w in db.widgets if not (w["id"] == args[0] and w["dashboard_id"] == args[1])]
+            return []
+
+        if q == _norm(_edt.DELETE_ALL_WIDGETS_SQL):
+            db.widgets = [w for w in db.widgets if w["dashboard_id"] != args[0]]
+            return []
+
+        if q == _norm(_edt.UPDATE_WIDGET_SQL):
+            for w in db.widgets:
+                if w["id"] == args[0] and w["dashboard_id"] == args[1]:
+                    if len(args[2]) > 120:
+                        raise FakeDBError("value too long for type character varying(120)")
+                    w.update(title=args[2], widget_type=args[3], config=_strict_json(args[4]),
+                             data_source_query=_strict_json(args[5]) if args[5] is not None else None,
+                             updated_at=datetime.now(timezone.utc))
+            return []
+
+        if q == _norm(_edt.UPDATE_QUERY_SQL):
+            for w in db.widgets:
+                if w["id"] == args[0] and w["dashboard_id"] == args[1]:
+                    w["data_source_query"] = _strict_json(args[2])
+            return []
+
+        if q == _norm(_edt.INSERT_WIDGET_SQL):
+            if args[1] not in db.dashboards:
+                raise FakeDBError("violates foreign key constraint")
+            if any(w["id"] == args[0] for w in db.widgets):
+                raise FakeDBError("duplicate key value violates unique constraint widgets_pkey")
+            if len(args[2]) > 120:
+                raise FakeDBError("value too long for type character varying(120)")
+            now = datetime.now(timezone.utc)
+            db.widgets.append({
+                "id": args[0], "dashboard_id": args[1], "title": args[2], "widget_type": args[3],
+                "config": _strict_json(args[4]), "position_x": args[5], "position_y": args[6], "width": args[7],
+                "height": args[8], "data_source_query": _strict_json(args[9]) if args[9] is not None else None,
+                "created_at": now, "updated_at": now,
+            })
+            return []
+
+        if q in (_norm(_edt.RENAME_SQL), _norm(_edt.TOUCH_SQL), _norm(_edt.RESTORE_BOARD_SQL)):
+            for d in live:
+                if d["id"] == args[0]:
+                    if q == _norm(_edt.RENAME_SQL):
+                        if len(args[1]) > 120:
+                            raise FakeDBError("value too long for type character varying(120)")
+                        d["name"] = args[1]
+                    elif q == _norm(_edt.RESTORE_BOARD_SQL):
+                        d["name"], d["description"] = args[1], args[2]
+                    d["updated_at"] = datetime.now(timezone.utc) + timedelta(microseconds=len(db.sql_log))
+            return []
+
+        def version_rows(table):
+            return [r for r in db.records if r["table_name"] == table and "id" in r]
+
+        def seq_of(r):
+            return int(r["data"]["seq"])
+
+        if q == _norm(_edt.VERSION_MAX_SQL):
+            seqs = [seq_of(r) for r in version_rows(args[0])]
+            return [{"max": max(seqs) if seqs else None}]
+
+        if q == _norm(_edt.VERSION_INSERT_SQL):
+            vid = uuid.uuid4()
+            db.records.append({"id": vid, "table_name": args[0], "data": _strict_json(args[1]),
+                               "created_at": datetime.now(timezone.utc)})
+            return [{"id": vid}]
+
+        if q == _norm(_edt.VERSION_PRUNE_SQL):
+            db.records = [r for r in db.records if not (r["table_name"] == args[0] and "id" in r and seq_of(r) <= args[1])]
+            return []
+
+        if q == _norm(_edt.VERSION_CONSUME_SQL):
+            db.records = [r for r in db.records if not (r["table_name"] == args[0] and "id" in r and seq_of(r) >= args[1])]
+            return []
+
+        if q == _norm(_edt.VERSION_GET_SQL):
+            return [{"id": r["id"], "data": jsonb(r["data"])} for r in version_rows(args[1]) if r["id"] == args[0]]
+
+        if q == _norm(_edt.VERSION_NEWER_SQL):
+            return [{"id": r["id"]} for r in version_rows(args[0]) if seq_of(r) > args[1]]
+
+        if q == _norm(_edt.VERSION_LIST_SQL):
+            rows = sorted(version_rows(args[0]), key=seq_of, reverse=True)[: args[1]]
+            return [{"id": r["id"], "data": jsonb(r["data"]), "created_at": r["created_at"]} for r in rows]
 
         raise AssertionError(f"SQL no soportado por FakeConn: {q}")
 

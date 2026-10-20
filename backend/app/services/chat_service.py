@@ -413,6 +413,11 @@ async def send_message(
     for board in result.get("dashboards") or []:
         ai_response += f"\n```dashboard\n{json.dumps(board, ensure_ascii=False)}\n```"
 
+    # Ediciones de tableros aplicadas en este mensaje: igual, el bloque (con el id del tablero y de la version
+    # para deshacer) lo escribe SOLO el servidor.
+    for edit in result.get("dashboard_edits") or []:
+        ai_response += f"\n```dashboard_edit\n{json.dumps(edit, ensure_ascii=False)}\n```"
+
     # Guardar respuesta del asistente
     assistant_msg_id = str(uuid.uuid4())
     completed_at = datetime.now(timezone.utc)
