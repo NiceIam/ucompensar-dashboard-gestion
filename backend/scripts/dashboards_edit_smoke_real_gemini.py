@@ -278,7 +278,7 @@ async def run_scenario(runner, sc_id: int, dry: DryScript | None) -> dict:
         new_chart = None
         if board and edit:
             rendered = await render_dashboard(ORG_ID, board["id"])
-            new_chart = next((c for c in rendered["charts"] if "metodo_pago" in _fold(c["title"]) and not c.get("error")), None)
+            new_chart = next((c for c in rendered["charts"] if "metodo de pago" in _fold(c["title"]).replace("_", " ") and not c.get("error")), None)
             entry["render_errors"] = [c["error"] for c in rendered["charts"] if c.get("error")] + [k["error"] for k in rendered["kpis"] if k.get("error")]
         flags = {"declaro_edit_dashboard": edit_declared, "create_dashboard_NO_declarada": not create_declared,
                  "llamo_edit_dashboard_con_add_widget": "edit_dashboard" in called and "add_widget" in edit_args,
@@ -287,7 +287,7 @@ async def run_scenario(runner, sc_id: int, dry: DryScript | None) -> dict:
                  "sin_errores_al_calcular": not entry.get("render_errors"),
                  "datos_por_metodo_pago_correctos": bool(new_chart) and (
                      {p["name"]: p["value"] for p in new_chart["data"]} == W_METODO_VALUES
-                     or "count" in _fold(new_chart["title"]) or "cantidad" in _fold(new_chart["title"])),
+                     or "registros" in _fold(new_chart["title"]) or "cantidad" in _fold(new_chart["title"])),
                  "sin_ids_en_los_argumentos": not re.search(r'"(id|dashboard_id|color|position\w*)"', edit_args),
                  "entrada_total_<=3500": usage["prompt_tokens"] <= 3500, "salida_total_<=500": usage["output_tokens"] + usage["thoughts_tokens"] <= 500,
                  "a_lo_sumo_3_llamadas": entry["calls_used"] <= 3}

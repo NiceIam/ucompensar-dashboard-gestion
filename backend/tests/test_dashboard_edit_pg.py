@@ -42,7 +42,7 @@ W_MES = {"table": "ventas", "chart_type": "line", "x": "month(fecha)", "y": "sum
 W_PRODUCTO = {"table": "ventas", "chart_type": "bar", "x": "producto", "y": "sum(total)", "top": 5}
 W_METODO = {"table": "ventas", "chart_type": "pie", "x": "metodo_pago", "y": "sum(total)"}
 BASE = [W_KPI, W_MES, W_PRODUCTO]
-T_METODO = "Suma de total por metodo_pago"
+T_METODO = "Total por método de pago"
 
 
 async def _database():
@@ -175,12 +175,12 @@ class TestSQLReal:
         assert out["name"] == "Resumen 2025" and out["widgets"] == 3 and out["noop"] is False
         name, widgets = await rows_of(pg, bid)
         assert name == "Resumen 2025" and sorted(w[1] for w in widgets) == sorted(
-            ["Suma de total por mes de fecha", "Cantidad por metodo_pago", T_METODO])
+            ["Total por mes", "Número de registros por método de pago", T_METODO])
         rendered = await render_dashboard(ORG, str(bid))
         by_title = {c["title"]: {p["name"]: p["value"] for p in c["data"]} for c in rendered["charts"]}
         assert by_title[T_METODO] == {"transferencia": 4_941_700, "tarjeta": 3_109_000, "efectivo": 2_184_000}
-        assert by_title["Cantidad por metodo_pago"] == {"efectivo": 16, "transferencia": 14, "tarjeta": 10}
-        assert by_title["Suma de total por mes de fecha"] == {
+        assert by_title["Número de registros por método de pago"] == {"efectivo": 16, "transferencia": 14, "tarjeta": 10}
+        assert by_title["Total por mes"] == {
             "2025-07": 3_315_500, "2025-08": 3_174_500, "2025-09": 2_994_700, "2025-10": 750_000}
         assert rendered["kpis"] == []                                               # la cifra se quito
 
@@ -237,7 +237,7 @@ class TestSQLReal:
         bid, catalog = await base_board(pg)
         boards = await editor.list_boards(pg)
         assert len(boards) == 1 and boards[0].count == 3
-        assert boards[0].titles == ["Suma de total", "Suma de total por mes de fecha", "Suma de total por producto"]
+        assert boards[0].titles == ["Suma de total", "Total por mes", "Total por producto"]
         assert boards[0].kinds == ["kpi_card", "line_chart", "bar_chart"]
         await editor.edit_dashboard(pg, catalog, "Ventas por día", [add(W_METODO)])
         (v,) = await editor.list_versions(pg, bid)
@@ -262,7 +262,7 @@ class TestSQLReal:
         bid, catalog = await base_board(pg)
         before = await rows_of(pg, bid)
         out = await editor.edit_dashboard(pg, catalog, "Ventas por día", [add(W_MES)])
-        assert out["noop"] is True and out["unchanged"] == ["Suma de total por mes de fecha"]
+        assert out["noop"] is True and out["unchanged"] == ["Total por mes"]
         assert await rows_of(pg, bid) == before and await versions_of(pg, bid) == 0
 
 
@@ -365,7 +365,7 @@ class TestConcurrencia:
         assert not any(isinstance(r, Exception) and not isinstance(r, (editor.EditError, editor.UndoError)) for r in results)
         name, widgets = await rows_of(pg, bid)
         titles = [w[1] for w in widgets]
-        assert titles.count("Cantidad por categoria") <= 1 and len(set(w[0] for w in widgets)) == len(widgets)
+        assert titles.count("Número de registros por categoría") <= 1 and len(set(w[0] for w in widgets)) == len(widgets)
         assert len(widgets) in (3, 4, 5)
 
     async def test_el_lock_es_por_tablero_uno_ocupado_no_frena_a_otro(self, pg, patched):
@@ -404,12 +404,12 @@ class TestFlujoCompleto:
             result = await process_with_gemini(ORG, "edita el tablero ventas por dia: agrega la torta de pagos, cambia la línea por conteo y renómbralo Ventas 2025")
         (edit,) = result["dashboard_edits"]
         assert edit["name"] == "Ventas 2025" and edit["widgets"] == 4 and edit["added"] == [T_METODO]
-        assert edit["replaced"] == [{"from": "Suma de total por mes de fecha", "to": "Cantidad por mes de fecha"}]
+        assert edit["replaced"] == [{"from": "Total por mes", "to": "Número de registros por mes"}]
         (fr,) = sent_function_responses(fake.send, 1)
         assert fr.response == {"ok": True, "tablero": "Ventas 2025", "graficos": 4,
                                "cambios": "agregados 1, reemplazados 1, renombrado"}
         rendered = await render_dashboard(ORG, str(bid))
         by_title = {c["title"]: {p["name"]: p["value"] for p in c["data"]} for c in rendered["charts"]}
-        assert by_title["Cantidad por mes de fecha"] == {"2025-07": 12, "2025-08": 12, "2025-09": 12, "2025-10": 4}
+        assert by_title["Número de registros por mes"] == {"2025-07": 12, "2025-08": 12, "2025-09": 12, "2025-10": 4}
         out = await editor.undo_edit(pg, bid, edit["version"])
         assert out["name"] == "Ventas por día" and out["widgets"] == 3
