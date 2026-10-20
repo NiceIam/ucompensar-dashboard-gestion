@@ -22,8 +22,11 @@ export function PageHeader({
   children?: ReactNode
 }) {
   return (
-    <header className={cn("flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", className)}>
-      <div className="min-w-0 space-y-2">
+    // El contenedor mide el ancho DISPONIBLE del contenido: con el chat abierto la pantalla es ancha pero el contenido
+    // no, y un `sm:flex-row` dejaba el título y la descripción a una palabra por línea.
+    <div className="[container-type:inline-size]">
+    <header className={cn("flex flex-col gap-4 [@container(min-width:44rem)]:flex-row [@container(min-width:44rem)]:items-end [@container(min-width:44rem)]:justify-between", className)}>
+      <div className="min-w-0 flex-1 space-y-2">
         {eyebrow && (
           <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-primary">
             {eyebrow}
@@ -35,8 +38,9 @@ export function PageHeader({
         )}
         {children}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 [@container(min-width:44rem)]:shrink-0">{actions}</div>}
     </header>
+    </div>
   )
 }
 

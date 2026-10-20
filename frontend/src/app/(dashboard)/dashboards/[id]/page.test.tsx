@@ -6,12 +6,20 @@ const state = vi.hoisted(() => ({
   execute: { data: undefined, isLoading: false, isFetching: false, isError: false, error: null, updatedAt: 0, refetch: () => undefined } as Record<string, unknown>,
 }))
 
-vi.mock("next/navigation", () => ({ useParams: () => ({ id: "3f2c1f7e-1111-4222-8333-444455556666" }) }))
+vi.mock("next/navigation", () => ({
+  useParams: () => ({ id: "3f2c1f7e-1111-4222-8333-444455556666" }),
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/dashboards/3f2c1f7e-1111-4222-8333-444455556666",
+  useSearchParams: () => new URLSearchParams(),
+}))
 vi.mock("@/hooks/use-page-title", () => ({ usePageTitle: () => undefined }))
 vi.mock("@/providers/chat-provider", () => ({ useChat: () => ({ ask: vi.fn() }) }))
 vi.mock("@/hooks/use-dashboards", () => ({
   useDashboardMeta: () => ({ data: { dashboard_id: "x", name: "Ventas del mes", description: "Creado por el asistente a tu pedido.", created_at: "" }, isLoading: false }),
   useDashboardExecute: () => state.execute,
+  useDashboardFilterOptions: () => ({ data: undefined, isLoading: false }),
+  useFilterValueSearch: () => ({ data: undefined, isFetching: false }),
+  useDrill: () => ({ data: undefined, isError: false, isFetching: false, isPlaceholderData: false }),
 }))
 // El dibujo de Recharts no aporta aquí: se verifica qué recibe cada gráfico (título y unidad).
 vi.mock("@/components/charts/chart-renderer", () => ({

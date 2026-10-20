@@ -318,3 +318,23 @@
     print-color-adjust: exact;
   }
 }
+
+/* Datos tocables de los gráficos (detalle al hacer clic): cursor, hover y foco visible por teclado. */
+.drill-datum {
+  cursor: pointer;
+  outline: none;
+}
+.drill-datum:hover .datum-mark {
+  filter: brightness(0.88);
+}
+.drill-datum:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.drill-datum:focus-visible .datum-dot-hidden,
+.drill-datum:hover .datum-dot-hidden {
+  opacity: 1;
+}
+.datum-dot-hidden {
+  opacity: 0;
+}

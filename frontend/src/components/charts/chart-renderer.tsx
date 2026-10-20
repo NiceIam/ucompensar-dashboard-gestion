@@ -16,7 +16,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { SERIES_COLORS, SimpleChart, formatValue, type ChartUnit } from "@/components/charts/simple-chart"
+import { Info } from "lucide-react"
+import { SERIES_COLORS, SimpleChart, formatValue, type ChartPoint, type ChartUnit } from "@/components/charts/simple-chart"
 import { MetricCard } from "@/components/charts/metric-card"
 import { prettyLabel } from "@/components/chat/message-content"
 import { columnLabel, isMoneyLike } from "@/lib/data-vocabulary"
@@ -27,14 +28,23 @@ import type { WidgetConfig } from "@/types/api"
 interface ChartRendererProps {
   widget: WidgetConfig
   className?: string
+  /** Si se pasa, cada dato del gráfico se puede tocar para ver su detalle (barra, punto, porción, fila). */
+  onSelectPoint?: (point: ChartPoint) => void
+  /** Encabezados legibles de los ejes (vista de tabla). */
+  xLabel?: string
+  yLabel?: string
+  /** Avisos discretos bajo el gráfico («este gráfico no tiene fecha»). */
+  notes?: string[]
+  /** Sin filas con los filtros activos: se muestra este texto en vez de un gráfico vacío. */
+  emptyMessage?: string
 }
 
 const axisTick = { fill: "hsl(var(--chart-axis))", fontSize: 12 }
 
-function EmptyChart() {
+function EmptyChart({ message }: { message?: string }) {
   return (
     <div className="flex h-44 items-center justify-center rounded-xl bg-muted/50 px-6 text-center text-sm text-muted-foreground">
-      Este gráfico todavía no tiene datos para mostrar.
+      {message ?? "Este gráfico todavía no tiene datos para mostrar."}
     </div>
   )
 }
@@ -85,7 +95,7 @@ function MultiSeries({ widget, unit }: { widget: WidgetConfig; unit: ChartUnit }
  * Dibuja un widget de tablero a partir de su `WidgetConfig` (contrato sin
  * cambios): barras, líneas, áreas, torta, radar, cifra o tabla.
  */
-export function ChartRenderer({ widget, className }: ChartRendererProps) {
+export function ChartRenderer({ widget, className, onSelectPoint, xLabel, yLabel, notes, emptyMessage }: ChartRendererProps) {
   const { title, chart_type, data = [], x_key, y_keys } = widget
   const yKey = y_keys[0] ?? "value"
   // La unidad la decide el servidor (`widget.unit`, por la columna medida). Sin ella, solo se muestra "$" si la
@@ -93,7 +103,7 @@ export function ChartRenderer({ widget, className }: ChartRendererProps) {
   const unit: ChartUnit = widget.unit ? (widget.unit === "money" ? "money" : "number") : isMoneyLike(yKey) ? "money" : "number"
 
   const body = () => {
-    if (!data.length) return <EmptyChart />
+    if (!data.length) return <EmptyChart message={emptyMessage} />
 
     if (chart_type === "metric") {
       const raw = data[0]?.[yKey]
@@ -155,17 +165,38 @@ export function ChartRenderer({ widget, className }: ChartRendererProps) {
 
     if (y_keys.length > 1) return <MultiSeries widget={widget} unit={unit} />
 
-    const points = data
-      .map((row) => ({ name: prettyLabel(String(row[x_key] ?? "")), value: Number(row[yKey]) }))
+    const points: ChartPoint[] = data
+      .map((row) => {
+        const raw = String(row[x_key] ?? "")
+        // `key` = el valor EXACTO del dato (el nombre que se ve puede estar recortado o con formato de fecha).
+        return {
+          name: prettyLabel(raw),
+          value: Number(row[yKey]),
+          key: typeof row.key === "string" ? row.key : raw,
+          empty: row.empty === true,
+          other: row.other === true,
+        }
+      })
       .filter((p) => Number.isFinite(p.value))
     const form = chart_type === "pie" ? "pie" : chart_type === "line" ? "line" : chart_type === "area" ? "area" : "bar"
-    return <SimpleChart form={form} points={points} unit={unit} label={title} height={240} />
+    return <SimpleChart form={form} points={points} unit={unit} label={title} height={240} onSelectPoint={onSelectPoint} xLabel={xLabel} yLabel={yLabel} />
   }
 
   return (
     <article className={cn("surface flex h-full flex-col gap-3 p-5", className)}>
       <h3 className="pr-24 font-display text-lg font-semibold leading-snug">{title}</h3>
+      {onSelectPoint && data.length > 0 && <p className="-mt-1.5 text-xs text-muted-foreground">Toca un dato para ver su detalle.</p>}
       <div className="min-w-0 flex-1">{body()}</div>
+      {notes && notes.length > 0 && (
+        <ul className="space-y-1 text-xs text-muted-foreground">
+          {notes.map((n) => (
+            <li key={n} className="flex items-start gap-1.5">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>{n}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </article>
   )
 }
