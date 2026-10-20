@@ -190,8 +190,9 @@ class TestMessage:
 
         assert body["content"].startswith("Mira:")
         assert (
-            '```chart\n{"type": "bar", "title": "Suma de total por producto", "data": [{"name": "Martillo", '
-            '"value": 100}], "x": "name", "y": "value", "color": "#3b82f6", "unit": "money"}\n```'
+            '```chart\n{"type": "bar", "title": "Total por producto", "data": [{"name": "Martillo", '
+            '"value": 100}], "x": "name", "y": "value", "color": "#3b82f6", "unit": "money", '
+            '"x_label": "Producto", "y_label": "Total"}\n```'
         ) in body["content"]
         assert chat_env.dbs.db(ORG_A).chat[-1]["content"] == body["content"]   # se persiste igual, sin `usage`
 

@@ -23,6 +23,7 @@ import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal
 
+from app.services import data_labels as labels
 from app.services import data_query_engine as engine
 
 logger = logging.getLogger(__name__)
@@ -46,11 +47,10 @@ CHART_MAX_POINTS = {"bar": 20, "line": 60, "pie": 10}
 # porciones, las sobrantes van a "Otros" (recortarlas haria que las porciones visibles sumaran 100%).
 PIE_AGGS = ("count", "sum")
 KPI_AGGS = ("count", "count_distinct", "sum", "avg", "min", "max")
-AGG_TITLES = {
-    "count": "Cantidad", "count_distinct": "Distintos de {c}", "sum": "Suma de {c}",
-    "avg": "Promedio de {c}", "min": "Mínimo de {c}", "max": "Máximo de {c}",
-}
-BUCKET_TITLES = {"day": "día", "week": "semana", "month": "mes", "year": "año"}
+
+
+class EmptyResult(engine.QueryError):
+    """El widget es valido pero no hay filas con esos filtros (no es un error de especificacion)."""
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +67,8 @@ MONEY_WORDS = frozenset({
     "venta", "ventas", "salario", "salarios", "pago", "pagos", "subtotal", "total", "totales", "iva",
     "descuento", "descuentos", "tarifa", "tarifas", "saldo", "deuda", "abono", "abonos", "utilidad",
     "ganancia", "ganancias", "gasto", "gastos", "presupuesto", "facturado", "recaudo",
+    # Abreviaturas y palabras de cartera: "vr", "vlr", "cuanto_debe", "fiados".
+    "vr", "vlr", "debe", "deben", "adeudado", "adeuda", "fiado", "fiados", "cartera", "cobrar",
 })
 _ID_WORDS = frozenset({
     "id", "uuid", "codigo", "cod", "nit", "cedula", "cc", "documento", "doc", "telefono", "tel", "celular",
@@ -278,6 +280,19 @@ def parse_stored(catalog: dict, dsq, widget_type: str) -> Spec:
 # Calculo (motor) -> grafico o cifra
 # ---------------------------------------------------------------------------
 
+def _point(label, number) -> dict:
+    """Un dato del grafico. `name` es el texto que se ve (corto, de una linea); si no es el valor real de la celda
+    se agrega `key` con el valor EXACTO (para abrir el detalle al tocarlo), y `empty` marca el grupo "sin dato"."""
+    if label is None:
+        return {"name": "(sin dato)", "value": number, "empty": True}
+    name = engine.cell(label, 30)
+    point = {"name": name, "value": number}
+    raw = str(label)
+    if raw != name and len(raw) <= engine.MAX_VALUE_CHARS and "\x00" not in raw:
+        point["key"] = raw
+    return point
+
+
 def chart_number(value) -> int | float | None:
     try:
         number = float(value)
@@ -290,17 +305,15 @@ def chart_number(value) -> int | float | None:
     return int(number) if number == int(number) and abs(number) < 1e15 else round(number, 2)
 
 
-def chart_title(key, agg) -> str:
-    what = AGG_TITLES[agg.fn].format(c=agg.col.name if agg.col else "")
-    by = f"{BUCKET_TITLES[key.bucket]} de {key.col.name}" if key.bucket else key.col.name
-    return f"{what} por {by}"
+def chart_title(key, agg, table=None) -> str:
+    """Titulo en lenguaje del duenio ("Ventas por mes"); ver `data_labels`."""
+    return labels.chart_title(key, agg, table)
 
 
 def unit_of(agg) -> str:
-    """Unidad de la cifra: 'count' (conteos), 'money' si la columna medida tiene nombre de dinero, 'number'."""
-    if agg.fn in ("count", "count_distinct") or agg.col is None:
-        return "count"
-    return "money" if is_money_name(agg.col.name) else "number"
+    """Unidad de la cifra: 'count' (conteos), 'money' si la medida es dinero (por ROL de la columna o por su nombre
+    aunque sea raro: "cuanto_debe", "vr.total") y 'number' en otro caso."""
+    return labels.unit_of(agg)
 
 
 async def build_chart(pool, table, kind: str, x: str, y: str, filters, title=None, top: int | None = None) -> tuple[dict, dict]:
@@ -336,21 +349,24 @@ async def build_chart(pool, table, kind: str, x: str, y: str, filters, title=Non
     for label, value in rows:
         number = chart_number(value)
         if number is not None:
-            data.append({"name": engine.cell(label, 30) if label is not None else "(sin dato)", "value": number})
+            data.append(_point(label, number))
     if others is not None and chart_number(others):
-        data.append({"name": f"Otros ({result.total - len(rows)})", "value": chart_number(others)})
+        data.append({"name": f"Otros ({result.total - len(rows)})", "value": chart_number(others), "other": True})
     if not data:
-        raise engine.QueryError("sin datos para graficar con esos filtros")
+        raise EmptyResult("sin datos para graficar con esos filtros")
     if kind == "pie" and any(point["value"] < 0 for point in data):
         raise engine.QueryError("pie no admite valores negativos; usa bar")
     chart = {
         "type": kind,
-        "title": engine.cell(title if isinstance(title, str) and title.strip() else chart_title(key, agg), 80),
+        "title": engine.cell(title if isinstance(title, str) and title.strip() else chart_title(key, agg, table), 80),
         "data": data,
         "x": "name",
         "y": "value",
         "color": CHART_COLORS[kind],
         "unit": unit_of(agg),
+        # Encabezados legibles de los dos ejes (para la vista de tabla y los lectores de pantalla).
+        "x_label": labels.key_label(key),
+        "y_label": labels.agg_noun(agg, table),
     }
     out = {"ok": True, "puntos": len(data)}
     if result.total > len(result.rows) or others is not None:
@@ -373,14 +389,12 @@ async def build_kpi(pool, table, y: str, filters, title=None) -> dict:
     (result,) = await engine.run_plans(pool, [plan])
     value = chart_number(result.rows[0][0]) if result.rows else None
     if value is None:
-        raise engine.QueryError("sin datos para calcular esta cifra con esos filtros")
+        raise EmptyResult("sin datos para calcular esta cifra con esos filtros")
     unit = unit_of(agg)
     if title:
         label = engine.cell(title, 80)
-    elif agg.fn == "count":
-        label = f"Registros de {engine.cell(table.display, 40)}"
     else:
-        label = engine.cell(AGG_TITLES[agg.fn].format(c=agg.col.name if agg.col else ""), 80)
+        label = engine.cell(labels.agg_title(agg, table), 80)
     kpi = {"label": label, "value": value, "unit": unit, "icon": _KPI_ICONS[unit]}
     if agg.col is not None:
         kpi["column"] = engine.cell(agg.col.name, 60)
@@ -421,6 +435,8 @@ async def run_many(pool, catalog: dict, specs: list[Spec], titles: list | None =
         async with semaphore:
             try:
                 return {"ok": True, **await run_spec(pool, catalog, specs[i], titles[i])}
+            except EmptyResult as exc:
+                return {"ok": False, "error": engine.one_line(str(exc), 200), "empty": True}
             except engine.QueryError as exc:
                 return {"ok": False, "error": engine.one_line(str(exc), 200)}
             except asyncio.CancelledError:

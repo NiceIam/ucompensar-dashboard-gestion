@@ -84,7 +84,7 @@ class TestRegla:
         kpis = {k["label"]: k["value"] for k in data["kpis"]}
         assert kpis == {"Suma de total": 10_234_700, "Registros de Ventas": 40}
         pie = next(c for c in data["charts"] if c["type"] == "pie")
-        assert pie["title"] == "Cantidad por metodo_pago"
+        assert pie["title"] == "Número de registros por método de pago"
         assert {p["name"]: p["value"] for p in pie["data"]} == {"efectivo": 16, "transferencia": 14, "tarjeta": 10}
         assert not any(c.get("error") for c in data["charts"])
 
