@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ChartRenderer } from "@/components/charts/chart-renderer"
-import { DrillPanel, type DrillTarget } from "@/components/dashboards/drill-panel"
+import { DrillPanel, captureFocus, type DrillTarget } from "@/components/dashboards/drill-panel"
 import { FilterBar } from "@/components/dashboards/filter-bar"
 import { EmptyState, ErrorState } from "@/components/kit/empty-state"
 import { MetricTile } from "@/components/kit/metric-tile"
@@ -250,6 +250,7 @@ function DashboardDetail() {
                                 widgetId: chart.id as string,
                                 chartTitle: chart.title,
                                 point: { name: point.name, value: point.value, key: point.key, empty: point.empty, other: point.other },
+                                restoreFocus: captureFocus(),
                               })
                           : undefined
                       }

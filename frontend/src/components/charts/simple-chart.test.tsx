@@ -66,6 +66,23 @@ describe.each([["bar"], ["line"], ["pie"]] as const)("datos clicables de un grá
   })
 })
 
+describe("el clic no se pierde cuando el foco cambia de dato", () => {
+  test.each([["bar"], ["line"], ["pie"]] as const)(
+    "%s: bajar y soltar sobre un dato que NO era la parada de Tab abre ese dato (el foco no repinta el gráfico)",
+    async (form) => {
+      const onSelect = vi.fn()
+      const { container } = render(<SimpleChart form={form} points={POINTS} label="Ventas" onSelectPoint={onSelect} />)
+      const nodes = Array.from(container.querySelectorAll<SVGElement>('[role="button"][data-datum]'))
+      await userEvent.click(nodes[2])
+      expect(onSelect).toHaveBeenCalledTimes(1)
+      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ name: "(sin dato)" }))
+      // los mismos nodos siguen en el DOM (nada se recreó) y la parada de Tab pasó al dato tocado
+      expect(Array.from(container.querySelectorAll('[role="button"][data-datum]'))).toEqual(nodes)
+      expect(nodes.map((n) => n.getAttribute("tabindex"))).toEqual(["-1", "-1", "0"])
+    }
+  )
+})
+
 describe("zona tocable y tooltip", () => {
   test("cada barra tiene una zona tocable de al menos 24 px", () => {
     const { container } = render(<SimpleChart form="bar" points={POINTS} label="Ventas" onSelectPoint={() => undefined} />)

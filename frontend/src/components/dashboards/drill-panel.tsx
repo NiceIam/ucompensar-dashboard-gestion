@@ -21,6 +21,28 @@ export interface DrillTarget {
   widgetId: string
   chartTitle: string
   point: PointRef
+  /** Devuelve el foco al dato que se tocó (los dibujos de Recharts se recrean, así que no basta la referencia). */
+  restoreFocus?: () => void
+}
+
+/** Guarda a qué dato volver al cerrar el panel: el botón enfocado ahora (dato del gráfico, fila de leyenda o de tabla). */
+export function captureFocus(): (() => void) | undefined {
+  const el = document.activeElement
+  if (!(el instanceof HTMLElement || el instanceof SVGElement)) return undefined
+  const chart = el.getAttribute("data-datum")
+  const index = el.getAttribute("data-index")
+  const label = el.getAttribute("aria-label")
+  return () => {
+    const next =
+      chart && index !== null
+        ? document.querySelector<HTMLElement | SVGElement>(`[data-datum="${chart}"][data-index="${index}"]`)
+        : el.isConnected
+          ? el
+          : label
+            ? Array.from(document.querySelectorAll<HTMLElement>("button[aria-label]")).find((b) => b.getAttribute("aria-label") === label)
+            : null
+    next?.focus()
+  }
 }
 
 interface DrillPanelProps {
@@ -104,6 +126,11 @@ export function DrillPanel({ dashboardId, target: openTarget, filters, onClose, 
       <SheetContent
         side={isMobile ? "bottom" : "right"}
         aria-describedby="drill-description"
+        onCloseAutoFocus={(e) => {
+          // Radix devolvería el foco a un nodo que Recharts ya recreó: se devuelve al dato por su posición.
+          e.preventDefault()
+          target?.restoreFocus?.()
+        }}
         className={cn(
           "flex flex-col gap-0 p-0",
           isMobile ? "h-[92dvh] rounded-t-2xl" : "w-full sm:max-w-lg"

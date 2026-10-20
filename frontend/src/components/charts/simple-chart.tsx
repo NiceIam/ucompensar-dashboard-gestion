@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type Key, type KeyboardEvent, type ReactNode } from "react"
+import { createContext, useContext, useId, useMemo, useRef, useState, type Key, type KeyboardEvent, type ReactNode } from "react"
 import {
   Area,
   AreaChart,
@@ -96,7 +96,7 @@ const axisTick = { fill: "hsl(var(--chart-axis))", fontSize: 12 }
 interface DatumContextValue {
   chartId: string
   /** Índice del dato que es la parada de Tab (foco "rodante"). */
-  rove: number
+  getRove: () => number
   dotsVisible: boolean
   ariaLabel: (index: number) => string
   select: (index: number) => void
@@ -113,7 +113,7 @@ function DatumGroup({ index, children }: { index: number; children: ReactNode })
   return (
     <g
       role="button"
-      tabIndex={ctx.rove === index ? 0 : -1}
+      tabIndex={ctx.getRove() === index ? 0 : -1}
       aria-label={ctx.ariaLabel(index)}
       data-datum={ctx.chartId}
       data-index={index}
@@ -234,9 +234,10 @@ export function SimpleChart({
   yLabel?: string
 }) {
   const [asTable, setAsTable] = useState(false)
-  const [rove, setRove] = useState(0)
-  // Recharts vuelve a crear los nodos del dibujo al repintarse: el foco se devuelve al dato que toca DESPUÉS de pintar.
-  const pendingFocus = useRef<number | null>(null)
+  // El dato que es la parada de Tab vive en una referencia (NO en el estado): Recharts vuelve a crear los nodos del
+  // dibujo cuando este componente se repinta, y un repintado entre «bajar» y «soltar» el dedo o el ratón se
+  // tragaba el clic (el nodo que recibe el clic ya no existe). Los atributos tabindex se actualizan directo en el DOM.
+  const roveRef = useRef(0)
   const rootRef = useRef<HTMLDivElement>(null)
   const chartId = useId().replace(/:/g, "")
   const gradientId = chartId
@@ -280,28 +281,24 @@ export function SimpleChart({
     if (!(e.key in move)) return
     e.preventDefault()
     const next = Math.max(0, Math.min(data.length - 1, move[e.key]))
-    pendingFocus.current = next
-    setRove(next)
+    moveRove(next)
+    rootRef.current?.querySelector<SVGElement>(`[data-datum="${chartId}"][data-index="${next}"]`)?.focus()
   }
 
-  useEffect(() => {
-    const index = pendingFocus.current
-    if (index === null) return
-    pendingFocus.current = null
-    // Recharts puede volver a crear los nodos un instante después de este repintado: se enfoca al terminar.
-    const timer = window.setTimeout(() => {
-      rootRef.current?.querySelector<SVGElement>(`[data-datum="${chartId}"][data-index="${index}"]`)?.focus()
-    }, 0)
-    return () => window.clearTimeout(timer)
-  })
+  const moveRove = (index: number) => {
+    roveRef.current = index
+    rootRef.current?.querySelectorAll(`[data-datum="${chartId}"]`).forEach((node) => {
+      node.setAttribute("tabindex", node.getAttribute("data-index") === String(index) ? "0" : "-1")
+    })
+  }
 
   const datumContext: DatumContextValue = {
     chartId,
-    rove,
+    getRove: () => roveRef.current,
     dotsVisible: data.length <= 16,
     ariaLabel: (i) => `${data[i]?.name ?? ""}: ${formatValue(data[i]?.value ?? 0, unit, true)}. Ver el detalle`,
     select,
-    focusAt: setRove,
+    focusAt: moveRove,
     onKey: onDatumKey,
   }
 
