@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { api } from "@/lib/api"
 import { describeChatError, getChatErrorMessage, isChatLimitError, type ChatErrorInfo } from "@/lib/chat-errors"
 import { hasDashboardBlock } from "@/lib/dashboard-block"
+import { editedDashboardIds } from "@/lib/dashboard-edit-block"
 import { humanizeError } from "@/lib/errors"
 import type { ChatMessage } from "@/types/api"
 
@@ -91,11 +92,15 @@ export interface FloatingChatState {
 export interface FloatingChatOptions {
   /** Se llama cuando una respuesta trae un tablero recién creado (para refrescar la lista de tableros). */
   onDashboardCreated?: () => void
+  /** Se llama con los tableros que el asistente editó (para refrescar su detalle además de la lista). */
+  onDashboardsEdited?: (ids: string[]) => void
 }
 
 export function useFloatingChat(options: FloatingChatOptions = {}): FloatingChatState {
   const onDashboardCreated = useRef(options.onDashboardCreated)
   onDashboardCreated.current = options.onDashboardCreated
+  const onDashboardsEdited = useRef(options.onDashboardsEdited)
+  onDashboardsEdited.current = options.onDashboardsEdited
   const pathname = usePathname()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -164,6 +169,8 @@ export function useFloatingChat(options: FloatingChatOptions = {}): FloatingChat
         }
         setMessages((prev) => [...prev, assistantMsg])
         if (hasDashboardBlock(response.content)) onDashboardCreated.current?.()
+        const edited = editedDashboardIds(response.content)
+        if (edited.length > 0) onDashboardsEdited.current?.(edited)
       } catch (err) {
         rateLimited = isChatLimitError(err)
         setError(getChatErrorMessage(err, "No pudimos enviar tu mensaje. Inténtalo de nuevo."))

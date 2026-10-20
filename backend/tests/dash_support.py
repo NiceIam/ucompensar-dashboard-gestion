@@ -68,6 +68,8 @@ def settings_stub():
         DASHBOARD_CREATE_TIMEOUT_SECONDS=10.0, DASHBOARD_RENDER_TIMEOUT_SECONDS=12.0,
         DASHBOARD_SUGGEST_USE_LLM=True, DASHBOARD_SUGGEST_DAILY_CALLS=3, DASHBOARD_SUGGEST_MAX_OUTPUT_TOKENS=900,
         DASHBOARD_SUGGEST_TIMEOUT_SECONDS=12.0, DASHBOARD_AUTO_SUGGEST=True,
+        CHAT_DASHBOARD_EDIT_ENABLED=True, CHAT_DASHBOARD_EDIT_MAX_OPS=4, CHAT_DASHBOARD_EDIT_MAX_WIDGETS=12,
+        DASHBOARD_EDIT_VERSIONS_KEPT=10, DASHBOARD_EDIT_MAX_OUTPUT_TOKENS=384,
     )
 
 
@@ -101,6 +103,8 @@ def env(settings_stub, gemini):
         patch("app.services.dashboard_render_service.get_org_pool", dbs.get_org_pool),
         patch("app.services.dashboard_render_service.get_settings", return_value=settings_stub),
         patch("app.services.dashboard_builder_service.get_settings", return_value=settings_stub),
+        patch("app.services.dashboard_edit_service.get_settings", return_value=settings_stub),
+        patch("app.routers.dashboard_edits.get_org_pool", dbs.get_org_pool),
         patch("app.services.dashboard_suggest_service.get_org_pool", dbs.get_org_pool),
         patch("app.services.dashboard_suggest_service.get_settings", return_value=settings_stub),
         patch("app.services.data_query_engine.run_plans", fake_run_plans(plans)),

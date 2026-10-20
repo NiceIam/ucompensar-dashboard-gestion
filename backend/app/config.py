@@ -81,8 +81,9 @@ class Settings(BaseSettings):
     CHAT_USER_WINDOW_SECONDS: int = 60
     CHAT_ORG_DAILY_MESSAGES: int = 300
 
-    # Tableros creados por la IA (herramienta create_dashboard del chat y sugerencias). El modelo solo CREA:
-    # nunca edita ni borra. Con el interruptor apagado la herramienta no se declara en ningun turno.
+    # Tableros creados por la IA (herramienta create_dashboard del chat y sugerencias). create_dashboard solo CREA
+    # (la edicion es otra herramienta, mas abajo) y nada borra tableros. Con el interruptor apagado la herramienta
+    # no se declara en ningun turno.
     CHAT_DASHBOARD_TOOL_ENABLED: bool = True
     # Graficos/cifras por tablero (el tablero se crea con los validos hasta este tope).
     CHAT_DASHBOARD_MAX_WIDGETS: int = 6
@@ -93,6 +94,17 @@ class Settings(BaseSettings):
     # salida mas ajustado (4 graficos son ~200 tokens de argumentos; el razonamiento descuenta de este tope).
     DASHBOARD_THINKING_LEVEL: str = "low"
     DASHBOARD_CHAT_MAX_OUTPUT_TOKENS: int = 1024
+    # Edicion de tableros existentes por el asistente (herramienta edit_dashboard): solo en turnos donde la persona
+    # pide editar un tablero; cada edicion guarda una version previa para poder deshacerla. El modelo NO puede
+    # crear ni borrar tableros con ella. Apagada: la herramienta no se declara en ningun turno.
+    CHAT_DASHBOARD_EDIT_ENABLED: bool = True
+    # Operaciones por mensaje (agregar/reemplazar/quitar/renombrar) y graficos por tablero tras editar.
+    CHAT_DASHBOARD_EDIT_MAX_OPS: int = 4
+    CHAT_DASHBOARD_EDIT_MAX_WIDGETS: int = 12
+    # Versiones previas que se conservan por tablero para "Deshacer".
+    DASHBOARD_EDIT_VERSIONS_KEPT: int = 10
+    # Tope de tokens de salida en turnos de edicion (una llamada a edit_dashboard son ~100 tokens de argumentos).
+    DASHBOARD_EDIT_MAX_OUTPUT_TOKENS: int = 768
     # Presupuesto de tiempo (s) para validar los graficos de un tablero al crearlo y para calcularlos al abrirlo.
     DASHBOARD_CREATE_TIMEOUT_SECONDS: float = 10.0
     DASHBOARD_RENDER_TIMEOUT_SECONDS: float = 12.0
