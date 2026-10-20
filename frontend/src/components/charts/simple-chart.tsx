@@ -367,7 +367,9 @@ export function SimpleChart({
           </table>
         </div>
       ) : form === "pie" ? (
-        <div role={interactive ? "group" : "img"} aria-label={summary} className="flex flex-col items-center gap-4 pt-6 sm:flex-row sm:items-center">
+        // Responde al ancho de la TARJETA (con el chat abierto es angosta aunque la pantalla no lo sea): lado a lado solo si cabe.
+        <div className="[container-type:inline-size]">
+        <div role={interactive ? "group" : "img"} aria-label={summary} className="flex flex-col items-center gap-4 pt-6 [@container(min-width:34rem)]:flex-row [@container(min-width:34rem)]:items-center">
           <div className="h-[200px] w-[200px] shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -409,6 +411,7 @@ export function SimpleChart({
               )
             })}
           </ul>
+        </div>
         </div>
       ) : (
         <div role={interactive ? "group" : "img"} aria-label={summary} className="pt-8" style={{ height: horizontal ? Math.max(height, data.length * 34 + 40) : height }}>

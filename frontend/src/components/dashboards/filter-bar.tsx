@@ -68,7 +68,11 @@ function PeriodPicker({ filters, options, onChange }: { filters: DashboardFilter
           <ChevronDown className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[min(22rem,calc(100vw-2rem))] space-y-4 p-4">
+      <PopoverContent
+        align="start"
+        collisionPadding={12}
+        className="max-h-[var(--radix-popover-content-available-height)] w-[min(22rem,calc(100vw-2rem))] space-y-4 overflow-y-auto p-4"
+      >
         <div role="group" aria-label="Atajos de período" className="grid grid-cols-2 gap-2">
           {PRESETS.map((p) => (
             <button
@@ -177,12 +181,16 @@ function ValuePicker({
           <ChevronDown className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[min(22rem,calc(100vw-2rem))] space-y-3 p-3">
-        <div className="relative">
+      <PopoverContent
+        align="start"
+        collisionPadding={12}
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[min(22rem,calc(100vw-2rem))] flex-col gap-3 p-3"
+      >
+        <div className="relative shrink-0">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Buscar ${dim.label.toLowerCase()}`} aria-label={`Buscar ${dim.label.toLowerCase()}`} className="pl-9" />
         </div>
-        <ul className="max-h-64 space-y-0.5 overflow-y-auto" aria-label={dim.label}>
+        <ul className="min-h-24 flex-1 space-y-0.5 overflow-y-auto" aria-label={dim.label}>
           {rows.map((v) => {
             const checked = selected.some((s) => s.toLowerCase() === v.value.toLowerCase())
             return (
@@ -201,8 +209,8 @@ function ValuePicker({
             </li>
           )}
         </ul>
-        {dim.more > 0 && !q.trim() && <p className="px-1 text-xs text-muted-foreground">Y {formatNumber(dim.more, 0)} más: escribe arriba para buscarlos.</p>}
-        <div className="flex items-center justify-between gap-2 border-t pt-3">
+        {dim.more > 0 && !q.trim() && <p className="shrink-0 px-1 text-xs text-muted-foreground">Y {formatNumber(dim.more, 0)} más: escribe arriba para buscarlos.</p>}
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t pt-3">
           <Button type="button" variant="ghost" size="sm" disabled={!active} onClick={() => onChange(setCategory(filters, dim.key, []))}>
             Quitar filtro
           </Button>
