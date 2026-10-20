@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useMemo, useState } from "react"
+import { createContext, useContext, useId, useMemo, useRef, useState, type Key, type KeyboardEvent, type ReactNode } from "react"
 import {
   Area,
   AreaChart,
@@ -12,12 +12,14 @@ import {
   LineChart,
   Pie,
   PieChart,
+  Rectangle,
   ResponsiveContainer,
+  Sector,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts"
-import { Table2, BarChart3 } from "lucide-react"
+import { Table2, BarChart3, ChevronRight } from "lucide-react"
 import { formatCompact, formatMoney, formatNumber, formatShare } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -27,6 +29,12 @@ export type ChartUnit = "money" | "number" | "count"
 export interface ChartPoint {
   name: string
   value: number
+  /** Valor exacto de la celda cuando `name` es una versión recortada (sirve para abrir el detalle). */
+  key?: string
+  /** El grupo «(sin dato)». */
+  empty?: boolean
+  /** La porción «Otros (n)» que armó el servidor. */
+  other?: boolean
 }
 
 /** Colores categóricos en orden fijo (validados para daltonismo en claro y oscuro). */
@@ -41,6 +49,14 @@ export function formatValue(value: number, unit: ChartUnit, compact = false): st
 export function shortLabel(label: string, count: number): string {
   const max = count <= 3 ? 16 : count <= 5 ? 12 : 9
   return label.length > max ? `${label.slice(0, max - 1).trimEnd()}…` : label
+}
+
+/** Lado mínimo (px) de lo que se puede tocar: WCAG 2.2 (2.5.8) pide 24 px. */
+const HIT = 28
+
+/** Color de una porción: el gris neutro para «Otros», los categóricos en orden fijo para el resto. */
+function sliceColor(p: ChartPoint, i: number): string {
+  return p.other ? "hsl(var(--muted-foreground))" : SERIES_COLORS[i % SERIES_COLORS.length]
 }
 
 /** Pie con máximo 6 porciones: el resto se agrupa en "Otros". */
@@ -73,6 +89,116 @@ function ChartTooltip({ active, payload, label, unit }: TooltipContentProps) {
 
 const axisTick = { fill: "hsl(var(--chart-axis))", fontSize: 12 }
 
+// ─── Datos tocables ──────────────────────────────────────────────────────────
+// Los dibujos de cada dato (barra, punto, porción) son componentes ESTABLES a nivel de módulo que leen su estado de
+// un contexto: si se crearan dentro de SimpleChart, cada render los remontaría y el foco del teclado se perdería.
+
+interface DatumContextValue {
+  chartId: string
+  /** Índice del dato que es la parada de Tab (foco "rodante"). */
+  getRove: () => number
+  dotsVisible: boolean
+  ariaLabel: (index: number) => string
+  select: (index: number) => void
+  focusAt: (index: number) => void
+  onKey: (event: KeyboardEvent<SVGElement>, index: number) => void
+}
+
+const DatumContext = createContext<DatumContextValue | null>(null)
+
+/** Un dato tocable: botón con nombre accesible, Enter/Espacio para abrir y flechas para moverse. */
+function DatumGroup({ index, children }: { index: number; children: ReactNode }) {
+  const ctx = useContext(DatumContext)
+  if (!ctx) return <g>{children}</g>
+  return (
+    <g
+      role="button"
+      tabIndex={ctx.getRove() === index ? 0 : -1}
+      aria-label={ctx.ariaLabel(index)}
+      data-datum={ctx.chartId}
+      data-index={index}
+      className="drill-datum"
+      onClick={() => ctx.select(index)}
+      onFocus={() => ctx.focusAt(index)}
+      onKeyDown={(e) => ctx.onKey(e, index)}
+    >
+      {children}
+    </g>
+  )
+}
+
+/** Zona tocable de al menos HIT x HIT alrededor de un rectángulo (los datos pequeños son difíciles de acertar con el dedo). */
+function HitRect({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+  const padX = Math.max(0, (HIT - w) / 2)
+  const padY = Math.max(0, (HIT - h) / 2)
+  return <rect x={x - padX} y={y - padY} width={w + 2 * padX} height={h + 2 * padY} fill="transparent" />
+}
+
+interface BarShapeProps {
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  fill?: string
+  index?: number
+}
+
+function BarDatum({ x = 0, y = 0, width = 0, height = 0, fill, index = 0, radius }: BarShapeProps & { radius: [number, number, number, number] }) {
+  return (
+    <DatumGroup index={index}>
+      <Rectangle x={x} y={y} width={width} height={height} fill={fill ?? SERIES_COLORS[0]} radius={radius} className="datum-mark" />
+      <HitRect x={x} y={y} w={width} h={height} />
+    </DatumGroup>
+  )
+}
+const renderColumnBar = (props: BarShapeProps) => <BarDatum {...props} radius={[4, 4, 0, 0]} />
+const renderRowBar = (props: BarShapeProps) => <BarDatum {...props} radius={[0, 4, 4, 0]} />
+
+function LineDatum({ cx = 0, cy = 0, index = 0 }: { cx?: number; cy?: number; index?: number }) {
+  const ctx = useContext(DatumContext)
+  const visible = ctx?.dotsVisible ?? true
+  return (
+    <DatumGroup index={index}>
+      <circle cx={cx} cy={cy} r={visible ? 4 : 3} fill={SERIES_COLORS[0]} stroke="hsl(var(--card))" strokeWidth={2} className={cn("datum-mark", !visible && "datum-dot-hidden")} />
+      <circle cx={cx} cy={cy} r={HIT / 2} fill="transparent" />
+    </DatumGroup>
+  )
+}
+const renderLineDot = (props: { cx?: number; cy?: number; index?: number; key?: Key | null }) => (
+  <LineDatum key={props.key ?? props.index} cx={props.cx} cy={props.cy} index={props.index} />
+)
+
+interface SliceShapeProps {
+  cx?: number
+  cy?: number
+  innerRadius?: number
+  outerRadius?: number
+  startAngle?: number
+  endAngle?: number
+  index?: number
+  fill?: string
+}
+
+function SliceDatum({ cx, cy, innerRadius, outerRadius, startAngle, endAngle, index = 0, fill }: SliceShapeProps) {
+  return (
+    <DatumGroup index={index}>
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+        stroke="hsl(var(--card))"
+        strokeWidth={2}
+        className="datum-mark"
+      />
+    </DatumGroup>
+  )
+}
+const renderSlice = (props: SliceShapeProps) => <SliceDatum {...props} />
+
 /**
  * Gráfico sencillo de una serie con la paleta de la marca: barras finas con
  * extremo redondeado, líneas de 2 px, rejilla de una línea y tooltip legible.
@@ -86,6 +212,9 @@ export function SimpleChart({
   label,
   className,
   allowTable = true,
+  onSelectPoint,
+  xLabel,
+  yLabel,
 }: {
   form: ChartForm
   points: ChartPoint[]
@@ -95,10 +224,26 @@ export function SimpleChart({
   label: string
   className?: string
   allowTable?: boolean
+  /**
+   * Si se pasa, cada dato (barra, punto, porción, fila de la leyenda o de la tabla) se puede tocar: es un botón
+   * con foco por teclado (flechas para moverse, Enter o Espacio para abrir). Sin esto el gráfico es solo de lectura.
+   */
+  onSelectPoint?: (point: ChartPoint) => void
+  /** Encabezados legibles de la vista de tabla («Mes», «Ventas»). */
+  xLabel?: string
+  yLabel?: string
 }) {
   const [asTable, setAsTable] = useState(false)
-  const gradientId = useId().replace(/:/g, "")
-  const data = useMemo(() => (form === "pie" ? foldPie(points) : points), [form, points])
+  // El dato que es la parada de Tab vive en una referencia (NO en el estado): Recharts vuelve a crear los nodos del
+  // dibujo cuando este componente se repinta, y un repintado entre «bajar» y «soltar» el dedo o el ratón se
+  // tragaba el clic (el nodo que recibe el clic ya no existe). Los atributos tabindex se actualizan directo en el DOM.
+  const roveRef = useRef(0)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const chartId = useId().replace(/:/g, "")
+  const gradientId = chartId
+  const interactive = Boolean(onSelectPoint)
+  // Con detalle, el servidor ya agrupa «Otros»: no se vuelve a agrupar aquí (el detalle de «Otros» sería otro).
+  const data = useMemo(() => (form === "pie" && !onSelectPoint ? foldPie(points) : points), [form, points, onSelectPoint])
   const total = useMemo(() => data.reduce((s, p) => s + p.value, 0), [data])
   const longLabels = data.some((p) => p.name.length > 10)
   const horizontal = form === "bar" && (longLabels || data.length > 8) && data.length <= 12
@@ -119,8 +264,61 @@ export function SimpleChart({
     .map((p) => `${p.name} ${formatValue(p.value, unit, true)}`)
     .join(", ")}${data.length > 6 ? "…" : ""}`
 
+  const select = (index: number) => {
+    const p = data[index]
+    if (p && onSelectPoint) onSelectPoint(p)
+  }
+
+  const onDatumKey = (e: KeyboardEvent<SVGElement>, index: number) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault()
+      select(index)
+      return
+    }
+    const move: Record<string, number> = {
+      ArrowRight: index + 1, ArrowDown: index + 1, ArrowLeft: index - 1, ArrowUp: index - 1, Home: 0, End: data.length - 1,
+    }
+    if (!(e.key in move)) return
+    e.preventDefault()
+    const next = Math.max(0, Math.min(data.length - 1, move[e.key]))
+    moveRove(next)
+    rootRef.current?.querySelector<SVGElement>(`[data-datum="${chartId}"][data-index="${next}"]`)?.focus()
+  }
+
+  const moveRove = (index: number) => {
+    roveRef.current = index
+    rootRef.current?.querySelectorAll(`[data-datum="${chartId}"]`).forEach((node) => {
+      node.setAttribute("tabindex", node.getAttribute("data-index") === String(index) ? "0" : "-1")
+    })
+  }
+
+  const datumContext: DatumContextValue = {
+    chartId,
+    getRove: () => roveRef.current,
+    dotsVisible: data.length <= 16,
+    ariaLabel: (i) => `${data[i]?.name ?? ""}: ${formatValue(data[i]?.value ?? 0, unit, true)}. Ver el detalle`,
+    select,
+    focusAt: moveRove,
+    onKey: onDatumKey,
+  }
+
+  const rowButton = (index: number, children: ReactNode, extra = "") => (
+    <button
+      type="button"
+      onClick={() => select(index)}
+      className={cn(
+        "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-1.5 text-left transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        extra
+      )}
+      aria-label={`${data[index].name}: ${formatValue(data[index].value, unit, true)}. Ver el detalle`}
+    >
+      {children}
+    </button>
+  )
+
   return (
-    <div className={cn("relative", className)}>
+    <DatumContext.Provider value={interactive ? datumContext : null}>
+    <div ref={rootRef} className={cn("relative", className)} data-chart-root="">
       {allowTable && (
         <button
           type="button"
@@ -139,24 +337,39 @@ export function SimpleChart({
             <caption className="sr-only">{label}</caption>
             <thead className="sticky top-0 bg-muted/80 backdrop-blur">
               <tr>
-                <th scope="col" className="px-3 py-2 text-left font-semibold">Categoría</th>
-                <th scope="col" className="px-3 py-2 text-right font-semibold">Valor</th>
+                <th scope="col" className="px-3 py-2 text-left font-semibold">{xLabel ?? "Categoría"}</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">{yLabel ?? "Valor"}</th>
                 {form === "pie" && <th scope="col" className="px-3 py-2 text-right font-semibold">Parte</th>}
+                {interactive && <th scope="col" className="w-12 px-1 py-2"><span className="sr-only">Detalle</span></th>}
               </tr>
             </thead>
             <tbody>
-              {data.map((p) => (
-                <tr key={p.name} className="border-t">
+              {data.map((p, i) => (
+                <tr key={`${p.name}-${i}`} className="border-t">
                   <td className="px-3 py-2">{p.name}</td>
                   <td className="px-3 py-2 text-right tabular">{formatValue(p.value, unit)}</td>
                   {form === "pie" && <td className="px-3 py-2 text-right tabular">{total ? formatShare(p.value / total) : "—"}</td>}
+                  {interactive && (
+                    <td className="px-1 py-0.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => select(i)}
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`Ver el detalle de ${p.name}`}
+                      >
+                        <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ) : form === "pie" ? (
-        <div role="img" aria-label={summary} className="flex flex-col items-center gap-4 pt-6 sm:flex-row sm:items-center">
+        // Responde al ancho de la TARJETA (con el chat abierto es angosta aunque la pantalla no lo sea): lado a lado solo si cabe.
+        <div className="[container-type:inline-size]">
+        <div role={interactive ? "group" : "img"} aria-label={summary} className="flex flex-col items-center gap-4 pt-6 [@container(min-width:34rem)]:flex-row [@container(min-width:34rem)]:items-center">
           <div className="h-[200px] w-[200px] shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -170,28 +383,38 @@ export function SimpleChart({
                   stroke="hsl(var(--card))"
                   strokeWidth={2}
                   isAnimationActive={false}
+                  shape={interactive ? renderSlice : undefined}
                 >
                   {data.map((p, i) => (
-                    <Cell key={p.name} fill={SERIES_COLORS[i % SERIES_COLORS.length]} />
+                    <Cell key={`${p.name}-${i}`} fill={sliceColor(p, i)} />
                   ))}
                 </Pie>
                 <Tooltip content={<ChartTooltip unit={unit} />} />
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <ul className="w-full min-w-0 flex-1 space-y-2 text-sm">
-            {data.map((p, i) => (
-              <li key={p.name} className="flex items-center gap-2.5">
-                <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }} aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                <span className="tabular text-muted-foreground">{total ? formatShare(p.value / total) : ""}</span>
-                <span className="tabular font-semibold">{formatValue(p.value, unit, true)}</span>
-              </li>
-            ))}
+          <ul className="w-full min-w-0 flex-1 space-y-1 text-sm">
+            {data.map((p, i) => {
+              const row = (
+                <>
+                  <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: sliceColor(p, i) }} aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                  <span className="tabular text-muted-foreground">{total ? formatShare(p.value / total) : ""}</span>
+                  <span className="tabular font-semibold">{formatValue(p.value, unit, true)}</span>
+                  {interactive && <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                </>
+              )
+              return (
+                <li key={`${p.name}-${i}`} className={interactive ? undefined : "flex items-center gap-2.5 py-1"}>
+                  {interactive ? rowButton(i, row) : row}
+                </li>
+              )
+            })}
           </ul>
         </div>
+        </div>
       ) : (
-        <div role="img" aria-label={summary} className="pt-8" style={{ height: horizontal ? Math.max(height, data.length * 34 + 40) : height }}>
+        <div role={interactive ? "group" : "img"} aria-label={summary} className="pt-8" style={{ height: horizontal ? Math.max(height, data.length * 34 + 40) : height }}>
           <ResponsiveContainer width="100%" height="100%">
             {form === "area" ? (
               <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
@@ -211,7 +434,8 @@ export function SimpleChart({
                   stroke={SERIES_COLORS[0]}
                   strokeWidth={2}
                   fill={`url(#${gradientId})`}
-                  activeDot={{ r: 5, stroke: "hsl(var(--card))", strokeWidth: 2 }}
+                  dot={interactive ? renderLineDot : false}
+                  activeDot={interactive ? false : { r: 5, stroke: "hsl(var(--card))", strokeWidth: 2 }}
                   isAnimationActive={false}
                 />
               </AreaChart>
@@ -226,8 +450,14 @@ export function SimpleChart({
                   dataKey="value"
                   stroke={SERIES_COLORS[0]}
                   strokeWidth={2}
-                  dot={data.length <= 16 ? { r: 4, fill: SERIES_COLORS[0], stroke: "hsl(var(--card))", strokeWidth: 2 } : false}
-                  activeDot={{ r: 5, stroke: "hsl(var(--card))", strokeWidth: 2 }}
+                  dot={
+                    interactive
+                      ? renderLineDot
+                      : data.length <= 16
+                        ? { r: 4, fill: SERIES_COLORS[0], stroke: "hsl(var(--card))", strokeWidth: 2 }
+                        : false
+                  }
+                  activeDot={interactive ? false : { r: 5, stroke: "hsl(var(--card))", strokeWidth: 2 }}
                   isAnimationActive={false}
                 />
               </LineChart>
@@ -237,7 +467,7 @@ export function SimpleChart({
                 <XAxis type="number" tick={axisTick} tickLine={false} axisLine={false} tickFormatter={(v: number) => formatValue(v, unit, true)} />
                 <YAxis type="category" dataKey="name" tick={axisTick} tickLine={false} axisLine={false} width={120} />
                 <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ fill: "hsl(var(--muted))" }} />
-                <Bar dataKey="value" fill={SERIES_COLORS[0]} radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false} />
+                <Bar dataKey="value" fill={SERIES_COLORS[0]} radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false} shape={interactive ? renderRowBar : undefined} />
               </BarChart>
             ) : (
               <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
@@ -245,12 +475,13 @@ export function SimpleChart({
                 <XAxis dataKey="name" tick={axisTick} tickLine={false} axisLine={{ stroke: "hsl(var(--chart-grid))" }} interval={data.length <= 8 ? 0 : "preserveStartEnd"} minTickGap={4} tickFormatter={(v: string) => shortLabel(String(v), data.length)} />
                 <YAxis tick={axisTick} tickLine={false} axisLine={false} width={yWidth} interval={0} tickCount={5} tickFormatter={(v: number) => formatValue(v, unit, true)} />
                 <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ fill: "hsl(var(--muted))" }} />
-                <Bar dataKey="value" fill={SERIES_COLORS[0]} radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={false} />
+                <Bar dataKey="value" fill={SERIES_COLORS[0]} radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={false} shape={interactive ? renderColumnBar : undefined} />
               </BarChart>
             )}
           </ResponsiveContainer>
         </div>
       )}
     </div>
+    </DatumContext.Provider>
   )
 }

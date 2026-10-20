@@ -1,9 +1,10 @@
-from typing import List
+from typing import Annotated, Any, List
 
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, ConfigDict, Field
+from slowapi.util import get_remote_address
 
-from app.auth import CurrentUserDep
+from app.auth import CurrentUser, CurrentUserDep, limiter
 from app.models.schemas import (
     DashboardCreate,
     DashboardDetail,
@@ -26,6 +27,25 @@ from app.services.dashboard_service import (
 )
 
 router = APIRouter(prefix="/api/v1/dashboards", tags=["Dashboards"])
+
+# Calcular un tablero, abrir el detalle de un dato y pedir las opciones de filtro leen las tablas de la organizacion
+# (unas pocas consultas cada una). Es de solo lectura y sin IA: un tope por usuario protege la BD de un cliente que
+# insista (el cambio de un filtro recalcula el tablero, por eso el de `execute` es mas holgado).
+DASHBOARD_READ_RATE_LIMIT = "120/minute"
+DRILL_RATE_LIMIT = "90/minute"
+
+
+def _rate_limit_key(request: Request) -> str:
+    return getattr(request.state, "rate_limit_key", None) or get_remote_address(request)
+
+
+async def _rate_limited_user(request: Request, current_user: CurrentUserDep) -> CurrentUser:
+    """CurrentUser + su identidad como clave del limiter. Las peticiones sin sesion (401) no consumen cupo."""
+    request.state.rate_limit_key = f"dashboards-user:{current_user.user_id}"
+    return current_user
+
+
+RateLimitedUser = Annotated[CurrentUser, Depends(_rate_limited_user)]
 
 # Quien borra tableros. Crear (por chat o sugerencias) lo puede hacer cualquier miembro; borrar, solo
 # owner/admin (los tableros son de toda la organizacion y no tienen dueno propio).
@@ -185,10 +205,93 @@ async def delete_widget(
 # ---------------------------------------------------------------------------
 
 
+class ExecuteRequest(BaseModel):
+    """Cuerpo OPCIONAL de /execute: `{}` (o sin cuerpo) calcula el tablero como siempre."""
+    model_config = ConfigDict(extra="ignore")
+
+    # Filtros globales de solo lectura: {"period": {"preset"|"from","to"}, "where": [{"key", "values"}]}.
+    filters: dict[str, Any] | None = None
+
+
+class DrillRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # El valor tocado: la categoria o el periodo del eje X (`key` del dato si lo trae, si no su `name`).
+    # null = el grupo "(sin dato)". Se puede omitir solo con `other: true`.
+    value: str | int | float | None = None
+    by: str | None = Field(default=None, max_length=80)       # dimension de detalle (de la lista `dimensions`)
+    other: bool = False                                      # la porcion "Otros (n)" de un pastel
+    limit: int | None = Field(default=None, ge=1, le=50)
+    filters: dict[str, Any] | None = None
+
+
+def _http_error(exc: Exception) -> HTTPException:
+    from app.services.dashboard_drill_service import DrillError
+
+    code = exc.status_code if isinstance(exc, DrillError) else 422
+    return HTTPException(status_code=code, detail=str(exc))
+
+
 @router.post(
     "/{dashboard_id}/execute",
-    summary="Calcula los graficos y cifras del tablero con tus datos de este momento",
+    summary="Calcula los graficos y cifras del tablero con tus datos de este momento (con filtros opcionales)",
 )
-async def execute(dashboard_id: str, current_user: CurrentUserDep):
+@limiter.limit(DASHBOARD_READ_RATE_LIMIT, key_func=_rate_limit_key)
+async def execute(
+    request: Request,
+    dashboard_id: str,
+    current_user: RateLimitedUser,
+    body: ExecuteRequest | None = None,
+):
+    from app.services import data_query_engine as engine
+    from app.services.dashboard_filters import FilterError
     from app.services.dashboard_render_service import render_dashboard
-    return await render_dashboard(current_user.org_id, dashboard_id)
+
+    try:
+        return await render_dashboard(current_user.org_id, dashboard_id, body.filters if body else None)
+    except (FilterError, engine.QueryError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post(
+    "/{dashboard_id}/widgets/{widget_id}/drill",
+    summary="Detalle de un dato tocado en un grafico: de que esta hecho, por producto, cliente, mes... (solo lectura, sin IA)",
+)
+@limiter.limit(DRILL_RATE_LIMIT, key_func=_rate_limit_key)
+async def drill(
+    request: Request,
+    dashboard_id: str,
+    widget_id: str,
+    body: DrillRequest,
+    current_user: RateLimitedUser,
+):
+    from app.services import data_query_engine as engine
+    from app.services.dashboard_drill_service import DrillError, drill as run_drill
+    from app.services.dashboard_filters import FilterError
+
+    try:
+        return await run_drill(current_user.org_id, dashboard_id, widget_id, body.model_dump(exclude_unset=True))
+    except (DrillError, FilterError, engine.QueryError) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get(
+    "/{dashboard_id}/filter-options",
+    summary="Que puedes filtrar en este tablero: rango de fechas y valores mas frecuentes de cada categoria",
+)
+@limiter.limit(DASHBOARD_READ_RATE_LIMIT, key_func=_rate_limit_key)
+async def filter_options(
+    request: Request,
+    dashboard_id: str,
+    current_user: RateLimitedUser,
+    key: Annotated[str | None, Query(max_length=60, description="Solo esta categoria (para buscar sus valores)")] = None,
+    q: Annotated[str | None, Query(max_length=60, description="Texto a buscar dentro de los valores de `key`")] = None,
+):
+    from app.services import data_query_engine as engine
+    from app.services.dashboard_drill_service import DrillError
+    from app.services.dashboard_filter_options_service import filter_options as run_options
+
+    try:
+        return await run_options(current_user.org_id, dashboard_id, key=key, q=q)
+    except (DrillError, engine.QueryError) as exc:
+        raise _http_error(exc) from exc

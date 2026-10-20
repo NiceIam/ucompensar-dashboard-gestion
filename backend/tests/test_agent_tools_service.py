@@ -1085,11 +1085,12 @@ class TestGraficos:
 
         assert result["charts"] == [{
             "type": "bar",
-            "title": "Suma de total por producto",
+            "title": "Total por producto",
             "data": [{"name": "Sierra", "value": 300}, {"name": "Taladro", "value": 200},
                      {"name": "Martillo", "value": 150.5}],
             "x": "name", "y": "value", "color": "#3b82f6",
             "unit": "money",            # sum(total): la columna medida tiene nombre de dinero
+            "x_label": "Producto", "y_label": "Total",       # encabezados legibles de los ejes
         }]
         (fr,) = sent_function_responses(gemini.send, 1)
         assert fr.response == {"ok": True, "puntos": 3}
@@ -1112,7 +1113,7 @@ class TestGraficos:
         assert chart["type"] == "line" and chart["color"] == "#10b981" and chart["title"] == "Ventas por mes"
         assert chart["data"] == [
             {"name": "2026-01", "value": 1}, {"name": "2026-02", "value": 1},
-            {"name": "2026-03", "value": 2}, {"name": "(sin dato)", "value": 2},
+            {"name": "2026-03", "value": 2}, {"name": "(sin dato)", "value": 2, "empty": True},
         ]
 
     async def test_torta_con_mas_de_10_categorias_agrupa_el_resto_en_otros(self, env, gemini):

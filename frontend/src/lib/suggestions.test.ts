@@ -132,3 +132,28 @@ describe("preguntas sugeridas", () => {
     expect(suggestQuestions([{ name: "Ventas", rowCount: 0, columns: [{ name: "total", type: "number" }] }])).toEqual([])
   })
 })
+
+describe("nombres legibles de encabezados crudos", () => {
+  test.each([
+    ["vr.total", "Valor total"],
+    ["Vr.Total", "Valor total"],
+    ["fec", "Fecha"],
+    ["p.unit", "Precio unitario"],
+    ["Cant", "Cantidad"],
+    ["qty", "Cantidad"],
+    ["Item", "Producto"],
+    ["Sell Price", "Precio de venta"],
+    ["¿Cuánto debe?", "Cuánto debe"],
+    ["cuánto_debe", "Cuánto debe"],
+  ])("%s -> %s", (raw, expected) => {
+    expect(humanizeName(raw)).toBe(expected)
+  })
+
+  test("las abreviaturas también ayudan a reconocer dinero y categorías", () => {
+    expect(isMoneyLike("vr.total")).toBe(true)
+    expect(isMoneyLike("cuánto_debe")).toBe(true)
+    expect(isMoneyLike("fiados")).toBe(true)
+    expect(isMoneyLike("cant")).toBe(false)
+    expect(columnKind({ name: "cuánto_debe", type: "number" })).toBe("money")
+  })
+})

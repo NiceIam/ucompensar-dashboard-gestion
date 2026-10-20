@@ -82,9 +82,9 @@ class TestValoresExactos:
         assert got == {
             ("Registros de Ventas", "count", 40),
             ("Suma de cantidad", "number", 460),
-            ("Promedio de precio_venta", "money", 73006.67),
-            ("Suma de stock", "number", 2985),
-            ("Distintos de cliente", "count", 22),
+            ("Promedio de precio venta", "money", 73006.67),
+            ("Suma de existencias", "number", 2985),
+            ("Cantidad de clientes diferentes", "count", 22),
         }
 
     async def test_el_tablero_NO_es_una_foto_si_llegan_mas_datos_cambia(self, env):
@@ -155,7 +155,7 @@ class TestErrorAislado:
         line, bar, pie = out["charts"]
         assert not line.get("error") and not bar.get("error")
         assert pie["data"] == [] and "metodo_pago" in pie["error"] and "no existe" in pie["error"]
-        assert pie["title"] == "Suma de total por metodo_pago"          # titulo guardado al crearlo
+        assert pie["title"] == "Total por método de pago"              # el error conserva un titulo legible
 
     async def test_tabla_borrada_da_error_por_widget_y_el_resto_sigue(self, env):
         db = env.dbs.db(ORG_A)
@@ -296,7 +296,7 @@ class TestTablerosAntiguos:
         assert kpis["Total Ventas"] == (40, "count") and kpis["Total Productos"] == (30, "count")
         assert out["charts"] and all(not c.get("error") for c in out["charts"])
         titles = {c["title"] for c in out["charts"]}
-        assert "Suma de total por mes de fecha" in titles and "Suma de total por producto" in titles
+        assert "Total por mes" in titles and "Total por producto" in titles
 
     async def test_el_tablero_antiguo_ya_no_se_calcula_sobre_500_filas(self, env):
         db = env.dbs.db(ORG_A)
@@ -319,7 +319,7 @@ class TestListaParaTarjetas:
         assert board.widget_count == 4 and board.source == "assistant"
         assert board.preview == {"type": "line", "points": [3315500, 3174500, 2994700, 750000]}
         assert board.highlights == [
-            "Suma de total por mes de fecha", "Suma de total por producto", "Suma de total por metodo_pago"]
+            "Total por mes", "Total por producto", "Total por método de pago"]
         manual = items["a mano"]
         assert (manual.widget_count, manual.source, manual.preview, manual.highlights) == (0, None, None, [])
 

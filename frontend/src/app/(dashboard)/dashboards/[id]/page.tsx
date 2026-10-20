@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useParams } from "next/navigation"
-import { useEffect, useState } from "react"
+import { usePathname, useParams, useRouter, useSearchParams } from "next/navigation"
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import {
   ArrowLeft,
   CircleDollarSign,
@@ -18,15 +18,19 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ChartRenderer } from "@/components/charts/chart-renderer"
+import { DrillPanel, captureFocus, type DrillTarget } from "@/components/dashboards/drill-panel"
+import { FilterBar } from "@/components/dashboards/filter-bar"
 import { EmptyState, ErrorState } from "@/components/kit/empty-state"
 import { MetricTile } from "@/components/kit/metric-tile"
 import { Notice } from "@/components/kit/notice"
 import { ChartSkeleton, MetricRowSkeleton } from "@/components/kit/skeletons"
-import { useDashboardExecute, useDashboardMeta, type ChartConfig } from "@/hooks/use-dashboards"
+import { useDashboardExecute, useDashboardFilterOptions, useDashboardMeta, type ChartConfig } from "@/hooks/use-dashboards"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useChat } from "@/providers/chat-provider"
 import { humanizeError } from "@/lib/errors"
+import { filtersFromParams, filtersToParams, hasActiveFilters } from "@/lib/dashboard-filters"
 import { formatKpiValue, kpiUnit, type KpiLike, type KpiUnit } from "@/lib/kpi"
+import type { DashboardFilters } from "@/types/dashboard-filters"
 import type { WidgetConfig } from "@/types/api"
 
 /** Icono del KPI: primero la pista del backend; el de dinero solo si la cifra es en pesos. */
@@ -89,12 +93,34 @@ function ChartError({ title, message }: { title: string; message: string }) {
 }
 
 export default function DashboardDetailPage() {
+  // useSearchParams necesita un límite de Suspense (el estado de los filtros vive en la URL).
+  return (
+    <Suspense fallback={null}>
+      <DashboardDetail />
+    </Suspense>
+  )
+}
+
+function DashboardDetail() {
   const params = useParams<{ id: string }>()
   const id = params.id
   const { ask } = useChat()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const filters = useMemo(() => filtersFromParams(new URLSearchParams(searchParams?.toString() ?? "")), [searchParams])
+  const setFilters = useCallback(
+    (next: DashboardFilters) => {
+      const qs = filtersToParams(next, new URLSearchParams(searchParams?.toString() ?? "")).toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    },
+    [router, pathname, searchParams]
+  )
+  const [drillTarget, setDrillTarget] = useState<DrillTarget | null>(null)
 
   const { data: meta, isLoading: metaLoading } = useDashboardMeta(id)
-  const { data, isLoading, isFetching, isError, error, updatedAt, refetch } = useDashboardExecute(id)
+  const { data: options, isLoading: optionsLoading } = useDashboardFilterOptions(id)
+  const { data, isLoading, isFetching, isStale, isError, error, updatedAt, refetch } = useDashboardExecute(id, filters)
   const ago = useSecondsAgo(updatedAt || undefined)
   usePageTitle(meta?.name ?? "Tablero")
 
@@ -112,12 +138,14 @@ export default function DashboardDetailPage() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Tableros
         </Link>
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0 space-y-2">
+        {/* Responde al ANCHO DEL CONTENIDO (no al de la pantalla): con el chat abierto el contenido es angosto. */}
+        <div className="[container-type:inline-size]">
+        <header className="flex flex-col gap-4 [@container(min-width:44rem)]:flex-row [@container(min-width:44rem)]:items-end [@container(min-width:44rem)]:justify-between">
+          <div className="min-w-0 flex-1 space-y-2">
             {metaLoading ? (
               <Skeleton className="h-10 w-72 max-w-full" />
             ) : (
-              <h1 className="font-display text-[30px] font-semibold leading-tight text-balance sm:text-[36px]">{meta?.name ?? "Tablero"}</h1>
+              <h1 className="break-words font-display text-[30px] font-semibold leading-tight text-balance sm:text-[36px]">{meta?.name ?? "Tablero"}</h1>
             )}
             <p className="max-w-2xl text-[15px] text-muted-foreground">
               {meta?.description?.trim() || "Gráficos calculados con tus datos de este momento."}
@@ -136,7 +164,12 @@ export default function DashboardDetailPage() {
             </Button>
           </div>
         </header>
+        </div>
       </div>
+
+      {!isLoading && !isError && (options?.dimensions.length || options?.date || hasActiveFilters(filters)) ? (
+        <FilterBar dashboardId={id} options={options} loading={optionsLoading} filters={filters} onChange={setFilters} busy={isFetching} />
+      ) : null}
 
       {isLoading ? (
         <div className="space-y-5" aria-busy="true">
@@ -151,7 +184,7 @@ export default function DashboardDetailPage() {
           <ErrorState error={humanizeError(error, "load")} onRetry={() => void refetch()} retrying={isFetching} />
         </div>
       ) : (
-        <div className={isFetching ? "opacity-70 transition-opacity" : "transition-opacity"}>
+        <div className={isFetching || isStale ? "opacity-70 transition-opacity" : "transition-opacity"} aria-busy={isFetching}>
           {kpis.length > 0 && (
             <section aria-label="Cifras principales" className="auto-grid mb-6 gap-4 [--auto-grid-min:13rem]">
               {kpis.map((kpi, i) => {
@@ -161,7 +194,13 @@ export default function DashboardDetailPage() {
                     key={`${kpi.id ?? kpi.label}-${i}`}
                     label={kpi.label}
                     value={formatKpiValue(kpi)}
-                    context={kpi.error ? `No pudimos calcular esta cifra: ${kpi.error}` : undefined}
+                    context={
+                      kpi.error
+                        ? `No pudimos calcular esta cifra: ${kpi.error}`
+                        : kpi.empty
+                          ? (kpi.message ?? "Sin datos con estos filtros.")
+                          : kpi.notes?.[0]?.message
+                    }
                     icon={kpiIcon(kpi, unit)}
                     // El naranja solo en la primera cifra: guía la atención sin saturar.
                     tone={kpi.error ? "warning" : i === 0 ? "primary" : "neutral"}
@@ -197,7 +236,25 @@ export default function DashboardDetailPage() {
                   chart.error ? (
                     <ChartError key={`${chart.id ?? chart.title}-${i}`} title={chart.title} message={chart.error} />
                   ) : (
-                    <ChartRenderer key={`${chart.id ?? chart.title}-${i}`} widget={toWidget(id, chart, i)} />
+                    <ChartRenderer
+                      key={`${chart.id ?? chart.title}-${i}`}
+                      widget={toWidget(id, chart, i)}
+                      xLabel={chart.x_label}
+                      yLabel={chart.y_label}
+                      notes={chart.notes?.map((n) => n.message)}
+                      emptyMessage={chart.empty ? (chart.message ?? "Sin datos con estos filtros.") : undefined}
+                      onSelectPoint={
+                        chart.drillable && chart.id
+                          ? (point) =>
+                              setDrillTarget({
+                                widgetId: chart.id as string,
+                                chartTitle: chart.title,
+                                point: { name: point.name, value: point.value, key: point.key, empty: point.empty, other: point.other },
+                                restoreFocus: captureFocus(),
+                              })
+                          : undefined
+                      }
+                    />
                   )
                 )}
               </section>
@@ -205,6 +262,17 @@ export default function DashboardDetailPage() {
           )}
         </div>
       )}
+
+      <DrillPanel
+        dashboardId={id}
+        target={drillTarget}
+        filters={filters}
+        onClose={() => setDrillTarget(null)}
+        onAsk={(question) => {
+          setDrillTarget(null)
+          ask(question, { send: false })
+        }}
+      />
     </div>
   )
 }

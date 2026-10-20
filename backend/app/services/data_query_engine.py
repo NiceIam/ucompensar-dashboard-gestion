@@ -42,6 +42,8 @@ from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
+from app.services import intake_ontology as onto
+
 # Tipos de columnas_definition -> clase de dato: t texto, n numero, f fecha, b si/no.
 KIND_TEXT, KIND_NUM, KIND_DATE, KIND_BOOL = "t", "n", "f", "b"
 _TYPE_KIND = {
@@ -147,6 +149,11 @@ class Column:
     kind: str
     # Solo columnas de fecha: (min, max) ISO calculado al cargar datos (columns_definition[].range); None si no hay.
     range: tuple[str, str] | None = None
+    # Metadata de la carga inteligente (opcional, validada contra la ontologia): rol del negocio ("total",
+    # "producto"...) y encabezado ORIGINAL del archivo. Solo sirven para nombres legibles y unidades; nunca
+    # cambian como se consulta la columna.
+    role: str | None = None
+    label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -156,6 +163,8 @@ class Table:
     display: str
     rows: int
     columns: tuple[Column, ...]
+    # Tipo de hoja de la carga inteligente ("ventas", "compras"...) o None en hojas anteriores.
+    sheet_kind: str | None = None
 
     def column(self, name: str) -> Column | None:
         for c in self.columns:
@@ -201,16 +210,23 @@ def build_catalog(records) -> dict[str, Table]:
             except (json.JSONDecodeError, TypeError):
                 cols = []
         columns, seen = [], set()
+        sheet = onto.read_sheet_meta(cols)
+        roles = onto.column_roles(cols) if sheet else {}
         for c in cols if isinstance(cols, list) else []:
             name = c.get("name") if isinstance(c, dict) else None
             if not isinstance(name, str) or not name or name in seen:
                 continue
             seen.add(name)
             kind = _TYPE_KIND.get(str(c.get("type") or "").lower(), KIND_TEXT)
-            columns.append(Column(name, kind, _stored_range(c, kind)))
+            role = (roles.get(name) or {}).get("role")
+            label = c.get("label") if isinstance(c.get("label"), str) and c.get("label").strip() else None
+            columns.append(Column(
+                name, kind, _stored_range(c, kind), role if role != onto.OTHER_ROLE else None,
+                one_line(label, 80) if label else None,
+            ))
         catalog[r["table_name"]] = Table(
             id=r["id"], name=r["table_name"], display=r["display_name"] or r["table_name"],
-            rows=r["row_count"] or 0, columns=tuple(columns),
+            rows=r["row_count"] or 0, columns=tuple(columns), sheet_kind=sheet["kind"] if sheet else None,
         )
     return dict(sorted(catalog.items()))
 

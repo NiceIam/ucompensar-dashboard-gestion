@@ -84,20 +84,30 @@ class FakeOrgDB:
         legacy_records: int = 0,
         column_types: Optional[dict[str, str]] = None,
         column_ranges: Optional[dict[str, list]] = None,
+        sheet_kind: Optional[str] = None,
+        roles: Optional[dict[str, str]] = None,
+        labels: Optional[dict[str, str]] = None,
     ) -> uuid.UUID:
+        """`sheet_kind`/`roles`/`labels` emulan la metadata de la carga inteligente (tipo de hoja, rol y encabezado
+        original de cada columna) tal como la deja `intake_ontology.with_sheet_meta`."""
         table_id = uuid.uuid4()
         types = column_types or {}
         ranges = column_ranges or {}
+        cols = [
+            {"name": c, "type": types.get(c, "text"), **({"range": ranges[c]} if c in ranges else {}),
+             **({"role": roles[c], "role_confidence": 0.9} if roles and c in roles else {}),
+             **({"label": labels[c]} if labels and c in labels else {})}
+            for c in columns
+        ]
+        if sheet_kind:
+            from app.services import intake_ontology as _onto
+
+            cols = _onto.with_sheet_meta(cols, _onto.make_sheet_meta(sheet_kind, 0.9, "user", None))
         self.tables[table_id] = {
             "id": table_id,
             "table_name": table_name,
             "display_name": display_name or table_name.title(),
-            "columns_definition": json.dumps(
-                [
-                    {"name": c, "type": types.get(c, "text"), **({"range": ranges[c]} if c in ranges else {})}
-                    for c in columns
-                ]
-            ),
+            "columns_definition": json.dumps(cols),
             "row_count": len(rows or []),
         }
         for data in rows or []:

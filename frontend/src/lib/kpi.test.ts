@@ -44,3 +44,10 @@ describe("unidad de los KPI del tablero", () => {
     expect(kpiUnit({ label: "Suma", value: null })).toBe("number")
   })
 })
+
+describe("cartera sin palabra de dinero en el nombre", () => {
+  test("«Suma de cuánto debe» sale en pesos por su columna de origen, aunque la unidad no llegue", () => {
+    expect(kpiUnit({ label: "Suma de cuánto debe", value: 5_600_000, icon: "TrendingUp", column: "cuánto_debe" })).toBe("money")
+    expect(formatKpiValue({ label: "Suma de cuánto debe", value: 5_600_000, icon: "TrendingUp", column: "cuánto_debe" })).toMatch(/^\$.5,6.M$/)
+  })
+})
