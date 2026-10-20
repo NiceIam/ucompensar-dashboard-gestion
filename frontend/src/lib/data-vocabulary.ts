@@ -51,11 +51,51 @@ export const KIND_INFO: Record<ColumnKind, KindInfo> = {
   },
 }
 
-/** Separa un nombre técnico en palabras en minúscula. */
-export function nameTokens(raw: string): string[] {
-  return raw
+/** Pares de palabras que juntas significan otra cosa ("p.unit" = precio unitario). */
+const BIGRAMS: Record<string, string> = {
+  "p unit": "precio unitario", "pr unit": "precio unitario", "pre unit": "precio unitario", "v unit": "valor unitario",
+  "vr unit": "valor unitario", "vlr unit": "valor unitario", "val unit": "valor unitario", "c unit": "costo unitario",
+  "sell price": "precio de venta", "unit price": "precio unitario", "unit cost": "costo unitario",
+  "met pago": "método de pago", "payment method": "método de pago",
+}
+
+/** Abreviaturas frecuentes de encabezados de hojas de cálculo (español e inglés) y lo que significan. */
+const ABBREVIATIONS: Record<string, string> = {
+  vr: "valor", vlr: "valor", val: "valor", cant: "cantidad", cantd: "cantidad", ctd: "cantidad", cnt: "cantidad", qty: "cantidad",
+  fec: "fecha", fch: "fecha", tot: "total", dcto: "descuento", dscto: "descuento", unit: "unitario", und: "unidades",
+  unds: "unidades", uds: "unidades", unid: "unidades", prod: "producto", prov: "proveedor", cli: "cliente", cat: "categoría",
+  ref: "referencia", doc: "documento", obs: "observaciones", dir: "dirección", tel: "teléfono", cel: "celular",
+  cod: "código", nro: "número", num: "número", pcio: "precio", prec: "precio", mto: "monto", fact: "factura",
+  cta: "cuenta", ciud: "ciudad", dpto: "departamento", mpio: "municipio", sucur: "sucursal", vend: "vendedor",
+  item: "producto", cost: "costo", price: "precio", date: "fecha", name: "nombre", customer: "cliente", client: "cliente",
+  product: "producto", amount: "monto", supplier: "proveedor", category: "categoría", quantity: "cantidad",
+  payment: "pago", method: "método", discount: "descuento",
+}
+
+/** Palabras planas (minúscula, sin tildes) de un nombre técnico, con las abreviaturas ya expandidas. */
+function plainWords(raw: string): string[] {
+  const tokens = raw
     .replace(/([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])/g, "$1 $2")
     .toLowerCase()
+    .split(/[^a-záéíóúñ0-9]+/)
+    .filter(Boolean)
+  const out: string[] = []
+  for (let i = 0; i < tokens.length; i++) {
+    const pair = BIGRAMS[`${tokens[i]} ${tokens[i + 1] ?? ""}`]
+    if (pair) {
+      out.push(...pair.split(" "))
+      i++
+    } else {
+      out.push(ABBREVIATIONS[tokens[i]] ?? tokens[i])
+    }
+  }
+  return out
+}
+
+/** Separa un nombre técnico en palabras en minúscula y sin tildes (las abreviaturas se expanden: "vr" -> "valor"). */
+export function nameTokens(raw: string): string[] {
+  return plainWords(raw)
+    .join(" ")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .split(/[^a-z0-9]+/)
@@ -85,11 +125,8 @@ function accentWord(word: string): string {
 
 /** "precio_unitario" -> "Precio unitario"; "fechaVenta" -> "Fecha venta"; "iva" -> "IVA". */
 export function humanizeName(raw: string): string {
-  const cleaned = raw
-    .replace(/([a-záéíóúñ])([A-ZÁÉÍÓÚÑ])/g, "$1 $2")
-    .replace(/[_\-.]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
+  const words0 = plainWords(raw.replace(/^[¿?¡!()\s]+|[¿?¡!()\s]+$/g, ""))
+  const cleaned = words0.join(" ")
   if (!cleaned) return raw
   const words = cleaned.split(" ").map((w) => {
     const plain = w.toLowerCase()
@@ -123,6 +160,8 @@ const MONEY_WORDS = new Set([
   "venta", "ventas", "salario", "salarios", "pago", "pagos", "subtotal", "total", "totales", "iva",
   "descuento", "descuentos", "tarifa", "tarifas", "saldo", "deuda", "abono", "abonos", "utilidad",
   "ganancia", "ganancias", "gasto", "gastos", "presupuesto", "facturado", "recaudo",
+  // Cartera: "cuánto_debe", "fiados", "cartera por cobrar".
+  "debe", "deben", "adeudado", "adeuda", "fiado", "fiados", "cartera", "cobrar",
 ])
 
 /** true si el nombre sugiere un identificador (no se suma ni sirve para agrupar). */
